@@ -8,7 +8,17 @@ const landingEl = $('landing'), readerEl = $('reader');
 const contentEl = $('content'), progressEl = $('progress');
 const card = $('toc-card'), scrim = $('scrim');
 
-const { parts, chapters } = await (await fetch('../data/textbook.json')).json();
+// Resolve all assets against the vite base so the page works both at
+// /textbook/ and /fly-brain/textbook (no trailing slash) on any host.
+const B = import.meta.env.BASE_URL;
+document.querySelectorAll('[data-base]').forEach(el => {
+  const v = B + el.dataset.base;
+  if (el.tagName === 'IMG') el.src = v; else el.href = v;
+});
+
+const res = await fetch(B + 'data/textbook.json');
+if (!res.ok) throw new Error(`textbook.json: ${res.status}`);
+const { parts, chapters } = await res.json();
 
 // TOC card: serif part headings, plain rows, active row highlighted
 tocEl.innerHTML = parts.map((p, i) => `
@@ -55,6 +65,7 @@ function route() {
   progressEl.innerHTML = part.chapters.map(s =>
     `<a class="seg${s === ch.slug ? ' cur' : ''}" href="#${s}"></a>`).join('');
 
+  $('chap-label').textContent = ch.slug.startsWith('A-') ? 'Appendix' : `Chapter ${idx + 1}`;
   $('chap-title').textContent = ch.title;
   contentEl.innerHTML = ch.html.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>/, '');
   tocEl.querySelectorAll('.toc-row').forEach(a => a.classList.toggle('active', a.dataset.slug === ch.slug));
