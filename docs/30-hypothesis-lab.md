@@ -89,9 +89,28 @@ feedback (61 edges), and hΔB internal recurrence. Ablating each in every wired_
 - Ranked discriminators: amplitude scaling (0.42) > hd_recur_off (0.41) > **hd2pfn_off (0.32)**
   — the feedback loop, newly added, is already a top-3 discriminator.
 
-**Meta-finding across both circuits: structure overstates what dynamics delivers.** Cosine
-kernel → realised, phase shift → realised at ~⅓ amplitude, ring attractor → only in a narrow
-tonic regime. The structure-to-dynamics gap is itself the calibration signal.
+## Lab 3: mushroom-body memory circuit (`sparse_associative_memory`, geometry `memory`)
+
+Third circuit through the generic runner — a different observable class entirely: no
+spatial geometry. Two overlapping KC "odors" (200 cells, 50% shared) are driven; the
+measured transform is KC→MBON readout, and the free question is whether the KC↔APL
+feedback loop provides gain control (compresses KC output as drive doubles).
+
+**Result: an honest negative.** 18 members over `{kc2mb, aplGain, mbonTonic, mbRecur}`:
+9 silent, 9 collapsed/linear — no `gain_controlled` member. APL recruitment saturates
+(~16 spikes in 200ms at 5× drive) while KC output scales ~3.4×; with ~1 APL synapse per
+KC (4210 edges / 4064 cells), count-calibrated feedback cannot compress. The MBON
+transform is near-linear (expansion < 1 for 50%-overlap odors — expected: decorrelation
+happens upstream, at odor→KC, not at the readout). Interpretation: the wiring does not
+by itself establish divisive normalization — per-synapse conductance, which the
+connectome doesn't carry, is the missing parameter. That is the lab working as intended:
+it reports where structure underdetermines function.
+
+**Meta-finding across all three circuits: structure overstates what dynamics delivers.**
+Cosine kernel → realised; phase shift → realised at ~⅓ amplitude and only via dynamics
+(never `wired_only`); ring attractor → only in a narrow tonic regime; gain control →
+absent at count-calibrated weights. The structure-to-dynamics gap is the calibration
+signal — and, on the MB, it localises exactly which parameter functional data must fix.
 
 ## The engineering benchmark (`scripts/bench_heading.py` + `scripts/ring_pde.py`)
 

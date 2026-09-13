@@ -117,10 +117,14 @@ const spec = specs[specName];
 if (!spec) { console.error(`no spec '${specName}' in ensemble_specs.json`); process.exit(1); }
 console.log(`spec: ${specName} (geometry=${spec.geometry})`);
 
+const byPattern = (t) => t.endsWith('*')
+  ? Array.from({ length: D.N }, (_, i) => i).filter(i => meta.types[i]?.startsWith(t.slice(0, -1)))
+  : D.byType(t);
 const pop = {};
-for (const [k, t] of Object.entries(spec.populations)) pop[k] = Array.isArray(t) ? [...new Set(t.flatMap(tt => D.byType(tt)))] : D.byType(t);
+for (const [k, t] of Object.entries(spec.populations))
+  pop[k] = [...new Set((Array.isArray(t) ? t : [t]).flatMap(byPattern))];
 
-const resolve = (x) => x instanceof Set ? x : new Set((Array.isArray(x) ? x : [x]).flatMap(tt => pop[tt] || D.byType(tt)));
+const resolve = (x) => x instanceof Set ? x : new Set((Array.isArray(x) ? x : [x]).flatMap(tt => pop[tt] || byPattern(tt)));
 const build = makeBuilder(D, spec.edge_params.map(r => ({
   pre: resolve(r.pre), post: resolve(r.post), param: r.param,
 })), spec.tonics.map(t => ({ pop: pop[t.pop], param: t.param })));
@@ -175,6 +179,69 @@ if (spec.geometry === 'ring') {
     if (s.concentration > 0.5) return s.width_wedges >= b.width_wedges + 2 ? 'confines_width' : 'sculpts_sharp';
     if (s.total_rate > 1) return 'confines';
     return 'essential';
+  };
+} else if (spec.geometry === 'memory') {
+  // random-projection content-addressable memory: drive a random subset of the
+  // input population (an "odor"), measure whether the output population's
+  // response separates overlapping inputs better than the inputs overlap.
+  const kc = pop[spec.roles.input], out = pop[spec.roles.output];
+  const nOdor = spec.odor_size || 200, shared = Math.floor(nOdor * (spec.odor_overlap ?? 0.5));
+  const shuffled = [...kc].sort(() => Math.random() - 0.5);          // deterministic (seeded)
+  const odorA = shuffled.slice(0, nOdor);
+  const odorB = [...shuffled.slice(0, shared), ...shuffled.slice(nOdor, nOdor + nOdor - shared)];
+  const inSim = shared / nOdor;                                      // input overlap
+  const profOf = (net) => out.map(i => net.spikeCount[i]);
+  const cosSim = (a, b) => {
+    let d = 0, na = 0, nb = 0;
+    for (let k = 0; k < a.length; k++) { d += a[k] * b[k]; na += a[k] * a[k]; nb += b[k] * b[k]; }
+    return na * nb > 0 ? d / Math.sqrt(na * nb) : 0;
+  };
+  function odorProbe(net, odor, drive = 60, ms = 200) {
+    net.drive.fill(0); net.reset();
+    net.setDrive(odor, drive); run(net, ms); net.setDrive(odor, 0);
+    return { prof: profOf(net), kc_active: kc.filter(i => net.spikeCount[i] > 0).length / kc.length,
+             kc_spikes: kc.reduce((a, i) => a + net.spikeCount[i], 0) };
+  }
+  for (const p of grid) {
+    const net = build(p), bp = biasOf(p);
+    clean(net, bp);
+    const A = odorProbe(net, odorA), B = odorProbe(net, odorB);
+    const outSim = cosSim(A.prof, B.prof);
+    const expansion = f2((1 - outSim) / Math.max(1 - inSim, 1e-9));  // >1 = decorrelation
+    const rate = A.prof.reduce((a, b) => a + b, 0) + B.prof.reduce((a, b) => a + b, 0);
+    // gain control: double the odor drive — does KC output scale sub-linearly?
+    // APL feedback should compress; without it KC spikes ~2x.
+    const A2x = odorProbe(net, odorA, 120);
+    const compression = f2(A2x.kc_spikes / Math.max(A.kc_spikes, 1));
+    const hyp = rate < 10 ? 'silent'
+      : compression < 1.5 ? 'gain_controlled'
+      : expansion > 0.7 ? 'linear_passthrough' : 'collapsed';
+    const pert = {};
+    for (const pt of spec.perturbations) {
+      const n2 = build(pt.set != null ? { ...p, [pt.param]: pt.set } : p);
+      if (pt.silence) for (const i of pop[pt.silence]) n2.setThr(i, 1e6);
+      clean(n2, bp);
+      const Ap = odorProbe(n2, odorA), Bp = odorProbe(n2, odorB), Ap2x = odorProbe(n2, odorA, 120);
+      pert[pt.name] = { expansion: f2((1 - cosSim(Ap.prof, Bp.prof)) / Math.max(1 - inSim, 1e-9)),
+                        compression: f2(Ap2x.kc_spikes / Math.max(Ap.kc_spikes, 1)),
+                        kc_active: f2(Ap.kc_active), rate: Ap.prof.reduce((a, b) => a + b, 0) + Bp.prof.reduce((a, b) => a + b, 0) };
+    }
+    members.push({ params: p, hypothesis: hyp,
+      baseline: { expansion, compression, in_sim: inSim, out_sim: f2(outSim), kc_active: f2(A.kc_active), rate },
+      perturbations: pert });
+    console.log(`  ${JSON.stringify(p)}: ${hyp} | expansion ${expansion} compression ${compression} kc_act ${f2(A.kc_active)}`);
+  }
+  var ranked = rankExperiments({
+    baseline_gain_control: { outcome: members.map(m => m.baseline.rate < 10 ? 'silent' : m.baseline.compression < 1.5 ? 'controlled' : 'uncontrolled') },
+    ...Object.fromEntries(spec.perturbations.map(pt => [pt.name, {
+      outcome: members.map(m => { const t = m.perturbations[pt.name];
+        return t.rate < 10 ? 'silent' : t.compression < 1.5 ? 'controlled' : 'uncontrolled'; }),
+    }])),
+  });
+  var mech = (m) => {
+    if (m.hypothesis !== 'gain_controlled') return null;
+    const broken = spec.perturbations.filter(pt => m.perturbations[pt.name].compression >= 1.5).map(pt => pt.name);
+    return broken.length ? `needs_${broken.join('+')}` : 'robust';
   };
 } else {   // linear
   const G = linearGeom(D, meta);

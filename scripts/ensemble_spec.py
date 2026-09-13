@@ -100,6 +100,39 @@ SPECS['phasor_vector_shift'] = {
     'hypotheses': ['wired_shift', 'passthrough', 'distorted', 'silent'],
 }
 
+# --- sparse_associative_memory: mushroom-body random projection ---
+# substrate: KC input layer (~4k cells), APL feedback inhibition, MBON readout,
+# DAN teaching. Observable: do overlapping input patterns ("odors") produce
+# output vectors separated more than the inputs overlap? APL gain controls
+# KC sparsity -> separability. Perturbations probe which element carries it.
+SPECS['sparse_associative_memory'] = {
+    'geometry': 'memory',
+    'operator': 'sparse_associative_memory',
+    'populations': {
+        'kc': 'KC*', 'apl': 'APL*', 'mbon': 'MBON*',
+        'dan': ['PPL*', 'PAM*'],
+    },
+    'roles': {'input': 'kc', 'output': 'mbon', 'control': 'apl'},
+    'odor_size': 200, 'odor_overlap': 0.5,
+    'edge_params': [
+        {'pre': 'KC*', 'post': 'MBON*', 'param': 'kc2mb',
+         'why': 'KC->MBON readout gain (44k edges; plastic in vivo)'},
+        {'pre': 'APL*', 'post': 'KC*', 'param': 'aplGain',
+         'why': 'APL feedback inhibition sets KC sparsity'},
+        {'pre': 'MBON*', 'post': 'MBON*', 'param': 'mbRecur',
+         'why': 'MBON->MBON recurrence (936 edges)'},
+    ],
+    'tonics': [{'pop': 'mbon', 'param': 'mbonTonic'}],
+    'grid': {'kc2mb': [0.5, 1, 2], 'aplGain': [0.5, 1, 2],
+             'mbonTonic': [0, 4], 'mbRecur': [1]},
+    'perturbations': [
+        {'name': 'apl_silence', 'silence': 'apl',
+         'why': 'does separation survive without feedback inhibition?'},
+        {'name': 'mb_recur_off', 'param': 'mbRecur', 'set': 0},
+    ],
+    'hypotheses': ['gain_controlled', 'linear_passthrough', 'collapsed', 'silent'],
+}
+
 # attach provenance: which evidence items justified the operator detection
 for name, spec in SPECS.items():
     o = next((x for x in ops if x['name'] == name), None)

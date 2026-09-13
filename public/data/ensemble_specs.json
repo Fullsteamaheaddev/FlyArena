@@ -251,5 +251,119 @@
    ],
    "topology_folded": true
   }
+ },
+ "sparse_associative_memory": {
+  "geometry": "memory",
+  "operator": "sparse_associative_memory",
+  "populations": {
+   "kc": "KC*",
+   "apl": "APL*",
+   "mbon": "MBON*",
+   "dan": [
+    "PPL*",
+    "PAM*"
+   ]
+  },
+  "roles": {
+   "input": "kc",
+   "output": "mbon",
+   "control": "apl"
+  },
+  "odor_size": 200,
+  "odor_overlap": 0.5,
+  "edge_params": [
+   {
+    "pre": "KC*",
+    "post": "MBON*",
+    "param": "kc2mb",
+    "why": "KC->MBON readout gain (44k edges; plastic in vivo)"
+   },
+   {
+    "pre": "APL*",
+    "post": "KC*",
+    "param": "aplGain",
+    "why": "APL feedback inhibition sets KC sparsity"
+   },
+   {
+    "pre": "MBON*",
+    "post": "MBON*",
+    "param": "mbRecur",
+    "why": "MBON->MBON recurrence (936 edges)"
+   }
+  ],
+  "tonics": [
+   {
+    "pop": "mbon",
+    "param": "mbonTonic"
+   }
+  ],
+  "grid": {
+   "kc2mb": [
+    0.5,
+    1,
+    2
+   ],
+   "aplGain": [
+    0.5,
+    1,
+    2
+   ],
+   "mbonTonic": [
+    0,
+    4
+   ],
+   "mbRecur": [
+    1
+   ]
+  },
+  "perturbations": [
+   {
+    "name": "apl_silence",
+    "silence": "apl",
+    "why": "does separation survive without feedback inhibition?"
+   },
+   {
+    "name": "mb_recur_off",
+    "param": "mbRecur",
+    "set": 0
+   }
+  ],
+  "hypotheses": [
+   "gain_controlled",
+   "linear_passthrough",
+   "collapsed",
+   "silent"
+  ],
+  "provenance": {
+   "signature": "large sparse expansion + near-random input mixing + global feedback inhibition + compartmental modulatory gating",
+   "evidence": [
+    {
+     "item": "expansion ratio",
+     "value": "5.9\u00d7",
+     "weight": 0.25
+    },
+    {
+     "item": "PN-pair KC-correlation \u2248 shuffle",
+     "value": "0.0234 vs 0.0125",
+     "weight": 0.2
+    },
+    {
+     "item": "APL covers all KCs (global normalisation)",
+     "value": "1.0",
+     "weight": 0.15
+    },
+    {
+     "item": "DAN\u2192KC \u226b DAN\u2192MBON (gate at the synapse)",
+     "value": "89,036 vs 37,972",
+     "weight": 0.15
+    },
+    {
+     "item": "dynamics: ABL silencing broadens KC code",
+     "value": "0.16\u21920.31 active",
+     "weight": 0.1
+    }
+   ],
+   "topology_folded": false
+  }
  }
 }
