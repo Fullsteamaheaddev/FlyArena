@@ -47,6 +47,30 @@ function probe(net, colMap, driveCol, ms = 250) {
   return { offset: f2(hcol[Math.round(cen)] - driveCol), cen_offset: f2(cen - driveCol), rate: prof.reduce((a, b) => a + b, 0) };
 }
 
+// velocity channel: hDeltaB response amplitude should scale with PFN drive rate
+function probeAmp(net, colMap, driveCol, rates = [40, 80, 160]) {
+  const out = [];
+  for (const r of rates) {
+    net.drive.fill(0); net.reset();
+    const ix = colMap[driveCol]; if (!ix) return null;
+    net.setDrive(ix, r); run(net, 200); net.setDrive(ix, 0);
+    out.push(hdb.reduce((a, i) => a + net.spikeCount[i], 0));
+  }
+  return out;   // hDeltaB total spikes per rate level — should be ~monotonic if amplitude-coded
+}
+
+// phasor sum: driving both arms at the same column should put the hDeltaB centroid
+// between the two single-arm offsets, not at either peak
+function probeSum(net, driveCol = 6) {
+  net.drive.fill(0); net.reset();
+  const ix = [...(pfndCols[driveCol] || []), ...(pfnvCols[driveCol] || [])];
+  net.setDrive(ix, 80); run(net, 250); net.setDrive(ix, 0);
+  const prof = hcol.map(c => hdb.filter(i => colOf(i) === c).reduce((a, i) => a + net.spikeCount[i], 0));
+  const cen = centroid(prof);
+  if (cen == null || prof.reduce((a, b) => a + b, 0) < 10) return null;
+  return f2(hcol[Math.round(cen)] - driveCol);
+}
+
 const grid = [];
 for (const pfndGain of [0.5, 1, 2]) for (const pfnvGain of [0.5, 1, 2]) for (const hdRecur of [0, 1]) for (const hdTonic of [0, 4])
   grid.push({ pfndGain, pfnvGain, hdRecur, hdTonic });
@@ -72,16 +96,21 @@ for (const p of grid) {
   // perturbation: silence the opposite PFN arm
   const n3 = build(p); silence(n3, pfnv); if (p.hdTonic) n3.setBias(hdb, p.hdTonic);
   const isoD = probe(n3, pfndCols, 6);
+  const amp = probeAmp(net, pfndCols, 6);
+  const sum = probeSum(net, 6);
+  const ampScale = amp && amp[0] > 5 ? f2(amp[2] / amp[0]) : null;   // 160Hz / 40Hz
   members.push({ params: p, hypothesis: hyp, arms: { PFNd: armD, PFNv: armV },
-    offsets: { PFNd: offD, PFNv: offV },
+    offsets: { PFNd: offD, PFNv: offV }, amp: { profile: amp, scale_160v40: ampScale }, vector_sum_offset: sum,
     perturbations: { hd_recur_off: { PFNd: recD, PFNv: recV }, pfnv_silenced: { PFNd: isoD } } });
-  console.log(`  d×${p.pfndGain} v×${p.pfnvGain} recur${p.hdRecur} tonic${p.hdTonic}: ${hyp} | PFNd off ${offD?.offset} (${armD}) PFNv off ${offV?.offset} (${armV}) | noRecur d ${recD?.offset} v ${recV?.offset} | isoD ${isoD?.offset}`);
+  console.log(`  d×${p.pfndGain} v×${p.pfnvGain} recur${p.hdRecur} tonic${p.hdTonic}: ${hyp} | PFNd off ${offD?.offset} (${armD}) PFNv off ${offV?.offset} (${armV}) | amp ×${ampScale} | sum off ${sum} | noRecur d ${recD?.offset} v ${recV?.offset} | isoD ${isoD?.offset}`);
 }
 
 const offCls = (o, expect) => o == null || o.offset == null ? 'silent' : Math.abs(o.offset - expect) <= 1 ? 'shift' : Math.abs(o.offset) <= 1 ? 'pass' : 'other';
 const ranked = rankExperiments({
   measure_pfnd_offset: { outcome: members.map(m => offCls(m.offsets.PFNd, STRUCT.PFNd)) },
   measure_pfnv_offset: { outcome: members.map(m => offCls(m.offsets.PFNv, STRUCT.PFNv)) },
+  amp_scaling: { outcome: members.map(m => m.amp.scale_160v40 == null ? 'silent' : m.amp.scale_160v40 > 1.3 ? 'scales' : 'flat') },
+  vector_sum: { outcome: members.map(m => m.vector_sum_offset == null ? 'silent' : Math.abs(m.vector_sum_offset) <= 1 ? 'near_input' : 'shifted') },
   hd_recur_off: { outcome: members.map(m => offCls(m.perturbations.hd_recur_off.PFNd, STRUCT.PFNd)) },
   pfnv_silenced: { outcome: members.map(m => offCls(m.perturbations.pfnv_silenced.PFNd, STRUCT.PFNd)) },
 });

@@ -53,6 +53,7 @@ supplies the spontaneous drive the model lacks, and hunger reaches the brain as 
 ### Analysis
 28. [Algorithmic structures](28-algorithmic-structures.md): what the wiring computes — hierarchy, recurrence, motifs, ring attractor, expansion coding, convolution kernels
 29. [Connectome compiler](29-connectome-compiler.md): dataset-agnostic IR + generic analysis, worm vs fly first comparison
+30. [Hypothesis lab](30-hypothesis-lab.md): model ensembles, discriminating-experiment ranking, PDE ring-attractor benchmark
 
 ## Repository layout
 
