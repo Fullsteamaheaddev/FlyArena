@@ -59,6 +59,7 @@ supplies the spontaneous drive the model lacks, and hunger reaches the brain as 
 |---|---|
 | `index.html`, `src/main.js` | Connectome viewer |
 | `arena.html`, `src/arena.js` | Embodied arena |
+| `structures.html`, `src/structures.js` | Algorithmic-structure visualisation ([doc 28](28-algorithmic-structures.md)) |
 | `src/sim/` | Fly agent, world, senses, vision, motor, endogenous behaviour, neuromodulation, flight, worker |
 | `src/lif.js`, `src/lifwasm.js`, `src/lifgpu.js`, `src/wasm/lif.c` | Brain model in JS, WebAssembly and WebGPU |
 | `src/brainmodel.js`, `src/brainsetup.js` | Calibrated brain construction, shared memory |

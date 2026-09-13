@@ -1,6 +1,6 @@
 # fly-brain
 
-**Live demo:** [arena](https://lulzx.com/fly-brain/arena.html) · [connectome viewer](https://lulzx.com/fly-brain/) (desktop Chrome/Edge/Firefox; the viewer downloads about 30 MB, the arena about 23 MB)
+**Live demo:** [arena](https://lulzx.com/fly-brain/arena.html) · [connectome viewer](https://lulzx.com/fly-brain/) · [algorithmic structures](https://lulzx.com/fly-brain/structures.html) (desktop Chrome/Edge/Firefox; the viewer downloads about 30 MB, the arena about 23 MB)
 
 Full documentation: [docs/README.md](docs/README.md).
 
@@ -12,6 +12,7 @@ supplies the spontaneous drive the connectome model lacks: when to walk, pause, 
 It acts only as synaptic input to identified descending neurons ([docs/23-behaviour.md](docs/23-behaviour.md)).
 
 - `index.html` – the connectome viewer: 3D skeletons of all neurons, stimulate any cell type, watch activity.
+- `structures.html` – the algorithmic structures of the connectome: ring attractor, expansion coding, convolution kernels, motif census ([docs/28-algorithmic-structures.md](docs/28-algorithmic-structures.md)).
 - `arena.html` – the embodied arena: add flies (male or female), place sugar, odour, bitter patches, heat,
   blocks; launch a looming threat or activate a fly's takeoff neurons; change wind and light; follow a fly
   and watch its brain in the inset. `[` and `]` fold the side panels.

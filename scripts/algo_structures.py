@@ -3,7 +3,7 @@
 Reads the flat tables in public/data (graph_w3.bin, neurons.bin, meta.json, ntsign.bin) and measures the
 computational motifs the wiring implements: feedforward depth and feedback, recurrence, sign structure,
 bilateral wiring, and the canonical circuits (antennal lobe, mushroom body, central complex, optic lobe,
-escape, descending funnel, motor pools). Writes data/algo_structures.json; the report is docs/28-algorithmic-structures.md.
+escape, descending funnel, motor pools). Writes public/data/algo_structures.json; the report is docs/28-algorithmic-structures.md.
 
     python3 scripts/algo_structures.py            # all sections
     python3 scripts/algo_structures.py cx mb      # only some sections
@@ -165,5 +165,5 @@ if __name__ == '__main__':
     if 'bil' in want: bilateral()
     sys.path.insert(0, "scripts"); import algo_circuits as C
     C.run(want, globals(), R, x)
-    json.dump(R, open('data/algo_structures.json', 'w'), indent=1, default=lambda v: v.item() if hasattr(v, 'item') else str(v))
-    log('wrote data/algo_structures.json')
+    json.dump(R, open('public/data/algo_structures.json', 'w'), indent=1, default=lambda v: v.item() if hasattr(v, 'item') else str(v))
+    log('wrote public/data/algo_structures.json')

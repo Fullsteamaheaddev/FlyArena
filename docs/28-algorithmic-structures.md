@@ -3,10 +3,11 @@
 What computations does the wiring itself implement, before any dynamics are simulated? This document
 reports what `scripts/algo_structures.py` measures on the male-CNS graph used by the simulation
 (165,122 neurons, 10.5 M connections of 3 or more synapses, 104 M synapses, signs from the predicted
-transmitters as in [doc 5](05-brain-model.md)). Every number below is reproduced by
+transmitters as in [doc 5](05-brain-model.md)). `structures.html` visualises the same results with a description of each structure. Every number below is
+reproduced by
 
 ```sh
-python3 scripts/algo_structures.py            # ~3 min, writes data/algo_structures.json
+python3 scripts/algo_structures.py            # ~3 min, writes public/data/algo_structures.json
 python3 scripts/algo_structures.py cx mb      # only some sections
 ```
 
