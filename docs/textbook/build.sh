@@ -13,7 +13,8 @@ if command -v pandoc >/dev/null 2>&1; then
     if command -v "$ENGINE" >/dev/null 2>&1; then
       pandoc $FILES -o fly-brain-textbook.pdf --pdf-engine="$ENGINE" \
         -V geometry:margin=1in -V fontsize=11pt -V documentclass=report
-      echo "-> docs/textbook/fly-brain-textbook.pdf (engine: $ENGINE)"
+      cp fly-brain-textbook.pdf ../../public/fly-brain-textbook.pdf
+      echo "-> docs/textbook/fly-brain-textbook.pdf (engine: $ENGINE; copied to public/)"
       exit 0
     fi
   done

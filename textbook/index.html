@@ -2,29 +2,46 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Compiling the Fly Brain — a working textbook</title>
+<title>Compiling the Fly Brain</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="../src/textbook.css" />
 </head>
 <body>
-<div id="app">
-  <aside id="sidebar">
-    <div id="book-head">
-      <div class="book-title">Compiling the<br/>Fly Brain</div>
-      <div class="book-sub">From connectome to computation</div>
-      <div class="book-links"><a href="../">brain viewer</a> · <a href="../structures.html">structures</a> · <a href="../data/textbook.json">json</a></div>
-    </div>
-    <nav id="toc"></nav>
-  </aside>
-  <main id="reader">
-    <div id="content"><p class="loading">loading…</p></div>
-    <nav id="prevnext">
-      <a id="prev" class="pn"></a>
-      <a id="next" class="pn"></a>
-    </nav>
-  </main>
-  <button id="toc-toggle" aria-label="table of contents">☰</button>
-</div>
+<header id="topbar">
+  <button id="toc-btn">☰ Table of Contents</button>
+  <a id="wordmark" href="./">Compiling the Fly Brain</a>
+</header>
+<aside id="toc-panel"><nav id="toc"></nav></aside>
+<div id="scrim"></div>
+
+<main id="landing">
+  <div id="cover">
+    <h1>Compiling the Fly Brain</h1>
+    <p class="subtitle">From Connectome to Computation</p>
+    <p class="desc">A complete nervous system is now a data structure: 165,122 neurons, 104 million synapses. This book documents a pipeline that reads the wiring diagram, proposes the computations it performs, builds the families of models the wiring permits, and identifies the experiments that decide between them — worked end-to-end on three circuits of the male <i>Drosophila</i> CNS.</p>
+    <p class="actions">
+      <a class="btn" href="#01-introduction">Read online</a>
+      <a class="btn" href="../fly-brain-textbook.pdf">PDF</a>
+      <a class="btn" href="../">Brain viewer</a>
+      <a class="btn" href="../structures.html">Structures</a>
+    </p>
+  </div>
+  <nav id="landing-toc"></nav>
+</main>
+
+<main id="reader" hidden>
+  <div id="chap-head">
+    <div class="part-label" id="part-label"></div>
+    <div class="chap-label" id="chap-label"></div>
+    <h1 id="chap-title"></h1>
+  </div>
+  <div id="content"></div>
+  <nav id="prevnext">
+    <a id="prev" class="pn"></a>
+    <a id="next" class="pn"></a>
+  </nav>
+</main>
+
 <script type="module" src="../src/textbook.js"></script>
 </body>
 </html>

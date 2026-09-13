@@ -1,39 +1,62 @@
-// Ebook reader for docs/textbook — sidebar TOC + single-chapter reading pane,
-// hash-routed (#01-introduction). Content is pre-rendered by scripts/build_textbook.mjs.
+// Ebook reader for docs/textbook — networkstate-style: landing page with cover +
+// nested part/chapter TOC; chapter pages with a collapsible TOC overlay panel.
+// Content is pre-rendered by scripts/build_textbook.mjs.
 const tocEl = document.getElementById('toc');
+const landingTocEl = document.getElementById('landing-toc');
+const landingEl = document.getElementById('landing');
+const readerEl = document.getElementById('reader');
 const contentEl = document.getElementById('content');
 const prevEl = document.getElementById('prev');
 const nextEl = document.getElementById('next');
-const sidebar = document.getElementById('sidebar');
+const panel = document.getElementById('toc-panel');
+const scrim = document.getElementById('scrim');
 
-document.getElementById('toc-toggle').onclick = () => sidebar.classList.toggle('open');
+const { parts, chapters } = await (await fetch('../data/textbook.json')).json();
 
-const { chapters } = await (await fetch('../data/textbook.json')).json();
+function tocHTML(linkPrefix) {
+  return parts.map((p, i) => `
+    <div class="part">
+      <div class="part-name">${i + 1}. ${p.name}</div>
+      ${p.chapters.map(s => {
+        const ch = chapters.find(c => c.slug === s);
+        return `<a href="${linkPrefix}${s}" data-slug="${s}">${ch.title}</a>`;
+      }).join('')}
+    </div>`).join('');
+}
+landingTocEl.innerHTML = tocHTML('#');
+tocEl.innerHTML = tocHTML('#');
 
-// drop the title/TOC pseudo-chapter from the reading list but keep it as the landing view
-const reading = chapters.filter(c => c.slug !== '00-title');
-
-tocEl.innerHTML = reading.map((c, i) => {
-  const label = c.slug.startsWith('A-') ? 'A' : String(i + 1).padStart(2, '0');
-  return `<a href="#${c.slug}" data-slug="${c.slug}"><span class="num">${label}</span>${c.title}</a>`;
-}).join('');
+const openPanel = (on) => { panel.classList.toggle('open', on); scrim.classList.toggle('on', on); };
+document.getElementById('toc-btn').onclick = () => openPanel(!panel.classList.contains('open'));
+scrim.onclick = () => openPanel(false);
+addEventListener('keydown', e => { if (e.key === 'Escape') openPanel(false); });
 
 function route() {
-  const slug = location.hash.slice(1) || reading[0].slug;
-  const idx = Math.max(0, reading.findIndex(c => c.slug === slug));
-  const ch = reading[idx];
-  const label = ch.slug.startsWith('A-') ? 'Appendix' : `Chapter ${idx + 1}`;
-  contentEl.innerHTML = `<div class="chapnum">${label}</div>` + ch.html;
+  const slug = location.hash.slice(1);
+  const ch = chapters.find(c => c.slug === slug);
+  if (!ch) {                          // landing page
+    landingEl.hidden = false; readerEl.hidden = true;
+    document.title = 'Compiling the Fly Brain';
+    openPanel(false); return;
+  }
+  landingEl.hidden = true; readerEl.hidden = false;
+  const idx = chapters.indexOf(ch);
+  document.getElementById('part-label').textContent = ch.part;
+  document.getElementById('chap-label').textContent =
+    ch.slug.startsWith('A-') ? 'Appendix' : `Chapter ${idx + 1}`;
+  document.getElementById('chap-title').textContent = ch.title;
+  // strip the chapter's own h1 — the header renders it
+  contentEl.innerHTML = ch.html.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>/, '');
   tocEl.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.slug === ch.slug));
-  prevEl.textContent = idx > 0 ? `← ${reading[idx - 1].title}` : '';
-  prevEl.href = idx > 0 ? `#${reading[idx - 1].slug}` : '#';
-  prevEl.style.visibility = idx > 0 ? 'visible' : 'hidden';
-  nextEl.textContent = idx < reading.length - 1 ? `${reading[idx + 1].title} →` : '';
-  nextEl.href = idx < reading.length - 1 ? `#${reading[idx + 1].slug}` : '#';
-  nextEl.style.visibility = idx < reading.length - 1 ? 'visible' : 'hidden';
+
+  const prev = chapters[idx - 1], next = chapters[idx + 1];
+  prevEl.style.visibility = prev ? 'visible' : 'hidden';
+  nextEl.style.visibility = next ? 'visible' : 'hidden';
+  if (prev) { prevEl.href = `#${prev.slug}`; prevEl.innerHTML = `← Previous<br/><b>${prev.title}</b>`; }
+  if (next) { nextEl.href = `#${next.slug}`; nextEl.innerHTML = `Next Section:<br/><b>${next.title}</b>`; }
   document.title = `${ch.title} — Compiling the Fly Brain`;
+  openPanel(false);
   window.scrollTo(0, 0);
-  sidebar.classList.remove('open');
 }
 addEventListener('hashchange', route);
 route();
