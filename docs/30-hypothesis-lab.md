@@ -45,6 +45,22 @@ The literature check: real Delta7→EPG is glutamate→GluClα inhibition that s
 outcomes are the plausible ones; `d7_essential` is the class real data would rule out — which
 is exactly what a discriminating experiment is for.
 
+## The labs are now compiler output (`scripts/ensemble_spec.py` + `scripts/run_ensemble.mjs`)
+
+Both labs were reimplemented as executions of a declarative **ensemble spec**. The spec
+generator reads `operators.json` and emits, per detected operator: populations and their
+functional roles, the gain axes the wiring does not fix (per-edge-class scalar gains +
+tonic biases, each with a `why` note), the perturbation set (each load-bearing population
+and edge class ablated), hypothesis classes, and provenance (which evidence items justified
+the detection). `run_ensemble.mjs` executes a spec through geometry plugins (`ring`,
+`linear`) — hypothesis classification, perturbation ranking, mechanism attribution.
+
+Equivalence check: the ring spec at seed 42 reproduces the hand-written lab's hypothesis
+distribution and top-3 experiment set; the phasor spec reproduces the deepened workup and
+surfaces arm coupling (`needs_...+pfnv_silenced`: some members' PFNd shift requires PFNv
+co-activity). The difference between this and the earlier labs is the compiler claim: a new
+operator is now analysed by writing a spec entry, not a new script.
+
 ## Lab 2: the PFN→hDeltaB phasor transform (`scripts/phasor_lab.mjs`)
 
 Same machinery, different circuit — the test of whether the framework is generic or secretly
