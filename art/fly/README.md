@@ -77,8 +77,11 @@ The webpage does not load those images.
 `public/body/blender/fly.mesh` contains meshoptimizer-compressed vertex/index streams inside gzip.
 Positions use 16 bits per local axis, normals use 12-bit octahedral encoding, and irradiance uses
 12-bit square-root encoding. No triangles are removed. The packer verifies index round-trips and
-records maximum position/irradiance quantization errors in `bake.json`. The original surface
-sampler is included in the same compressed request to reproduce the exact procedural hair roots.
+records maximum position/irradiance quantization errors in `bake.json`. Version 3 packs the
+exact procedural hair transforms and their culling bounds offline, replacing the original surface
+sampler. A short-lived worker decodes the geometry, lighting and hair matrices, then transfers
+their buffers to the renderer without copying. `check_fly_asset.mjs` verifies every hair transform
+against the original sampler and preserves the original abdomen band boundaries.
 The small `agx-look.png` is a color-management lookup table, not a fly image.
 
 Lighting is baked for the fixed studio and resting male. It remains valid when orbiting the
@@ -90,6 +93,7 @@ tracing. The arena continues to use dynamic lighting and its existing distance d
 npm run dev
 node scripts/check_fly_page.mjs --url=http://localhost:5173 --out=/tmp/fly-blender/interactive-check
 node scripts/check_rendering.mjs --url=http://localhost:5173 --out=/tmp/fly-blender/browser-check --frames=180
+node scripts/check_fly_asset.mjs
 npm run build
 ```
 
@@ -102,5 +106,10 @@ throughput. Raw measurements are stored in
 Validated on 2026-09-13 in production-preview Chrome 152 on M4 Pro: 60.0 FPS full-body,
 60.1 FPS head detail and 60.1 FPS flying (300 frames each, 1400×900, DPR 1). The Retina check
 held 60.3 FPS at effective DPR 1.38 under the 2.4-megapixel ceiling; it does not render at native
-DPR 2. The packed mesh is 9.26 MB including the original surface sampler, with no triangles
-removed. Build, orbit/zoom, sex/wing controls, phone touch and arena regression checks passed.
+DPR 2. The packed mesh is now 8.22 MB, with no triangles removed. The focus effect reuses the
+main render's resolved MSAA depth and combines focus compositing with the AgX output pass.
+It preserves the full-resolution sharp image and no longer redraws the body for depth.
+Both pages now adapt to a 120 Hz frame budget on fast displays. Flying wing-stroke samples use
+smooth vertex illumination, and sub-texel motion reuses the studio shadow map.
+See [the browser performance comparison](../../docs/fly-browser-performance.md) for measured
+loading, GPU costs, visual checks, limitations and reproduction commands.

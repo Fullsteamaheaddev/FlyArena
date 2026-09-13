@@ -10,7 +10,8 @@ const out = args.out || '/tmp/fly-rendering';
 const frames = Number(args.frames || 180);
 const base = args.url || 'http://localhost:5173';
 await fs.mkdir(out, { recursive: true });
-const browser = await chromium.launch({ channel: 'chrome', headless: true });
+const browser = await chromium.launch({ channel: 'chrome', headless: true,
+  args:args.uncapped==='1'?['--disable-frame-rate-limit','--disable-gpu-vsync']:[] });
 const errors = [], results = [], fixtures = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: Number(args.dpr || 1) });
@@ -33,7 +34,7 @@ try {
     await page.waitForTimeout(1200);
   }
   async function measure(name, handle) {
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(args.target ? 5000 : 1000);
     const result = await page.evaluate(async ({ handle, frames, gpuTimers }) => {
       const h = window[handle], renderer = h.renderer, gl = renderer.getContext();
       const debug = gl.getExtension('WEBGL_debug_renderer_info');
@@ -77,6 +78,7 @@ try {
       };
     }, { handle, frames, gpuTimers: args.gpuTimers === '1' });
     results.push({ name, ...result }); console.log(name, JSON.stringify(result));
+    if(args.target && 1000/result.frameMs.mean<Number(args.target)) errors.push(`${name}: ${(1000/result.frameMs.mean).toFixed(1)} FPS is below ${args.target}`);
     await page.screenshot({ path: path.join(out, `${name}.png`) });
   }
   await open('fly');

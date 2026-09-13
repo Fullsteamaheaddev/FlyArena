@@ -146,7 +146,9 @@ function setaMatrix(out, pos, dir, bendTo, len, radius) {
 }
 
 
-export function createFlyAppearance(json, bin, low = null, detailTexture = null) {
+// Blender supplies worker-decoded geometry and exact baked hair placements through `prepared`.
+// The arena and offline exporter retain the original scan-based procedural path.
+export function createFlyAppearance(json, bin, low = null, detailTexture = null, prepared = null) {
 const makeCuticle = options => cuticle({ ...options, detailTexture });
 // body hierarchy from world poses: local = parentWorld⁻¹ · world
 const root = new THREE.Group();
@@ -186,6 +188,7 @@ const hairMats = {
   pale: new THREE.MeshPhysicalMaterial({ color: '#9a7846', roughness: 0.65, sheen: 0.1, sheenColor: new THREE.Color('#d8b890'), sheenRoughness: 0.7 }),
   comb: new THREE.MeshPhysicalMaterial({ color: '#160e08', roughness: 0.4, clearcoat: 0.1, clearcoatRoughness: 0.4 }),
 };
+for (const [name, material] of Object.entries(hairMats)) material.name = name;
 
 const geoms = {}, meshes = [], tergites = [], hairGroups = [];
 function wingThickness(geo) {   // planar UVs in the wing plane + a thickness map for the interference colours
@@ -205,20 +208,23 @@ const thickTex = (() => {   // u across the chord, v along the span; base (v=1) 
 const membrane = membraneMaterial(thickTex);
 
 for (const p of json.parts) {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bin, p.vOff, p.vCount * 3), 3));
-  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(bin, p.iOff, p.iCount), 1));
-  geo.computeVertexNormals(); geoms[p.geom] = geo;
+  const geo = prepared?.geometries[p.geom] || new THREE.BufferGeometry();
+  if (!prepared) {
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bin, p.vOff, p.vCount * 3), 3));
+    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(bin, p.iOff, p.iCount), 1));
+    geo.computeVertexNormals();
+  }
+  geoms[p.geom] = geo;
   const n = p.geom, body = p.body; let mat;
-  if (n === 'head_red') { mat = mats.eye; addSmoothEyeNormals(geo); }
+  if (n === 'head_red') { mat = mats.eye; if (!geo.hasAttribute('aSmooth')) addSmoothEyeNormals(geo); }
   else if (n === 'head_ocelli') mat = mats.ocelli;
   else if (/black|bristle/.test(n)) mat = mats.bristle;
-  else if (/membrane/.test(n)) { wingThickness(geo); mat = membrane; }
+  else if (/membrane/.test(n)) { if (!geo.hasAttribute('uv')) wingThickness(geo); mat = membrane; }
   else if (/wing_.*brown/.test(n)) mat = mats.vein;
   else if (/claw/.test(n)) mat = mats.claw;
   else if (/lower/.test(n)) mat = mats.pale;
   else if (/^abdomen/.test(n)) { geo.computeBoundingBox(); const bb = geo.boundingBox;
-    mat = makeCuticle({ color: C.tan, roughness: 0.43, sheen: 0.1, band: { y0: bb.min.y, y1: bb.max.y, frac: 0.3 } }); tergites.push({ n, mat }); }
+    mat = makeCuticle({ color: C.tan, roughness: 0.43, sheen: 0.1, band: { y0: p.bandBounds?.[0] ?? bb.min.y, y1: p.bandBounds?.[1] ?? bb.max.y, frac: 0.3 } }); tergites.push({ n, mat }); }
   else if (/coxa|femur|tibia|tarsus|haltere/.test(n)) mat = mats.leg;
   else if (/^antenna/.test(n)) mat = mats.antenna;
   else if (/thorax/.test(n)) mat = mats.thorax;
@@ -245,6 +251,17 @@ function addSmoothEyeNormals(geo) {
 }
 
 // ---------------- setae ----------------
+const sexComb = [];
+if (prepared) {
+  for (const hair of prepared.hairs) {
+    const im = new THREE.InstancedMesh(SETA, hairMats[hair.material], hair.count);
+    im.instanceMatrix = new THREE.InstancedBufferAttribute(hair.matrices, 16);
+    im.name = hair.name; im.castShadow = hair.castShadow;
+    im.boundingSphere = new THREE.Sphere(new THREE.Vector3().fromArray(hair.bounds.center), hair.bounds.radius);
+    bodies[hair.body].add(im);
+    (hair.material === 'comb' ? sexComb : hairGroups).push(im);
+  }
+} else {
 // Direction conventions in each body frame: setae lean along `comb` (distal on legs, posterior on the abdomen),
 // lying at 50–75° from the surface normal like real socketed bristles.
 const restWorld = name => worldOf('rest', name);
@@ -318,7 +335,6 @@ function addWingMargin(sd) {
 addWingMargin('left'); addWingMargin('right');
 
 // male sex comb: ~10 thick, blunt, black teeth in a row across the distal basitarsus, on its anterior-ventral face
-const sexComb = [];
 for (const sd of ['left', 'right']) {
   const b = `tarsus_T1_${sd}`, geo = geoms[b]; geo.computeBoundingBox(); const bb = geo.boundingBox, P = geo.attributes.position.array, N = geo.attributes.normal.array;
   const w = restWorld(b), toLocal = w.q.clone().invert();
@@ -335,6 +351,7 @@ for (const sd of ['left', 'right']) {
   }
   im.name = `sexcomb:${sd}`; bodies[b].add(im); sexComb.push(im);
 }
+}
 
 
   // Immutable buffers are shared by all arena flies. Only transforms, draw counts and sex differ.
@@ -348,8 +365,8 @@ for (const sd of ['left', 'right']) {
     if (/membrane/.test(p.geom)) wingThickness(g);
     g.computeBoundingSphere(); lowGeoms[p.geom] = g;
   }
-  for (const m of [...hairGroups, ...sexComb]) { m.computeBoundingSphere(); m.userData.fullCount = m.count; }
-  for (const m of meshes) { m.geometry.computeBoundingSphere(); m.matrixAutoUpdate = false; }
+  for (const m of [...hairGroups, ...sexComb]) { if (!m.boundingSphere) m.computeBoundingSphere(); m.userData.fullCount = m.count; }
+  for (const m of meshes) { if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere(); m.matrixAutoUpdate = false; }
   function pigment(sex, list = tergites) {
     for (const { n, mat } of list) mat.userData.u.uBand.value.z = sex === 'm' && /abdomen_(6|7|8)$/.test(n) ? 1.2 : n === 'abdomen' ? 0.18 : 0.32;
   }

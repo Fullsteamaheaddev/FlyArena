@@ -4,14 +4,14 @@
 // posterior tergite bristle rows, interommatidial bristles, wing-margin bristles, the male sex comb,
 // sex-specific tergite pigmentation, wing thin-film interference and the eye's deep pseudopupil.
 import * as THREE from 'three';
-import { createFlyAppearance, loadCuticleDetail } from './fly-appearance.js';
-import { loadBlenderFly, applyBlenderFly, blenderLights, blenderOutput } from './fly-blender.js';
+import { loadCuticleDetail } from './fly-appearance.js';
+import { loadBlenderFly, createBlenderFly, blenderLights, blenderOutput } from './fly-blender.js';
 import { RenderResolution } from './render-resolution.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { MacroFocusPass } from './macro-focus.js';
+import { createWingBlurMaterial, lightWingBlur } from './wing-blur.js';
 const BASE = import.meta.env.BASE_URL;
 const $ = s => document.querySelector(s);
 const status = s => { $('#status').textContent = s; };
@@ -44,7 +44,7 @@ const describe = name => ANATOMY.find(([re]) => re.test(name));
 // ---------------- renderer, scene ----------------
 const canvas = $('#c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-const resolution = new RenderResolution(() => resize());
+const resolution = new RenderResolution(() => resize(), { targetFps: 120 });
 renderer.setPixelRatio(resolution.ratio);
 renderer.info.autoReset = false;
 renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = Math.pow(2, -.2);
@@ -109,20 +109,16 @@ const detailPromise = loadCuticleDetail(`${BASE}body/cuticle_detail.png`);
 const blenderPromise = loadBlenderFly(BASE, status);
 const outputPromise = blenderOutput(BASE);
 const blenderAsset = await blenderPromise;
-const json = { ...blenderAsset.meta, parts: blenderAsset.meta.sourceParts }, bin = blenderAsset.source;
-status('building cuticle and setae');
-await new Promise(r => setTimeout(r, 0));
-
-const appearance = createFlyAppearance(json, bin, null, await detailPromise);
+performance.mark('fly:decoded');
 status('applying Cycles lighting');
-applyBlenderFly(appearance, blenderAsset);
+const appearance = createBlenderFly(blenderAsset, await detailPromise);
+performance.mark('fly:assembled');
 const { root, bodies, localPose, meshes, tergites, hairGroups, sexComb } = appearance;
 scene.add(root);
 const _X = new THREE.Vector3(), _Y = new THREE.Vector3(), _Z = new THREE.Vector3();
 
 // flying: the wing sweeps its whole stroke every 4.6 ms, so it is drawn as faint copies across the stroke
-const ghostMat = new THREE.MeshStandardMaterial({ color: '#aab2ba', roughness: 0.35, transparent: true, opacity: 0.026, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.5 });
-ghostMat.forceSinglePass = true;
+const ghostMat = createWingBlurMaterial();
 const wingGhosts = ['left', 'right'].map(sd => {
   const film = meshes.find(m => m.name === `wing_${sd}_membrane`);
   const mesh = new THREE.InstancedMesh(film.geometry, ghostMat, 16);
@@ -148,6 +144,7 @@ controls.target.copy(target);
 camera.position.set(0.55, -0.62, 0.36).add(target);
 key.target.position.copy(target);
 const areaLights = blenderLights(scene, blenderAsset.meta, root.position);
+lightWingBlur(ghostMat, areaLights);
 // Cycles supplies diffuse transport. The area sources supply moving lens highlights;
 // a subdued shadow light anchors the live hairs and the fly's contact with the floor.
 key.position.copy(areaLights[0].position.clone().sub(target).normalize().multiplyScalar(1.8).add(target));
@@ -175,28 +172,17 @@ if (matchMedia('(max-width:700px)').matches) $('#controls').open = false;
 fullBody();
 
 // ---------------- post ----------------
-const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4,
+  depthTexture: new THREE.DepthTexture(1, 1, THREE.UnsignedIntType) });
 const composer = new EffectComposer(renderer, rt);
 composer.addPass(new RenderPass(scene, camera));
-const gtao = new GTAOPass(scene, camera, 1, 1); gtao.updateGtaoMaterial({ radius: 0.012, distanceExponent: 1.5, thickness: 0.6, scale: 1.1, samples: 12 });
-gtao.enabled = false; // Cycles already baked true geometry occlusion, including the fine setae.
-composer.addPass(gtao);
-const bokeh = new MacroFocusPass(scene, camera, { focus: 0.8, aperture: 0.006, maxblur: 0.006 });
+const bokeh = new MacroFocusPass(camera, { focus: 0.8, aperture: 0.006, maxblur: 0.006 });
 composer.addPass(bokeh);
-composer.addPass(await outputPromise);
-// see-through films (membranes, stroke blur) must not occlude in the AO and focus depth passes
-const depthExcluded = [...meshes.filter(m => !m.material.depthWrite), ...hairGroups, ...wingGhosts, floor];
-const depthHidden = [];
-const withoutFilms = fn => function (...args) {
-  for (const m of depthExcluded) if (m.visible) { m.visible = false; depthHidden.push(m); }
-  try { return fn.apply(this, args); } finally { for (const m of depthHidden) m.visible = true; depthHidden.length = 0; }
-};
-gtao._renderOverride = withoutFilms(gtao._renderOverride);
-bokeh.render = withoutFilms(bokeh.render);
+const output = await outputPromise;
+bokeh.connect(output); composer.addPass(output);
 function resize() {
   const w = innerWidth, h = innerHeight; renderer.setPixelRatio(resolution.ratio); renderer.setSize(w, h, false);
   composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h);
-  gtao.setSize(Math.ceil(w * renderer.getPixelRatio() / 2), Math.ceil(h * renderer.getPixelRatio() / 2));
   camera.aspect = w / h; camera.updateProjectionMatrix();
   if (framing === 'body') fullBody();
 }
@@ -248,9 +234,39 @@ function updateHover() {
 // ---------------- animation ----------------
 const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3();
 const WINGS = ['wing_left', 'wing_right'];
-const clock = new THREE.Timer(); let lastShadow = -Infinity;
+const clock = new THREE.Timer(); let lastShadowCheck = -Infinity;
 const bodyNames = Object.keys(bodies);
 const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0 };
+// The studio light is fixed. Reuse its map until a caster moves by half a shadow texel;
+// that is far smaller than the existing 10-texel soft-shadow filter. Keep the 30 Hz upper limit.
+const shadowTolerance = (key.shadow.camera.right-key.shadow.camera.left) / key.shadow.mapSize.x * .5;
+const shadowCasters = [...meshes, ...hairGroups, ...sexComb].filter(m=>m.castShadow).map(mesh=>({
+  mesh, matrix:new THREE.Matrix4(), visible:null, bounds:mesh.boundingSphere || mesh.geometry.boundingSphere,
+}));
+function refreshShadow(t) {
+  if(t-lastShadowCheck<1/30) return;
+  lastShadowCheck=t; root.updateMatrixWorld(true);
+  let changed=false;
+  for(const entry of shadowCasters) {
+    const {mesh,matrix,bounds}=entry;let visible=true;
+    for(let p=mesh;p;p=p.parent) if(!p.visible){visible=false;break;}
+    entry.nextVisible=visible;
+    if(visible!==entry.visible) changed=true;
+    if(!visible || changed) continue;
+    const a=mesh.matrixWorld.elements,b=matrix.elements,c=bounds.center;
+    let displacement=0,linear=0;
+    for(let k=0;k<3;k++) {
+      const x=a[k]-b[k],y=a[k+4]-b[k+4],z=a[k+8]-b[k+8];
+      displacement+=(x*c.x+y*c.y+z*c.z+a[k+12]-b[k+12])**2;
+      linear+=x*x+y*y+z*z;
+    }
+    // A conservative bound on movement of every point inside the caster's sphere.
+    if(Math.sqrt(displacement)+bounds.radius*Math.sqrt(linear)>shadowTolerance) changed=true;
+  }
+  if(!changed) return;
+  for(const e of shadowCasters){e.matrix.copy(e.mesh.matrixWorld);e.visible=e.nextVisible;}
+  renderer.shadowMap.needsUpdate=true;metrics.shadowUpdates++;
+}
 function tick() {
   requestAnimationFrame(tick);
   clock.update();
@@ -296,17 +312,22 @@ function tick() {
     ghost.instanceMatrix.needsUpdate = true; ghost.computeBoundingSphere();
   });
   if (fl >= 0.5 && Math.abs(fl - lastFlightPose) >= 0.0001) lastFlightPose = fl;
-  if (focusing > 0) { controls.target.lerp(focusTo, 0.12); focusing = controls.target.distanceTo(focusTo) > 1e-4 ? 1 : 0; }
-  controls.update();
+  if (focusing > 0) { controls.target.lerp(focusTo, 1-Math.pow(.88,dt*60)); focusing = controls.target.distanceTo(focusTo) > 1e-4 ? 1 : 0; }
+  controls.dampingFactor=1-Math.pow(.95,dt*60);
+  controls.update(dt);
   bokeh.uniforms.focus.value = camera.position.distanceTo(controls.target);
   const dist = camera.position.distanceTo(controls.target);
   bokeh.uniforms.aperture.value = 0.0045 / Math.max(dist, 0.15); bokeh.uniforms.maxblur.value = 0.008;
   updateHover();
-  resolution.update(performance.now(), gtao.enabled || bokeh.enabled);
-  if (t - lastShadow >= 1 / 30) { renderer.shadowMap.needsUpdate = true; lastShadow = t; metrics.shadowUpdates++; }
+  resolution.update(performance.now(), bokeh.enabled);
+  refreshShadow(t);
   renderer.info.reset(); const start = performance.now(); composer.render();
   metrics.renderMs = performance.now() - start; metrics.calls = renderer.info.render.calls; metrics.triangles = renderer.info.render.triangles;
 }
-window.__fly = { camera, controls, state, bodies, gtao, bokeh, key, renderer, composer, scene, appearance, metrics, resolution, areaLights, fullBody, headDetail };   // for scripted screenshots
+// Compile body materials in parallel before the first interactive frame, where supported.
+status('preparing lighting');
+await renderer.compileAsync(scene, camera);
+performance.mark('fly:compiled');
+window.__fly = { camera, controls, state, bodies, bokeh, key, renderer, composer, scene, appearance, metrics, resolution, areaLights, fullBody, headDetail };   // for scripted screenshots
 tick();
 $('#loading').classList.add('done');

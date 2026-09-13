@@ -73,7 +73,7 @@ const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0, brainUp
 let brainRenderer, brainScene, brainCam, brainPts, brainAct;
 function buildScene(data) {
   renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
-  resolution = new RenderResolution(() => resize());
+  resolution = new RenderResolution(() => resize(), { targetFps: 120 });
   renderer.setPixelRatio(resolution.ratio); renderer.setSize(innerWidth, innerHeight);
   renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;

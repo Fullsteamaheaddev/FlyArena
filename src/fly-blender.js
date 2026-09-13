@@ -1,7 +1,7 @@
 // Cycles diffuse transport on real subdivided geometry; camera-dependent gloss stays live.
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { MeshoptDecoder } from 'meshoptimizer/decoder';
+import { createFlyAppearance } from './fly-appearance.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 export async function loadBlenderFly(base, progress = () => {}) {
@@ -15,56 +15,49 @@ export async function loadBlenderFly(base, progress = () => {}) {
     loaded += chunk.byteLength; progress(size ? `loading Blender body ${Math.min(100, loaded / size * 100).toFixed(0)}%` : `loading Blender body ${(loaded / 1e6).toFixed(1)} MB`); controller.enqueue(chunk);
   } })).pipeThrough(new DecompressionStream('gzip'));
   const binary = await new Response(stream).arrayBuffer();
-  await MeshoptDecoder.ready;
-  return { meta, binary, source: binary.slice(meta.sourceScan.offset, meta.sourceScan.offset + meta.sourceScan.bytes) };
+  progress('decoding Blender detail');
+  const worker = new Worker(new URL('./fly-decode.worker.js', import.meta.url), { type: 'module' });
+  try {
+    const prepared = await new Promise((resolve, reject) => {
+      worker.onmessage = ({ data }) => data.error ? reject(new Error(data.error)) : resolve(data.prepared);
+      worker.onerror = event => reject(new Error(event.message || 'Blender mesh decoder failed'));
+      worker.onmessageerror = () => reject(new Error('Blender mesh transfer failed'));
+      worker.postMessage({ meta, binary }, [binary]);
+    });
+    return { meta, ...prepared };
+  } finally { worker.terminate(); }
 }
 
-export function applyBlenderFly(appearance, { meta, binary }) {
+export function createBlenderFly(asset, detailTexture) {
+  const geometries = {};
+  for (const part of asset.parts) {
+    const geometry = new THREE.BufferGeometry();
+    for (const [name, array] of Object.entries(part.attributes))
+      geometry.setAttribute(name, new THREE.BufferAttribute(array, name === 'uv' ? 2 : 3, name === 'normal'));
+    geometry.setIndex(new THREE.BufferAttribute(part.index, 1));
+    const b = part.bounds;
+    geometry.boundingBox = new THREE.Box3(new THREE.Vector3().fromArray(b.min), new THREE.Vector3().fromArray(b.max));
+    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3().fromArray(b.center), b.radius);
+    geometries[part.geom] = geometry;
+  }
+  const appearance = createFlyAppearance(asset.meta, null, null, detailTexture, { geometries, hairs: asset.hairs });
+  applyBlenderFly(appearance, asset);
+  return appearance;
+}
+
+function applyBlenderFly(appearance, { meta, hairs }) {
   const materialParts = new Map();
   const materialVariants = new Map();
   for (const part of meta.parts) {
     const mesh = appearance.meshes.find(m => m.name === part.geom);
-    const geometry = new THREE.BufferGeometry();
-    const decode = (key, filter) => {
-      const stream = part.streams[key], data = new Uint8Array(part.vCount * 8);
-      MeshoptDecoder.decodeVertexBuffer(data, part.vCount, 8, new Uint8Array(binary, stream.offset, stream.bytes), filter);
-      return data;
-    };
-    const positionQ = new Uint16Array(decode('position').buffer), normals = new Int16Array(decode('normal', 'OCTAHEDRAL').buffer), lightQ = new Uint16Array(decode('light').buffer);
-    const positions = new Float32Array(part.vCount * 3), normal = new Int16Array(part.vCount * 3), light = new Float32Array(part.vCount * 3);
-    for (let i = 0; i < part.vCount; i++) for (let k = 0; k < 3; k++) {
-      positions[3*i+k] = part.bounds.min[k] + positionQ[4*i+k] / 65535 * (part.bounds.max[k] - part.bounds.min[k]);
-      normal[3*i+k] = normals[4*i+k];
-      light[3*i+k] = (lightQ[4*i+k] / 4095) ** 2 * part.lightMax[k];
-    }
-    const indices = new Uint32Array(part.iCount), indexStream = part.streams.index;
-    MeshoptDecoder.decodeIndexBuffer(new Uint8Array(indices.buffer), part.iCount, 4, new Uint8Array(binary, indexStream.offset, indexStream.bytes));
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('normal', new THREE.BufferAttribute(normal, 3, true));
-    geometry.setAttribute('aCyclesLight', new THREE.BufferAttribute(light, 3));
-    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-    if (/membrane/.test(part.geom)) {
-      const uv = new Float32Array(part.vCount * 2), { min, max } = part.bounds;
-      for (let i = 0; i < part.vCount; i++) { uv[2*i] = (positions[3*i]-min[0])/(max[0]-min[0]); uv[2*i+1] = (positions[3*i+1]-min[1])/(max[1]-min[1]); }
-      geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    }
-    if (part.geom === 'head_red') {
-      // Overall eye curvature for the pseudopupil, separate from the new rounded lens normals.
-      const positions = geometry.attributes.position, smooth = new Float32Array(part.vCount * 3);
-      const center = [new THREE.Vector3(), new THREE.Vector3()], count = [0, 0];
-      for (let i = 0; i < positions.count; i++) { const side = positions.getX(i) > 0 ? 1 : 0; center[side].add(new THREE.Vector3().fromBufferAttribute(positions, i)); count[side]++; }
-      center.forEach((c, i) => c.divideScalar(count[i]));
-      const n = new THREE.Vector3();
-      for (let i = 0; i < positions.count; i++) n.fromBufferAttribute(positions, i).sub(center[positions.getX(i) > 0 ? 1 : 0]).normalize().toArray(smooth, i * 3);
-      geometry.setAttribute('aSmooth', new THREE.BufferAttribute(smooth, 3));
-    }
-    geometry.computeBoundingSphere(); geometry.computeBoundingBox();
-    mesh.geometry.dispose(); mesh.geometry = geometry;
     if (!/membrane/.test(part.geom)) {
       if (!/^abdomen/.test(part.geom)) {
         const original = mesh.material, key = `${original.uuid}:${part.surface.name}`;
         if (!materialVariants.has(key)) {
-          const material = original.clone();
+          // Material.copy JSON-serializes userData. That would PNG-encode the shared
+          // cuticle texture for each variant, only to discard it when restoring uniforms.
+          const source = Object.create(original); source.userData = {};
+          const material = new original.constructor().copy(source);
           material.userData = original.userData;
           material.onBeforeCompile = original.onBeforeCompile;
           material.customProgramCacheKey = original.customProgramCacheKey;
@@ -116,15 +109,11 @@ export function applyBlenderFly(appearance, { meta, binary }) {
     hair.material.color.setRGB(...(comb ? [.021, .008, .002] : pale ? [.45, .29, .11] : [.135, .067, .021]), THREE.LinearSRGBColorSpace);
     hair.material.roughness = .36;
     hair.material.sheen = .15;
-    const baked = meta.hairs?.[index];
+    const baked = hairs[index];
     if (baked) {
-      if (baked.count !== hair.count) throw new Error(`Hair bake count mismatch: ${hair.name}`);
-      const data = new Uint8Array(baked.count * 8);
-      MeshoptDecoder.decodeVertexBuffer(data, baked.count, 8, new Uint8Array(binary, baked.stream.offset, baked.stream.bytes));
-      const packed = new Uint16Array(data.buffer), light = new Float32Array(baked.count * 3);
-      for (let i = 0; i < baked.count; i++) for (let k = 0; k < 3; k++) light[i*3+k] = THREE.DataUtils.fromHalfFloat(packed[i*4+k]);
+      if (baked.count !== hair.count || baked.name !== hair.name) throw new Error(`Hair bake mismatch: ${hair.name}`);
       hair.geometry = hair.geometry.clone();
-      hair.geometry.setAttribute('aHairLight', new THREE.InstancedBufferAttribute(light, 3));
+      hair.geometry.setAttribute('aHairLight', new THREE.InstancedBufferAttribute(baked.light, 3));
       if (!hair.material.userData.cyclesHair) {
         hair.material.userData.cyclesHair = true;
         hair.material.customProgramCacheKey = () => 'cycles-hair-v1';
@@ -162,13 +151,24 @@ export async function blenderOutput(base) {
   return new ShaderPass({
     uniforms: { tDiffuse: { value: null }, lookup: { value: lookup } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
-    fragmentShader: `uniform sampler2D tDiffuse, lookup; varying vec2 vUv;
+    fragmentShader: `#include <packing>
+      uniform sampler2D tDiffuse, lookup, tBlur, tDepth; varying vec2 vUv;
+      uniform bool focusEnabled;
+      uniform float focus, aperture, maxblur, nearClip, farClip, width;
       vec3 displayColor(vec3 linearColor) {
         vec3 p = clamp((log2(max(linearColor, vec3(exp2(-12.)))) + 12.) / 20., 0., 1.) * 47.;
         float b = floor(p.b);
         vec2 uv = vec2((b * 48. + p.r + .5) / (48. * 48.), (p.g + .5) / 48.);
         return mix(texture2D(lookup, uv).rgb, texture2D(lookup, uv + vec2(min(1., 47.-b)/48., 0.)).rgb, fract(p.b));
       }
-      void main(){ gl_FragColor=vec4(displayColor(texture2D(tDiffuse,vUv).rgb),1.); }`,
+      void main(){
+        vec3 color = texture2D(tDiffuse, vUv).rgb;
+        if (focusEnabled) {
+          float z = perspectiveDepthToViewZ(texture2D(tDepth, vUv).x, nearClip, farClip);
+          float radius = min(abs(focus + z) * aperture, maxblur) * .4 * width;
+          color = mix(color, texture2D(tBlur, vUv).rgb, smoothstep(.5, 1.5, radius));
+        }
+        gl_FragColor=vec4(displayColor(color),1.);
+      }`,
   });
 }

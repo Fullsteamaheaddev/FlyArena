@@ -1,69 +1,71 @@
 import * as THREE from 'three';
-import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
-import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
-// Sample the defocused image at half resolution, then composite over the original full-resolution
-// colour. In-focus eye facets and hairs never go through the downsampled image.
-export class MacroFocusPass extends BokehPass {
-  constructor(scene, camera, params) {
-    super(scene, camera, params);
+// Reuse the main MSAA render's resolved depth. Only the blurred image is half resolution;
+// the final display pass composites it with the untouched full-resolution colour.
+export class MacroFocusPass extends Pass {
+  constructor(camera, { focus, aperture, maxblur }) {
+    super();
+    this.camera = camera;
+    this.needsSwap = false;
     this.blurTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
-    const prefix = this.materialBokeh.fragmentShader.split('void main()')[0];
-    // Deterministic disk samples: no time-dependent noise or shimmering when orbiting/recording.
+    this.uniforms = {
+      tColor: { value: null }, tDepth: { value: null }, focus: { value: focus },
+      aperture: { value: aperture }, maxblur: { value: maxblur }, aspect: { value: 1 },
+      nearClip: { value: camera.near }, farClip: { value: camera.far }, width: { value: 1 },
+    };
     const taps = Array.from({ length: 12 }, (_, i) => {
-      const angle = i * 2.39996323, r = Math.sqrt((i + 0.5) / 12) * 0.4;
-      return `col += texture2D(tColor, vUv + vec2(${(Math.cos(angle) * r).toFixed(7)}, ${(Math.sin(angle) * r).toFixed(7)}) * blur);`;
+      const angle = i * 2.39996323, r = Math.sqrt((i + .5) / 12) * .4;
+      return `col += texture2D(tColor, vUv + vec2(${(Math.cos(angle)*r).toFixed(7)}, ${(Math.sin(angle)*r).toFixed(7)}) * blur).rgb;`;
     }).join('\n');
-    this.materialBokeh.fragmentShader = `${prefix}
-      void main() {
-        float factor = focus + getViewZ(getDepth(vUv));
-        vec2 blur = vec2(1., aspect) * clamp(factor * aperture, -maxblur, maxblur);
-        vec4 col = texture2D(tColor, vUv);
-        ${taps}
-        gl_FragColor = vec4(col.rgb / 13., 1.);
-      }`;
-    this.composite = new THREE.ShaderMaterial({
-      uniforms: {
-        tColor: { value: null }, tBlur: { value: this.blurTarget.texture },
-        tDepth: this.uniforms.tDepth, focus: this.uniforms.focus, aperture: this.uniforms.aperture,
-        maxblur: this.uniforms.maxblur, nearClip: this.uniforms.nearClip, farClip: this.uniforms.farClip,
-        width: { value: 1 },
-      },
-      vertexShader: this.materialBokeh.vertexShader,
-      fragmentShader: `
-        #include <packing>
+    this.material = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+      fragmentShader: `#include <packing>
         varying vec2 vUv;
-        uniform sampler2D tColor, tBlur, tDepth;
-        uniform float focus, aperture, maxblur, nearClip, farClip, width;
+        uniform sampler2D tColor, tDepth;
+        uniform float focus, aperture, maxblur, aspect, nearClip, farClip;
         void main() {
-          float z = perspectiveDepthToViewZ(unpackRGBAToDepth(texture2D(tDepth, vUv)), nearClip, farClip);
-          float radius = min(abs(focus + z) * aperture, maxblur) * .4 * width;
-          vec3 sharp = texture2D(tColor, vUv).rgb;
-          vec3 blurred = texture2D(tBlur, vUv).rgb;
-          gl_FragColor = vec4(mix(sharp, blurred, smoothstep(.5, 1.5, radius)), 1.);
+          float z = perspectiveDepthToViewZ(texture2D(tDepth, vUv).x, nearClip, farClip);
+          vec2 blur = vec2(1., aspect) * clamp((focus + z) * aperture, -maxblur, maxblur);
+          vec3 col = texture2D(tColor, vUv).rgb;
+          ${taps}
+          gl_FragColor = vec4(col / 13., 1.);
         }`,
       depthTest: false, depthWrite: false,
     });
-    this.compositeQuad = new FullScreenQuad(this.composite);
+    this.quad = new FullScreenQuad(this.material);
   }
 
   setSize(width, height) {
-    const w = Math.ceil(width / 2), h = Math.ceil(height / 2);
-    super.setSize(w, h); this.blurTarget.setSize(w, h);
+    this.blurTarget.setSize(Math.ceil(width / 2), Math.ceil(height / 2));
     this.uniforms.aspect.value = width / height;
-    this.composite.uniforms.width.value = width;
+    this.uniforms.width.value = width;
   }
 
   render(renderer, writeBuffer, readBuffer) {
-    const toScreen = this.renderToScreen;
-    this.renderToScreen = false;
-    try { super.render(renderer, this.blurTarget, readBuffer); } finally { this.renderToScreen = toScreen; }
-    this.composite.uniforms.tColor.value = readBuffer.texture;
-    renderer.setRenderTarget(toScreen ? null : writeBuffer);
-    this.compositeQuad.render(renderer);
+    this.uniforms.tColor.value = readBuffer.texture;
+    this.uniforms.tDepth.value = readBuffer.depthTexture;
+    this.uniforms.nearClip.value = this.camera.near;
+    this.uniforms.farClip.value = this.camera.far;
+    renderer.setRenderTarget(this.blurTarget);
+    this.quad.render(renderer);
   }
 
-  dispose() {
-    super.dispose(); this.blurTarget.dispose(); this.composite.dispose(); this.compositeQuad.dispose();
+  // Shared uniform objects keep focus and resize changes in sync with the output pass.
+  connect(output) {
+    Object.assign(output.uniforms, {
+      tBlur: { value: this.blurTarget.texture }, focusEnabled: { value: false },
+      ...Object.fromEntries(['tDepth', 'focus', 'aperture', 'maxblur', 'nearClip', 'farClip', 'width'].map(k => [k, this.uniforms[k]])),
+    });
+    const render = output.render;
+    output.render = (...args) => {
+      output.uniforms.focusEnabled.value = this.enabled;
+      return render.apply(output, args);
+    };
+    // The final pass renders to the screen, so no ping-pong swap is needed.
+    output.needsSwap = false;
   }
+
+  dispose() { this.blurTarget.dispose(); this.material.dispose(); this.quad.dispose(); }
 }

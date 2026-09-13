@@ -23,11 +23,12 @@ try {
     return { generator: a.blender.generator, parts: a.meshes.length, triangles: a.meshes.reduce((n,m)=>n+m.geometry.index.count/3,0),
       irradiance: a.meshes.every(m => !!m.geometry.attributes.aCyclesLight),
       bakedHairs: a.hairGroups.reduce((n,m)=>n+(m.geometry.attributes.aHairLight ? m.count : 0),0),
-      lights: __fly.areaLights.length, ao: __fly.gtao.enabled };
+      lights: __fly.areaLights.length, ao: __fly.gtao?.enabled ?? false };
   });
   assert.match(report.assets.generator, /Blender.*Cycles/); assert.equal(report.assets.parts, 85);
   assert.equal(report.assets.triangles, 1169030); assert.ok(report.assets.irradiance); assert.ok(report.assets.bakedHairs > 35000);
   assert.equal(report.assets.lights, 4); assert.equal(report.assets.ao, false);
+  assert.equal(page.workers().length, 0, 'The decoding worker must release its temporary memory after loading');
   report.resources = await page.evaluate(() => performance.getEntriesByType('resource').map(r => ({ name: new URL(r.name).pathname, bytes: r.transferSize })));
   assert.ok(!report.resources.some(r => /body\/renders\//.test(r.name)));
   async function profile(name) {

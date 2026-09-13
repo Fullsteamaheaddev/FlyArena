@@ -5,6 +5,7 @@ import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 import { DataUtils } from 'three';
+import { createFlyAppearance } from '../src/fly-appearance.js';
 
 const input = process.argv[2] || '/tmp/fly-blender/baked', output = process.argv[3] || 'public/body/blender';
 await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready]);
@@ -19,7 +20,7 @@ const range = (data, stride = 3) => {
   for (let i = 0; i < data.length; i += stride) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], data[i+k]); max[k] = Math.max(max[k], data[i+k]); }
   return { min, max };
 };
-meta.version = 2; meta.encoding = 'meshopt-gzip';
+meta.version = 3; meta.encoding = 'meshopt-gzip';
 for (const p of meta.parts) {
   const pos = new Float32Array(binary, p.vOff, p.vCount * 3), normals = new Int16Array(binary, p.nOff, p.vCount * 3);
   const light = new Uint16Array(binary, p.lightOff, p.vCount * 3), indices = new Uint32Array(binary, p.iOff, p.iCount).slice();
@@ -61,11 +62,29 @@ for (const hair of meta.hairs || []) {
   hair.stream = append(MeshoptEncoder.encodeVertexBuffer(new Uint8Array(packed.buffer), hair.count, 8));
   delete hair.lightOff;
 }
-// Include the original surface sampler in the same compressed request. It preserves the
-// exact procedural hair roots used in the .blend, without a second uncompressed scan download.
+// Generate the original deterministic hair roots offline, once. Preserve every Float32
+// matrix element exactly; omit only the constant affine row. The browser needs no scan sampler.
 const originalScan = JSON.parse(await fs.readFile('public/body/fly_hd.json', 'utf8'));
-meta.sourceParts = originalScan.parts;
-meta.sourceScan = append(await fs.readFile('public/body/fly_hd.bin'));
+const scan = await fs.readFile('public/body/fly_hd.bin');
+const appearance = createFlyAppearance(originalScan, scan.buffer.slice(scan.byteOffset, scan.byteOffset + scan.byteLength));
+for (const part of meta.parts) if (appearance.tergites.some(t => t.n === part.geom)) {
+  const box = appearance.meshes.find(m => m.name === part.geom).geometry.boundingBox;
+  part.bandBounds = [box.min.y, box.max.y];
+}
+const rows = [0,1,2,4,5,6,8,9,10,12,13,14];
+for (const [i, mesh] of [...appearance.hairGroups, ...appearance.sexComb].entries()) {
+  const hair = meta.hairs[i];
+  if (hair.name !== mesh.name || hair.count !== mesh.count) throw new Error(`Hair bake mismatch: ${mesh.name}`);
+  const packed = new Float32Array(mesh.count * 12), matrices = mesh.instanceMatrix.array;
+  for (let j=0;j<mesh.count;j++) for (let k=0;k<12;k++) packed[j*12+k] = matrices[j*16+rows[k]];
+  const encoded = MeshoptEncoder.encodeVertexBuffer(new Uint8Array(packed.buffer), mesh.count, 48);
+  const check = new Uint8Array(packed.byteLength);
+  MeshoptDecoder.decodeVertexBuffer(check, mesh.count, 48, encoded);
+  if (!Buffer.from(check).equals(Buffer.from(packed.buffer))) throw new Error(`Hair matrix round-trip failed: ${mesh.name}`);
+  Object.assign(hair, { instances:append(encoded), body:mesh.parent.name, material:mesh.material.name,
+    castShadow:mesh.castShadow, bounds:{center:mesh.boundingSphere.center.toArray(),radius:mesh.boundingSphere.radius} });
+}
+delete meta.sourceParts; delete meta.sourceScan;
 await fs.mkdir(output, { recursive: true });
 const packed = gzipSync(Buffer.concat(chunks), { level: 9 });
 await fs.writeFile(path.join(output, 'fly.mesh'), packed);
