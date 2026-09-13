@@ -20,7 +20,7 @@ import { loadAll } from './lib_node.mjs';
 import { makeLIF } from './lifprobe.mjs';
 
 // deterministic RNG for the LIF noise source (mulberry32) — ensemble must be reproducible
-const SEED = 20260704;
+const SEED = +process.argv[2] || 20260704;
 let rs = SEED;
 Math.random = () => { rs |= 0; rs = rs + 0x6D2B79F5 | 0; let t = Math.imul(rs ^ rs >>> 15, 1 | rs); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
@@ -67,15 +67,25 @@ const circAngle = (r) => { let x = 0, y = 0; r.forEach((v, w) => { x += v * Math
 const clean = (net, tonic) => { net.drive.fill(0); net.bias.fill(0); net.thr.fill(0); net.reset(); if (tonic) net.setBias(epg, tonic); };
 
 // ---- observable: bump persistence after a seeded bump is released ----
+// concentration = circular resultant length (0 uniform .. 1 point bump)
+// width = FWHM of the wedge profile in wedges; real Delta7 silencing widens the
+// bump without necessarily killing it, so width separates 'sculpts' from 'confines'
+function bumpWidth(r) {
+  const pk = r.indexOf(Math.max(...r)), hi = r[pk] / 2;
+  let lo = 0, hit = 0;
+  for (let w = 0; w < 8; w++) if (r[((w + pk) % 8 + 8) % 8] > hi) hit++;
+  return hit;
+}
 function persistence(net, tonic) {
   clean(net, tonic);
   net.setDrive(wedges[0], 100); run(net, 150);
   const seeded = circRes(wedgeRates(net));
   net.setDrive(wedges[0], 0);
   const b0 = Uint32Array.from(net.spikeCount); run(net, 400);
-  const after = circRes(wedgeRates(net, b0));
-  const total = wedgeRates(net, b0).reduce((a, b) => a + b, 0);
-  return { concentration: f2(after), seeded: f2(seeded), total_rate: f2(total) };
+  const r = wedgeRates(net, b0);
+  const after = circRes(r);
+  const total = r.reduce((a, b) => a + b, 0);
+  return { concentration: f2(after), seeded: f2(seeded), total_rate: f2(total), width_wedges: total > 0.5 ? bumpWidth(r) : 0 };
 }
 
 // ---- observable: rotation under sustained unilateral PEN drive (only if a bump exists) ----
@@ -175,8 +185,8 @@ console.log('ranked experiments:', ranked.map(([n, e]) => `${n}=${e.score}`).joi
 // ---- mechanism classes among bump-sustaining members, under the top discriminator ----
 // same baseline behaviour, different causal structure — the thing an experiment resolves
 const mech = (m) => {
-  const s = m.perturbations.d7_silence;
-  if (s.concentration > 0.5) return 'd7_sculpts_only';          // kernel sharpens bump, not required
+  const s = m.perturbations.d7_silence, b = m.baseline.persistence;
+  if (s.concentration > 0.5) return s.width_wedges >= b.width_wedges + 2 ? 'd7_confines_width' : 'd7_sculpts_sharp';
   if (s.total_rate > 1) return 'd7_confines';                   // silencing -> runaway/uniform firing
   return 'd7_essential';                                        // silencing -> activity dies (adaptation release)
 };
@@ -186,6 +196,7 @@ for (const m of attractors) (mechGroups[mech(m)] ||= []).push(m.params);
 console.log('mechanisms among attractor members:', Object.fromEntries(Object.entries(mechGroups).map(([k, v]) => [k, v.length])));
 
 fs.writeFileSync('public/data/hypothesis_lab.json', JSON.stringify({
+  seed: SEED,
   summary: {
     ensemble_size: members.length,
     attractor_compatible: attractors.length,

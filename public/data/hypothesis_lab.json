@@ -1,4 +1,5 @@
 {
+ "seed": 20260704,
  "summary": {
   "ensemble_size": 48,
   "attractor_compatible": 11,
@@ -9,7 +10,7 @@
    "frozen": 1
   },
   "mechanisms": {
-   "d7_sculpts_only": 7,
+   "d7_sculpts_sharp": 7,
    "d7_confines": 2,
    "d7_essential": 2
   },
@@ -37,7 +38,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.99,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 30,
@@ -58,12 +60,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.991,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.992,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -80,7 +84,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.983,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 33,
@@ -101,12 +106,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.973,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.975,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -123,7 +130,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.975,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 36,
@@ -144,12 +152,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.972,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.971,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -166,7 +176,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.651,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 33,
@@ -187,12 +198,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.759,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.641,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -209,7 +222,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.99,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 37,
@@ -230,12 +244,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.991,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.99,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -252,7 +268,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.985,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 35,
@@ -273,12 +290,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.978,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.98,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -295,7 +314,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.967,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 34,
@@ -316,12 +336,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.971,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.969,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -338,7 +360,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.692,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 39,
@@ -359,12 +382,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.575,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.662,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -381,7 +406,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.991,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 39,
@@ -402,12 +428,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.991,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.991,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -424,7 +452,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.98,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 36,
@@ -445,12 +474,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.978,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.974,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -467,7 +498,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.968,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 37,
@@ -488,12 +520,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.974,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.972,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -510,7 +544,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.816,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 36,
@@ -531,12 +566,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.749,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.643,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -553,7 +590,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.968,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 35,
@@ -574,12 +612,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.972,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.967,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -596,7 +636,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.955,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 34,
@@ -617,12 +658,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.952,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.94,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -634,12 +677,13 @@
     "penGain": 1
    },
    "hypothesis": "attractor_tonic",
-   "mechanism": "d7_sculpts_only",
+   "mechanism": "d7_sculpts_sharp",
    "baseline": {
     "persistence": {
      "concentration": 0.808,
      "seeded": 0.208,
-     "total_rate": 7.867
+     "total_rate": 7.867,
+     "width_wedges": 3
     },
     "kernel": {
      "n_d7": 29,
@@ -660,12 +704,14 @@
     "d7_silence": {
      "concentration": 0.805,
      "seeded": 0.265,
-     "total_rate": 7.533
+     "total_rate": 7.533,
+     "width_wedges": 2
     },
     "peg_lesion": {
      "concentration": 1,
      "seeded": 0.897,
-     "total_rate": 0.2
+     "total_rate": 0.2,
+     "width_wedges": 0
     }
    }
   },
@@ -677,12 +723,13 @@
     "penGain": 1
    },
    "hypothesis": "attractor_tonic",
-   "mechanism": "d7_sculpts_only",
+   "mechanism": "d7_sculpts_sharp",
    "baseline": {
     "persistence": {
      "concentration": 0.929,
      "seeded": 0.161,
-     "total_rate": 0.533
+     "total_rate": 0.533,
+     "width_wedges": 2
     },
     "kernel": {
      "n_d7": 34,
@@ -703,12 +750,14 @@
     "d7_silence": {
      "concentration": 0.958,
      "seeded": 0.179,
-     "total_rate": 1.2
+     "total_rate": 1.2,
+     "width_wedges": 1
     },
     "peg_lesion": {
      "concentration": 1,
      "seeded": 0.169,
-     "total_rate": 0.5
+     "total_rate": 0.5,
+     "width_wedges": 0
     }
    }
   },
@@ -725,7 +774,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.973,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 40,
@@ -746,12 +796,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.967,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.973,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -768,7 +820,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.928,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 31,
@@ -789,12 +842,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.953,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.943,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -811,7 +866,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.907,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 34,
@@ -832,12 +888,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.908,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.903,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -849,12 +907,13 @@
     "penGain": 1
    },
    "hypothesis": "attractor_tonic",
-   "mechanism": "d7_sculpts_only",
+   "mechanism": "d7_sculpts_sharp",
    "baseline": {
     "persistence": {
      "concentration": 0.52,
      "seeded": 0.206,
-     "total_rate": 12.4
+     "total_rate": 12.4,
+     "width_wedges": 3
     },
     "kernel": {
      "n_d7": 37,
@@ -875,12 +934,14 @@
     "d7_silence": {
      "concentration": 0.938,
      "seeded": 0.177,
-     "total_rate": 1.4
+     "total_rate": 1.4,
+     "width_wedges": 1
     },
     "peg_lesion": {
      "concentration": 0.3,
      "seeded": 0.192,
-     "total_rate": 5.033
+     "total_rate": 5.033,
+     "width_wedges": 5
     }
    }
   },
@@ -897,7 +958,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.969,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 34,
@@ -918,12 +980,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.968,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.973,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -940,7 +1004,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.96,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 38,
@@ -961,12 +1026,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.954,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.92,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -978,12 +1045,13 @@
     "penGain": 1
    },
    "hypothesis": "attractor_tonic",
-   "mechanism": "d7_sculpts_only",
+   "mechanism": "d7_sculpts_sharp",
    "baseline": {
     "persistence": {
      "concentration": 0.794,
      "seeded": 0.252,
-     "total_rate": 7.7
+     "total_rate": 7.7,
+     "width_wedges": 2
     },
     "kernel": {
      "n_d7": 37,
@@ -1004,12 +1072,14 @@
     "d7_silence": {
      "concentration": 0.833,
      "seeded": 0.224,
-     "total_rate": 8.067
+     "total_rate": 8.067,
+     "width_wedges": 2
     },
     "peg_lesion": {
      "concentration": 0.822,
      "seeded": 0.188,
-     "total_rate": 6.667
+     "total_rate": 6.667,
+     "width_wedges": 2
     }
    }
   },
@@ -1021,12 +1091,13 @@
     "penGain": 1
    },
    "hypothesis": "attractor_tonic",
-   "mechanism": "d7_sculpts_only",
+   "mechanism": "d7_sculpts_sharp",
    "baseline": {
     "persistence": {
      "concentration": 0.924,
      "seeded": 0.166,
-     "total_rate": 2
+     "total_rate": 2,
+     "width_wedges": 2
     },
     "kernel": {
      "n_d7": 40,
@@ -1047,12 +1118,14 @@
     "d7_silence": {
      "concentration": 0.943,
      "seeded": 0.183,
-     "total_rate": 1.333
+     "total_rate": 1.333,
+     "width_wedges": 1
     },
     "peg_lesion": {
      "concentration": 0.193,
      "seeded": 0.167,
-     "total_rate": 5.267
+     "total_rate": 5.267,
+     "width_wedges": 6
     }
    }
   },
@@ -1069,7 +1142,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.942,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 29,
@@ -1090,12 +1164,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.955,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.952,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1107,12 +1183,13 @@
     "penGain": 1
    },
    "hypothesis": "attractor_tonic",
-   "mechanism": "d7_sculpts_only",
+   "mechanism": "d7_sculpts_sharp",
    "baseline": {
     "persistence": {
      "concentration": 0.928,
      "seeded": 0.175,
-     "total_rate": 2.167
+     "total_rate": 2.167,
+     "width_wedges": 2
     },
     "kernel": {
      "n_d7": 34,
@@ -1133,12 +1210,14 @@
     "d7_silence": {
      "concentration": 0.908,
      "seeded": 0.226,
-     "total_rate": 4.2
+     "total_rate": 4.2,
+     "width_wedges": 2
     },
     "peg_lesion": {
      "concentration": 0.933,
      "seeded": 0.214,
-     "total_rate": 3
+     "total_rate": 3,
+     "width_wedges": 1
     }
    }
   },
@@ -1155,7 +1234,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.13,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 37,
@@ -1176,12 +1256,14 @@
     "d7_silence": {
      "concentration": 1,
      "seeded": 0.186,
-     "total_rate": 0.2
+     "total_rate": 0.2,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 1,
      "seeded": 0.152,
-     "total_rate": 0.2
+     "total_rate": 0.2,
+     "width_wedges": 0
     }
    }
   },
@@ -1198,7 +1280,8 @@
     "persistence": {
      "concentration": 0.261,
      "seeded": 0.173,
-     "total_rate": 22.867
+     "total_rate": 22.867,
+     "width_wedges": 6
     },
     "kernel": {
      "n_d7": 33,
@@ -1219,12 +1302,14 @@
     "d7_silence": {
      "concentration": 0.194,
      "seeded": 0.172,
-     "total_rate": 27.067
+     "total_rate": 27.067,
+     "width_wedges": 6
     },
     "peg_lesion": {
      "concentration": 0.082,
      "seeded": 0.116,
-     "total_rate": 73.067
+     "total_rate": 73.067,
+     "width_wedges": 8
     }
    }
   },
@@ -1241,7 +1326,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.953,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 40,
@@ -1262,12 +1348,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.951,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.948,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1279,12 +1367,13 @@
     "penGain": 1
    },
    "hypothesis": "attractor_tonic",
-   "mechanism": "d7_sculpts_only",
+   "mechanism": "d7_sculpts_sharp",
    "baseline": {
     "persistence": {
      "concentration": 0.927,
      "seeded": 0.204,
-     "total_rate": 3.333
+     "total_rate": 3.333,
+     "width_wedges": 2
     },
     "kernel": {
      "n_d7": 35,
@@ -1305,12 +1394,14 @@
     "d7_silence": {
      "concentration": 0.893,
      "seeded": 0.237,
-     "total_rate": 5.733
+     "total_rate": 5.733,
+     "width_wedges": 2
     },
     "peg_lesion": {
      "concentration": 0.929,
      "seeded": 0.206,
-     "total_rate": 2.667
+     "total_rate": 2.667,
+     "width_wedges": 2
     }
    }
   },
@@ -1327,7 +1418,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.18,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 37,
@@ -1348,12 +1440,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.18,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.139,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1370,7 +1464,8 @@
     "persistence": {
      "concentration": 1,
      "seeded": 0.154,
-     "total_rate": 0.5
+     "total_rate": 0.5,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 35,
@@ -1391,12 +1486,14 @@
     "d7_silence": {
      "concentration": 0.358,
      "seeded": 0.152,
-     "total_rate": 17.7
+     "total_rate": 17.7,
+     "width_wedges": 4
     },
     "peg_lesion": {
      "concentration": 0.145,
      "seeded": 0.136,
-     "total_rate": 10.8
+     "total_rate": 10.8,
+     "width_wedges": 5
     }
    }
   },
@@ -1413,7 +1510,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.954,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 40,
@@ -1434,12 +1532,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.954,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.951,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1456,7 +1556,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.167,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 34,
@@ -1477,12 +1578,14 @@
     "d7_silence": {
      "concentration": 0.903,
      "seeded": 0.184,
-     "total_rate": 3.867
+     "total_rate": 3.867,
+     "width_wedges": 2
     },
     "peg_lesion": {
      "concentration": 0.908,
      "seeded": 0.254,
-     "total_rate": 3.867
+     "total_rate": 3.867,
+     "width_wedges": 2
     }
    }
   },
@@ -1499,7 +1602,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.128,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 40,
@@ -1520,12 +1624,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.163,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 1,
      "seeded": 0.154,
-     "total_rate": 0.2
+     "total_rate": 0.2,
+     "width_wedges": 0
     }
    }
   },
@@ -1542,7 +1648,8 @@
     "persistence": {
      "concentration": 0.173,
      "seeded": 0.145,
-     "total_rate": 26.267
+     "total_rate": 26.267,
+     "width_wedges": 7
     },
     "kernel": {
      "n_d7": 36,
@@ -1563,12 +1670,14 @@
     "d7_silence": {
      "concentration": 0.85,
      "seeded": 0.138,
-     "total_rate": 2.467
+     "total_rate": 2.467,
+     "width_wedges": 2
     },
     "peg_lesion": {
      "concentration": 0.214,
      "seeded": 0.187,
-     "total_rate": 22.9
+     "total_rate": 22.9,
+     "width_wedges": 6
     }
    }
   },
@@ -1585,7 +1694,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.123,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 29,
@@ -1606,12 +1716,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.119,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.148,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1628,7 +1740,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.084,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 34,
@@ -1649,12 +1762,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.115,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.131,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1671,7 +1786,8 @@
     "persistence": {
      "concentration": 0.925,
      "seeded": 0.127,
-     "total_rate": 0.9
+     "total_rate": 0.9,
+     "width_wedges": 2
     },
     "kernel": {
      "n_d7": 38,
@@ -1692,12 +1808,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.103,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0.05,
      "seeded": 0.139,
-     "total_rate": 87.667
+     "total_rate": 87.667,
+     "width_wedges": 8
     }
    }
   },
@@ -1714,7 +1832,8 @@
     "persistence": {
      "concentration": 0.091,
      "seeded": 0.099,
-     "total_rate": 98.333
+     "total_rate": 98.333,
+     "width_wedges": 8
     },
     "kernel": {
      "n_d7": 31,
@@ -1735,12 +1854,14 @@
     "d7_silence": {
      "concentration": 0.093,
      "seeded": 0.119,
-     "total_rate": 101.033
+     "total_rate": 101.033,
+     "width_wedges": 8
     },
     "peg_lesion": {
      "concentration": 0.171,
      "seeded": 0.142,
-     "total_rate": 24.267
+     "total_rate": 24.267,
+     "width_wedges": 7
     }
    }
   },
@@ -1757,7 +1878,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.131,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 37,
@@ -1778,12 +1900,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.111,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.138,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1800,7 +1924,8 @@
     "persistence": {
      "concentration": 1,
      "seeded": 0.116,
-     "total_rate": 0.167
+     "total_rate": 0.167,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 36,
@@ -1821,12 +1946,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.124,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.142,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1843,7 +1970,8 @@
     "persistence": {
      "concentration": 1,
      "seeded": 0.09,
-     "total_rate": 0.333
+     "total_rate": 0.333,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 37,
@@ -1864,12 +1992,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.118,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0.027,
      "seeded": 0.138,
-     "total_rate": 85.233
+     "total_rate": 85.233,
+     "width_wedges": 8
     }
    }
   },
@@ -1886,7 +2016,8 @@
     "persistence": {
      "concentration": 0.105,
      "seeded": 0.134,
-     "total_rate": 95.6
+     "total_rate": 95.6,
+     "width_wedges": 8
     },
     "kernel": {
      "n_d7": 34,
@@ -1907,12 +2038,14 @@
     "d7_silence": {
      "concentration": 0.056,
      "seeded": 0.133,
-     "total_rate": 38.067
+     "total_rate": 38.067,
+     "width_wedges": 8
     },
     "peg_lesion": {
      "concentration": 0.075,
      "seeded": 0.094,
-     "total_rate": 101.167
+     "total_rate": 101.167,
+     "width_wedges": 8
     }
    }
   },
@@ -1929,7 +2062,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.151,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 34,
@@ -1950,12 +2084,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.123,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.097,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -1972,7 +2108,8 @@
     "persistence": {
      "concentration": 0,
      "seeded": 0.106,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "kernel": {
      "n_d7": 39,
@@ -1993,12 +2130,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.125,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0,
      "seeded": 0.125,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     }
    }
   },
@@ -2015,7 +2154,8 @@
     "persistence": {
      "concentration": 0.055,
      "seeded": 0.146,
-     "total_rate": 87.467
+     "total_rate": 87.467,
+     "width_wedges": 8
     },
     "kernel": {
      "n_d7": 35,
@@ -2036,12 +2176,14 @@
     "d7_silence": {
      "concentration": 0,
      "seeded": 0.129,
-     "total_rate": 0
+     "total_rate": 0,
+     "width_wedges": 0
     },
     "peg_lesion": {
      "concentration": 0.07,
      "seeded": 0.115,
-     "total_rate": 85.7
+     "total_rate": 85.7,
+     "width_wedges": 8
     }
    }
   },
@@ -2058,7 +2200,8 @@
     "persistence": {
      "concentration": 0.537,
      "seeded": 0.125,
-     "total_rate": 17.2
+     "total_rate": 17.2,
+     "width_wedges": 4
     },
     "kernel": {
      "n_d7": 33,
@@ -2079,12 +2222,14 @@
     "d7_silence": {
      "concentration": 0.128,
      "seeded": 0.129,
-     "total_rate": 95.4
+     "total_rate": 95.4,
+     "width_wedges": 8
     },
     "peg_lesion": {
      "concentration": 0.26,
      "seeded": 0.104,
-     "total_rate": 25.8
+     "total_rate": 25.8,
+     "width_wedges": 6
     }
    }
   }
@@ -2096,7 +2241,7 @@
   "frozen": 1
  },
  "mechanism_counts": {
-  "d7_sculpts_only": 7,
+  "d7_sculpts_sharp": 7,
   "d7_confines": 2,
   "d7_essential": 2
  },
