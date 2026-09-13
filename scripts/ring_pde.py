@@ -34,21 +34,57 @@ class RingField:
         self.s = shift_cols * n / n_cols                   # PEN offset in field cells
         self.thr = thr
         self.vel_gain = 1.0                                # PEN advection coupling: bump speed = om*vel_gain
+        # PEN arms as shifted excitatory kernels (the real mechanism): the PEN bump
+        # copy re-enters EPG +-s cells ahead; mode projection predicts the gain.
+        s = int(round(self.s))
+        self.Wp = np.roll(np.maximum(0.0, c) ** 4, +s)     # +s column offset arm
+        self.Wm = np.roll(np.maximum(0.0, c) ** 4, -s)     # -s arm
+        # 'shifted' = literal shifted-synapse feedback (the mechanism). 'advect' = its
+        # reduced-algorithm equivalent (first-order identical by mode projection).
+        # Finding: 'shifted' tracks clean velocity at ~0.85x but distorts the bump
+        # under fluctuating drive — the single-field reduction is inadequate; the real
+        # circuit's second population (PEN as its own field) is likely load-bearing.
+        self.pen_mode = 'advect'
+        self.tau_pen = 0.06                                # PEN synaptic filtering (velocity channel)
+        self.om_sm = 0.0
+        # velocity gain from translation-mode projection on an equilibrated bump:
+        # phi_dot = om * <u*', Wshift*f(u*)> / (tau * <u*',u*'>)  ->  pen_gain = 1/coef
+        th = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        u0 = np.maximum(0.0, np.cos(th)) + 0.4
+        for _ in range(400):                               # settle to the bump fixed point
+            f0 = np.clip((u0 - thr) / (1.0 - thr), 0, 1)
+            u0 += 0.1 * (-u0 + np.fft.ifft(np.fft.fft(self.W) * np.fft.fft(f0)).real)
+        fu0 = np.clip((u0 - thr) / (1.0 - thr), 0, 1)
+        up = np.gradient(u0, th)
+        num = (up * np.fft.ifft(np.fft.fft(self.Wm) * np.fft.fft(fu0)).real).sum()
+        coef = num / max((up * up).sum(), 1e-9) / tau
+        self.pen_gain = 1.0 / max(abs(coef), 1e-9)
         self.u = np.zeros(n)
 
     def f(self, u):
         return np.clip((u - self.thr) / (1.0 - self.thr), 0.0, 1.0)  # saturating rate
 
     def step(self, om=0.0, landmark=None, lm_gain=0.0, dt=0.005, noise=0.0, rng=None):
-        # PEN pathway: L/R shifted projections implement advection of the bump
-        # (shifted feedback ~ s*df/dtheta). Spectral shift = exact translation.
-        if om:
-            m = np.fft.fftfreq(self.n) * self.n
-            delta = om * dt * self.vel_gain * self.n / (2 * np.pi)
-            self.u = np.fft.ifft(np.fft.fft(self.u) * np.exp(-2j * np.pi * m * delta / self.n)).real
         fu = self.f(self.u)
-        rec = np.fft.ifft(np.fft.fft(self.W) * np.fft.fft(fu)).real
+        F = np.fft.fft(fu)
+        rec = np.fft.ifft(np.fft.fft(self.W) * F).real
         pen = 0.0
+        if om:
+            if self.pen_mode == 'advect':
+                m = np.fft.fftfreq(self.n) * self.n
+                delta = om * dt * self.vel_gain * self.n / (2 * np.pi)
+                self.u = np.fft.ifft(np.fft.fft(self.u) * np.exp(-2j * np.pi * m * delta / self.n)).real
+                fu = self.f(self.u); F = np.fft.fft(fu)
+                rec = np.fft.ifft(np.fft.fft(self.W) * F).real
+            else:
+                # genuine mechanism: velocity drives the shifted-arm feedback at the
+                # gain the translation-mode projection predicts (set in __init__).
+                # PEN firing saturates (real neurons can't encode |om| >> 2 rad/s).
+                self.om_sm += (om - self.om_sm) * dt / self.tau_pen
+                om_s = 2.0 * np.tanh(self.om_sm / 2.0)
+                vp, vm = max(om_s, 0.0), max(-om_s, 0.0)
+                pen = self.pen_gain * (vp * np.fft.ifft(np.fft.fft(self.Wp) * F).real
+                                     + vm * np.fft.ifft(np.fft.fft(self.Wm) * F).real)
         lm = 0.0
         if landmark is not None:
             th = np.linspace(0, 2 * np.pi, self.n, endpoint=False)

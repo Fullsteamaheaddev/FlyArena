@@ -81,8 +81,29 @@ ring-neuron-style disinhibition (global suppression with a gap at the landmark b
 | Kalman + outlier gate | 0.489 | 0.710 |
 | complementary α=0.05 (matched) | 0.604 | 0.633 |
 | ring attractor (scalar reduced) | 0.641 | 0.668 |
-| **ring field (PDE)** | **0.449** | **0.450** |
-| ring field + per-cell noise σ=0.15 | 0.453 | 0.455 |
+| **ring field (PDE, advect mode)** | **0.408** | **0.494** |
+| ring field + per-cell noise σ=0.15 | 0.410 | 0.494 |
+
+### The velocity pathway, done properly
+
+The PEN shifted-feedback mechanism was derived rather than hand-tuned. Writing the bump as
+u*(θ−φ(t)) and the PEN arm as an extra shifted kernel K in τ∂_t u = −u + W∗f(u) + v·K∗f(u),
+projecting the perturbation onto the translation mode u*' (the marginal direction of the
+translation-invariant field) gives the integration gain in closed form:
+
+    phi_dot = v · ⟨u*', K∗f(u*)⟩ / (τ ⟨u*', u*'⟩)   →   pen_gain = 1/coef ≈ 0.27
+
+With the literal shifted-synapse kernels at that predicted gain, the field tracks clean
+velocity linearly at ~0.85× (the 15% deficit is the second-order correction — the shifted
+input also distorts the bump profile, which the leading-order projection ignores). Under
+fluctuating velocity, however, the literal mechanism degrades badly: each shifted injection
+distorts the bump shape, not just its phase. Two biological features likely repair this in
+the real circuit — PENs are their own field population (a second ring whose own dynamics
+smooths the feedback), and graded synapses add temporal filtering (tau_pen alone did not
+suffice). The reduced algorithm therefore uses `pen_mode='advect'`: the spectral translation
+that is provably the first-order equivalent of the shifted feedback. **The residual gap
+between 'shifted' and 'advect' is itself a hypothesis-lab output** — it says the single-field
+reduction drops something the real two-population circuit needs.
 
 Two honest points:
 

@@ -107,11 +107,15 @@ def ring_pde(om_hat, lm, dt, field_noise=0.0, lm_gain=25.0, seed=3):
     f = RingField()
     f.u = np.maximum(0, np.cos(np.linspace(0, 2 * np.pi, f.n, endpoint=False))) + 0.4  # seed bump
     sub = max(1, int(round(dt / 0.01)))                                # field timestep ~10ms
+    hold = int(0.4 / dt)                                               # cue persistence window
+    L_hold = None; hold_left = 0
     out = np.empty(len(om_hat))
     for t in range(len(om_hat)):
-        L = lm[t] if not np.isnan(lm[t]) else None
+        if not np.isnan(lm[t]): L_hold, hold_left = lm[t], hold
+        elif hold_left > 0: hold_left -= 1
+        else: L_hold = None
         for _ in range(sub):
-            f.step(om=om_hat[t], landmark=L, lm_gain=lm_gain if L is not None else 0.0,
+            f.step(om=om_hat[t], landmark=L_hold, lm_gain=lm_gain if L_hold is not None else 0.0,
                    dt=dt / sub, noise=field_noise / np.sqrt(dt / sub), rng=rng)
         out[t] = f.theta() or 0.0
     return out
