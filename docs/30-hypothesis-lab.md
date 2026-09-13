@@ -51,15 +51,27 @@ Same machinery, different circuit — the test of whether the framework is gener
 ring-specific. Geometry is linear FB columns (`_C<n>` tags), not the ring; the observable is a
 population centroid offset, not bump persistence.
 
-36 members over `{pfndGain, pfnvGain, hdRecur, hdTonic}`. Drive PFN column C6, measure where the
+72 members over `{pfndGain, pfnvGain, hdRecur(0–2), hdTonic}`. Drive PFN column C6, measure where the
 hDeltaB population responds; structure predicts PFNd −3 / PFNv +2 columns.
 
-**Result:** realised offsets cluster at −1..+1 — **directionally consistent with the wiring but
-magnitude-compressed** by dendritic integration. The transform is only partially compiled into
-topology; dynamics recovers about a third of the wired shift. hDeltaB response amplitude scales
-sub-linearly with PFN drive (×1.3–1.6 per 4× drive — the velocity channel exists but saturates).
-Top discriminator: killing hDeltaB recurrence (0.44) — separates "offset compiled into the
-projection" from "hDeltaB recurrence generates it."
+**Result:** 13 wired_shift · 55 passthrough · 4 silent. Realised offsets cluster at −1..−2 —
+**directionally consistent with the wiring but magnitude-compressed** by dendritic integration.
+hDeltaB response amplitude scales sub-linearly with PFN drive (the velocity channel exists but
+saturates).
+
+**The deeper workup changed the conclusion.** The connectome contains three candidate dynamical
+mechanisms the first pass didn't test: PFNd→PFNd self-recurrence (7970 synapses), hΔB→PFN
+feedback (61 edges), and hΔB internal recurrence. Ablating each in every wired_shift member:
+
+- **No member is `wired_only`** — every shifted response requires at least one dynamical
+  element (needs_hdb_recur / needs_pfn_recur / needs_hd2pfn_feedback in various combinations).
+  The −3-column wiring alone does not produce a shifted response; dynamics always participates.
+- **Column sweep is never rigid** — the realised offset varies with driven column, so the
+  transform is warped by position, not a clean linear shift.
+- **PFNv arm is structurally weaker** (20 cells vs 40) and rarely realises its +2 prediction;
+  the two phasor arms are asymmetric in a way the wiring histogram doesn't show.
+- Ranked discriminators: amplitude scaling (0.42) > hd_recur_off (0.41) > **hd2pfn_off (0.32)**
+  — the feedback loop, newly added, is already a top-3 discriminator.
 
 **Meta-finding across both circuits: structure overstates what dynamics delivers.** Cosine
 kernel → realised, phase shift → realised at ~⅓ amplitude, ring attractor → only in a narrow
@@ -125,7 +137,11 @@ during rotation, which is what calcium imaging of the fly circuit actually shows
 
 The same manipulations the LIF lab ranked were run on the field model, so outcomes can be
 compared across formalisms. Agreement across model classes is stronger evidence than
-agreement across parameters within one class.
+agreement across parameters within one class. `hypothesis_lab.mjs` now reads
+`public/data/perturb_pde.json` and emits a `cross_formalism` block: each ranked experiment
+carries the PDE outcome, its mapping onto the LIF mechanism classes, and an explicit
+`agrees_with_lif_majority` flag — at seed 42 the PDE lands in `d7_confines_width` while the
+LIF majority is `d7_sculpts_sharp`, so the disagreement is recorded, not smoothed over.
 
 **Delta7 suppression, graded (the LIF lab's #1 discriminator), corrected against withheld
 data.** The first field model attributed all surround inhibition to Delta7 and dissolved

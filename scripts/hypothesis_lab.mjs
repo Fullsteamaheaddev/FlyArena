@@ -170,6 +170,39 @@ const mechGroups = {};
 for (const m of attractors) (mechGroups[mech(m)] ||= []).push(m.params);
 console.log('mechanisms among attractor members:', Object.fromEntries(Object.entries(mechGroups).map(([k, v]) => [k, v.length])));
 
+// ---- cross-formalism merge: PDE field-model outcomes for the same manipulations ----
+// Agreement across model classes is stronger evidence than agreement across parameters
+// of one class. perturb_pde.json is produced by scripts/perturb_pde.py.
+let pde = null;
+try { pde = JSON.parse(fs.readFileSync('public/data/perturb_pde.json', 'utf8')); } catch {}
+const crossFormalism = {};
+if (pde?.d7_sweep) {
+  const at = (g) => pde.d7_sweep.find((r) => r.d7_gain === g);
+  const b = at(1.0), s = at(0.0);
+  const pdeD7 = !s || s.R < 0.1 ? (s && s.peak > 1 ? 'uniform_firing' : 'silent')
+    : s.width_deg > 1.3 * b.width_deg ? 'survives_widened' : 'survives_sharp';
+  const lifClass = { survives_widened: 'd7_confines_width', uniform_firing: 'd7_confines',
+                     survives_sharp: 'd7_sculpts_sharp', silent: 'd7_essential' }[pdeD7];
+  const lifCounts = {};
+  for (const m of attractors) lifCounts[mech(m)] = (lifCounts[mech(m)] || 0) + 1;
+  const majority = Object.entries(lifCounts).sort((x, y) => y[1] - x[1])[0]?.[0];
+  crossFormalism.d7_silence = {
+    pde_outcome: pdeD7, pde_width_deg: s?.width_deg, baseline_width_deg: b?.width_deg,
+    maps_to_lif_class: lifClass, lif_class_counts: lifCounts,
+    agrees_with_lif_majority: lifClass === majority,
+    curve: pde.d7_sweep.map((r) => ({ d7: r.d7_gain, R: r.R, width_deg: r.width_deg })),
+    note: 'PDE includes a ring-neuron inhibition channel not gated by d7 — bump survives ' +
+          'silencing widened, matching Turner-Evans 2020 (bump forms without D7 output).',
+  };
+  if (pde.pen_left) crossFormalism.unilateral_pen = {
+    both_drift: pde.pen_both?.drift, left_only: pde.pen_left?.drift, right_only: pde.pen_right?.drift,
+    pde_prediction: 'arm selectivity is exact: unilateral PEN loss abolishes integration in its direction only',
+  };
+  if (pde.exc_sweep) crossFormalism.exc_viability = pde.exc_sweep;
+  console.log('cross-formalism: d7_silence PDE outcome =', pdeD7,
+    '-> LIF class', lifClass, '| agrees with LIF majority:', lifClass === majority);
+}
+
 fs.writeFileSync('public/data/hypothesis_lab.json', JSON.stringify({
   seed: SEED,
   summary: {
@@ -189,5 +222,6 @@ fs.writeFileSync('public/data/hypothesis_lab.json', JSON.stringify({
   hypothesis_counts: Object.fromEntries(Object.entries(byHyp).map(([k, v]) => [k, v.length])),
   mechanism_counts: Object.fromEntries(Object.entries(mechGroups).map(([k, v]) => [k, v.length])),
   ranked_experiments: ranked.map(([name, e]) => ({ experiment: name, separation: e.score, outcomes: e.outcome })),
+  cross_formalism: Object.keys(crossFormalism).length ? crossFormalism : null,
 }, null, 1));
 console.log('wrote public/data/hypothesis_lab.json');
