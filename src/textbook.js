@@ -1,61 +1,75 @@
-// Ebook reader for docs/textbook — networkstate-style: landing page with cover +
-// nested part/chapter TOC; chapter pages with a collapsible TOC overlay panel.
+// Ebook reader for docs/textbook — networkstate-style: two-column landing
+// (cover + actions | description + part/chapter card lists), chapter pages
+// with centered crumbs, per-part progress segments, and a TOC overlay card.
 // Content is pre-rendered by scripts/build_textbook.mjs.
-const tocEl = document.getElementById('toc');
-const landingTocEl = document.getElementById('landing-toc');
-const landingEl = document.getElementById('landing');
-const readerEl = document.getElementById('reader');
-const contentEl = document.getElementById('content');
-const prevEl = document.getElementById('prev');
-const nextEl = document.getElementById('next');
-const panel = document.getElementById('toc-panel');
-const scrim = document.getElementById('scrim');
+const $ = id => document.getElementById(id);
+const tocEl = $('toc'), landingTocEl = $('landing-toc');
+const landingEl = $('landing'), readerEl = $('reader');
+const contentEl = $('content'), progressEl = $('progress');
+const card = $('toc-card'), scrim = $('scrim');
 
 const { parts, chapters } = await (await fetch('../data/textbook.json')).json();
 
-function tocHTML(linkPrefix) {
-  return parts.map((p, i) => `
-    <div class="part">
-      <div class="part-name">${i + 1}. ${p.name}</div>
-      ${p.chapters.map(s => {
-        const ch = chapters.find(c => c.slug === s);
-        return `<a href="${linkPrefix}${s}" data-slug="${s}">${ch.title}</a>`;
-      }).join('')}
-    </div>`).join('');
-}
-landingTocEl.innerHTML = tocHTML('#');
-tocEl.innerHTML = tocHTML('#');
+// TOC card: serif part headings, plain rows, active row highlighted
+tocEl.innerHTML = parts.map((p, i) => `
+  <div class="toc-part">${i + 1}. ${p.name}</div>
+  ${p.chapters.map(s => {
+    const ch = chapters.find(c => c.slug === s);
+    return `<a class="toc-row" href="#${s}" data-slug="${s}">${ch.title}</a>`;
+  }).join('')}`).join('');
 
-const openPanel = (on) => { panel.classList.toggle('open', on); scrim.classList.toggle('on', on); };
-document.getElementById('toc-btn').onclick = () => openPanel(!panel.classList.contains('open'));
-scrim.onclick = () => openPanel(false);
-addEventListener('keydown', e => { if (e.key === 'Escape') openPanel(false); });
+// Landing TOC: serif part heading + rounded card of chapter rows with arrows
+landingTocEl.innerHTML = parts.map((p, i) => `
+  <h3 class="part-head">${i + 1}. ${p.name} <a class="part-arrow" href="#${p.chapters[0]}">&#8599;</a></h3>
+  <div class="chap-card">
+    ${p.chapters.map(s => {
+      const ch = chapters.find(c => c.slug === s);
+      return `<a class="chap-row" href="#${s}"><span class="row-arrow">&#8599;</span>${ch.title}</a>`;
+    }).join('')}
+  </div>`).join('');
+
+const openCard = on => { card.classList.toggle('open', on); scrim.classList.toggle('on', on); };
+$('menu-btn').onclick = () => openCard(!card.classList.contains('open'));
+scrim.onclick = () => openCard(false);
+addEventListener('keydown', e => { if (e.key === 'Escape') openCard(false); });
 
 function route() {
   const slug = location.hash.slice(1);
   const ch = chapters.find(c => c.slug === slug);
-  if (!ch) {                          // landing page
+  if (!ch) {
     landingEl.hidden = false; readerEl.hidden = true;
+    $('crumb-part').textContent = ''; $('crumb-chap').textContent = '';
+    progressEl.innerHTML = '';
     document.title = 'Compiling the Fly Brain';
-    openPanel(false); return;
+    openCard(false); return;
   }
   landingEl.hidden = true; readerEl.hidden = false;
   const idx = chapters.indexOf(ch);
-  document.getElementById('part-label').textContent = ch.part;
-  document.getElementById('chap-label').textContent =
-    ch.slug.startsWith('A-') ? 'Appendix' : `Chapter ${idx + 1}`;
-  document.getElementById('chap-title').textContent = ch.title;
-  // strip the chapter's own h1 — the header renders it
+
+  // centered crumbs: part (bold) over chapter title (muted)
+  $('crumb-part').textContent = ch.part;
+  $('crumb-chap').textContent = ch.title;
+
+  // progress segments: one per chapter in this part
+  const part = parts[ch.partIndex];
+  progressEl.innerHTML = part.chapters.map(s =>
+    `<a class="seg${s === ch.slug ? ' cur' : ''}" href="#${s}"></a>`).join('');
+
+  $('chap-title').textContent = ch.title;
   contentEl.innerHTML = ch.html.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>/, '');
-  tocEl.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.slug === ch.slug));
+  tocEl.querySelectorAll('.toc-row').forEach(a => a.classList.toggle('active', a.dataset.slug === ch.slug));
 
   const prev = chapters[idx - 1], next = chapters[idx + 1];
-  prevEl.style.visibility = prev ? 'visible' : 'hidden';
-  nextEl.style.visibility = next ? 'visible' : 'hidden';
-  if (prev) { prevEl.href = `#${prev.slug}`; prevEl.innerHTML = `← Previous<br/><b>${prev.title}</b>`; }
-  if (next) { nextEl.href = `#${next.slug}`; nextEl.innerHTML = `Next Section:<br/><b>${next.title}</b>`; }
+  $('next-label').innerHTML = next ? `<b>Next Section:</b><br/>${next.title}` : '';
+  const nb = $('next-btn');
+  nb.style.visibility = next ? 'visible' : 'hidden';
+  if (next) nb.href = `#${next.slug}`;
+  const pv = $('prev');
+  pv.textContent = prev ? `← ${prev.title}` : '';
+  if (prev) pv.href = `#${prev.slug}`;
+
   document.title = `${ch.title} — Compiling the Fly Brain`;
-  openPanel(false);
+  openCard(false);
   window.scrollTo(0, 0);
 }
 addEventListener('hashchange', route);

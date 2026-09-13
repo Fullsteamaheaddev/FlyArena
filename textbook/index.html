@@ -7,39 +7,57 @@
 <link rel="stylesheet" href="../src/textbook.css" />
 </head>
 <body>
-<header id="topbar">
-  <button id="toc-btn">☰ Table of Contents</button>
-  <a id="wordmark" href="./">Compiling the Fly Brain</a>
-</header>
-<aside id="toc-panel"><nav id="toc"></nav></aside>
-<div id="scrim"></div>
 
-<main id="landing">
-  <div id="cover">
-    <h1>Compiling the Fly Brain</h1>
-    <p class="subtitle">From Connectome to Computation</p>
-    <p class="desc">A complete nervous system is now a data structure: 165,122 neurons, 104 million synapses. This book documents a pipeline that reads the wiring diagram, proposes the computations it performs, builds the families of models the wiring permits, and identifies the experiments that decide between them — worked end-to-end on three circuits of the male <i>Drosophila</i> CNS.</p>
-    <p class="actions">
-      <a class="btn" href="#01-introduction">Read online</a>
-      <a class="btn" href="../fly-brain-textbook.pdf">PDF</a>
-      <a class="btn" href="../">Brain viewer</a>
-      <a class="btn" href="../structures.html">Structures</a>
-    </p>
+<header id="topbar">
+  <a id="wordmark" href="./"><svg width="14" height="18" viewBox="0 0 14 18"><path d="M1 1 h11 l-3 4 h4 L3 17 l2-6 H1 z" fill="currentColor"/></svg> Compiling the Fly Brain</a>
+  <div id="crumbs"><div id="crumb-part"></div><div id="crumb-chap"></div></div>
+  <button id="menu-btn" aria-label="contents"><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="3" cy="8" r="1.4" fill="currentColor"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="13" cy="8" r="1.4" fill="currentColor"/></svg></button>
+</header>
+<div id="progress"></div>
+
+<!-- TOC overlay card -->
+<div id="scrim"></div>
+<aside id="toc-card">
+  <div class="toc-head">
+    <img class="toc-cover" src="../textbook-cover.svg" alt="cover"/>
+    <div>
+      <div class="toc-title">Compiling the Fly Brain</div>
+      <div class="toc-author">the fly-brain project</div>
+      <a class="toc-pill" href="../fly-brain-textbook.pdf">&#8615; PDF</a>
+    </div>
   </div>
-  <nav id="landing-toc"></nav>
+  <a class="toc-row toc-home" href="./">Home</a>
+  <nav id="toc"></nav>
+</aside>
+
+<!-- landing -->
+<main id="landing">
+  <div id="landing-grid">
+    <div id="cover-col">
+      <img id="cover-img" src="../textbook-cover.svg" alt="Compiling the Fly Brain cover"/>
+      <a class="act" href="#01-introduction">&#8599; Read online</a>
+      <a class="act" href="../fly-brain-textbook.pdf">&#8615; PDF</a>
+      <a class="act" href="../">&#8599; Brain viewer</a>
+      <a class="act" href="../structures.html">&#8599; Structures</a>
+      <a class="act" href="https://github.com/Lulzx/fly-brain">&#8599; GitHub</a>
+    </div>
+    <div id="desc-col">
+      <h3 class="sec-head">Description</h3>
+      <p class="desc">A complete nervous system is now a data structure: 165,122 neurons, 104 million synapses. This book documents a pipeline that reads the wiring diagram, proposes the computations it performs, builds the families of models the wiring permits, and identifies the experiments that decide between them &mdash; worked end-to-end on three circuits of the male <i>Drosophila</i> CNS.</p>
+      <nav id="landing-toc"></nav>
+    </div>
+  </div>
 </main>
 
+<!-- chapter page -->
 <main id="reader" hidden>
-  <div id="chap-head">
-    <div class="part-label" id="part-label"></div>
-    <div class="chap-label" id="chap-label"></div>
-    <h1 id="chap-title"></h1>
-  </div>
+  <h1 id="chap-title"></h1>
   <div id="content"></div>
   <nav id="prevnext">
-    <a id="prev" class="pn"></a>
-    <a id="next" class="pn"></a>
+    <div id="next-label"></div>
+    <a id="next-btn" href="#">Next &nbsp;&rsaquo;</a>
   </nav>
+  <div id="prevrow"><a id="prev" href="#"></a></div>
 </main>
 
 <script type="module" src="../src/textbook.js"></script>

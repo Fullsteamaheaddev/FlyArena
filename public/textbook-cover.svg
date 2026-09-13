@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 560" width="400" height="560">
+  <rect width="400" height="560" fill="#10141f"/>
+  <rect x="14" y="14" width="372" height="532" fill="none" stroke="#c9a86a" stroke-width="1.5" opacity="0.6"/>
+  <text x="200" y="82" text-anchor="middle" font-family="Georgia, serif" font-size="15" letter-spacing="6" fill="#c9a86a">THE FLY-BRAIN PROJECT</text>
+  <text x="200" y="150" text-anchor="middle" font-family="Georgia, serif" font-size="40" font-weight="bold" fill="#f5efe3">COMPILING</text>
+  <text x="200" y="196" text-anchor="middle" font-family="Georgia, serif" font-size="40" font-weight="bold" fill="#f5efe3">THE FLY</text>
+  <text x="200" y="242" text-anchor="middle" font-family="Georgia, serif" font-size="40" font-weight="bold" fill="#f5efe3">BRAIN</text>
+  <text x="200" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="17" fill="#c9a86a">from connectome to computation</text>
+  <!-- ring attractor: dots on a ring, bright bump at top -->
+  <g transform="translate(200,400)">
+    <circle r="78" fill="none" stroke="#2a3350" stroke-width="1"/>
+    <g fill="#4a5878">
+      <circle cx="78" cy="0" r="3.2"/><circle cx="71.6" cy="31.1" r="3.2"/><circle cx="53.4" cy="56.8" r="3.2"/><circle cx="25.8" cy="73.6" r="3.2"/><circle cx="-6.3" cy="77.7" r="3.2"/><circle cx="-36.9" cy="68.6" r="3.2"/><circle cx="-61.6" cy="47.7" r="3.2"/><circle cx="-76.5" cy="14.7" r="3.2"/><circle cx="-76.5" cy="-14.7" r="3.2"/><circle cx="-61.6" cy="-47.7" r="3.2"/><circle cx="-36.9" cy="-68.6" r="3.2"/><circle cx="-6.3" cy="-77.7" r="3.2"/><circle cx="25.8" cy="-73.6" r="3.2"/><circle cx="53.4" cy="-56.8" r="3.2"/><circle cx="71.6" cy="-31.1" r="3.2"/>
+    </g>
+    <!-- the bump -->
+    <g fill="#e8b64c">
+      <circle cx="71.6" cy="-31.1" r="4.4"/><circle cx="78" cy="0" r="5.6"/><circle cx="71.6" cy="31.1" r="4.4"/>
+    </g>
+    <!-- radius arrow to bump -->
+    <line x1="0" y1="0" x2="72" y2="0" stroke="#e8b64c" stroke-width="1.4" marker-end="url(#ah)"/>
+    <defs><marker id="ah" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#e8b64c"/></marker></defs>
+    <text x="0" y="52" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="15" fill="#8891ad">&#952;</text>
+  </g>
+  <text x="200" y="520" text-anchor="middle" font-family="Georgia, serif" font-size="13" letter-spacing="2" fill="#8891ad">A WORKING TEXTBOOK</text>
+</svg>
