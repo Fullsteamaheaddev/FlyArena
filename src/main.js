@@ -49,6 +49,7 @@ async function main() {
   await brain.ready;
   buildSimUI();
   $('#play').disabled = false;
+  applyDeepLink();
   if (selected >= 0) renderSelection();
   $('#summary').textContent = `${N.toLocaleString()} traced neurons · ${data.E.toLocaleString()} connections (model uses ≥5-synapse connections)`;
   brain.onFrame(onFrame);
@@ -283,5 +284,27 @@ function buildSimUI() {
   const grp = () => groupIndices($('#groupKind').value, $('#groupQuery').value, +$('#groupSide').value);
   $('#addDrive').onclick = () => addDrive(`${$('#groupQuery').value}${['', ' L', ' R'][+$('#groupSide').value]}`, grp(), +$('#rateHz').value);
   $('#pulse').onclick = () => brain.pulse(grp(), 10);
+}
+
+// Deep links, e.g. ?type=Delta7 selects one Delta7 cell, ?drive=EPG+PEN_a(PEN1)@80&run=1 starts the sim
+// with those types driven at 80 Hz. Linked from structures.html.
+function applyDeepLink() {
+  const qs = new URLSearchParams(location.search);
+  const t = qs.get('type');
+  if (t) {
+    const i = data.meta.types.indexOf(t);
+    if (i >= 0) { $('#groupKind').value = 'type'; fillDatalist(); $('#groupQuery').value = t; select(i); }
+    else status(`type "${t}" not found`);
+  }
+  const drv = qs.get('drive');
+  if (drv) {
+    const [names, hz] = drv.split('@');
+    const rate = +(hz || qs.get('hz') || 100);
+    for (const name of names.split('+')) {
+      const ix = groupIndices('type', name, 0);
+      if (ix.length) addDrive(`${name}`, ix, rate); else status(`type "${name}" not found`);
+    }
+  }
+  if (qs.get('run') && $('#play').textContent.includes('Run')) $('#play').click();
 }
 main().catch(e => { status('error: ' + e.message); console.error(e); });

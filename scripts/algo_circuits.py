@@ -14,6 +14,10 @@ def run(want, G, R, x):
     if 'mb' in want: mushroom_body(tl, R)
     if 'cx' in want: central_complex(tl, R)
     if 'ol' in want: optic_lobe(tl, R)
+    if 'lh' in want: lateral_horn(tl, R)
+    if 'og' in want: optic_glomeruli(tl, R)
+    if 'mbc' in want: mbon_convergence(tl, R)
+    if 'state' in want: state_circuits(tl, R)
     if 'escape' in want: escape(tl, R)
     if 'dn' in want: descending(tl, R, x)
     if 'vnc' in want: vnc(tl, R)
@@ -91,14 +95,88 @@ def motifs(tl, R):
             fi, fo = gi[p] / ins.data.sum(), go[p] / outs.data.sum()
             if fi > 0.3 and fo > 0.3 and p not in ('', 'unknown'): norm.append((str(ut[ii]), str(p), round(fi, 2), round(fo, 2), int(ins.data.sum()), int(cnt[ii])))
     norm.sort(key=lambda p: -p[4])
+    # feedforward loops (all sign classes) and null-model enrichment
+    ffl, nullz = ffl_census(A, Ab, tE, tI, ffi_count, ffi_pairs)
     R['motifs'] = dict(strong_type_edges=int(A.nnz), fan_by_superclass=by_sc, top_convergent_types=conv, top_divergent_types=div,
                        reciprocal_type_pairs_by_sign=dict(recc), recurrent_excitation_top=toplist('E<->E'), mutual_inhibition_top=toplist('I<->I'),
                        feedback_inhibition_top=toplist('E<->I'), recurrent_excitation_central=toplist('E<->E', central=True), mutual_inhibition_central=toplist('I<->I', central=True), feedback_inhibition_central=toplist('E<->I', central=True),
                        feedforward_inhibition=dict(E_type_edges=ffi_pairs, with_parallel_inhibitory_path=ffi_count, frac=round(ffi_count / ffi_pairs, 3),
                                                    top=[dict(A=a, I=i, B=b, A_B=w0, A_I=w1, I_B=w2) for _, a, i, b, w0, w1, w2 in tri[:15]], top_central=[dict(A=a, I=i, B=b, A_B=w0, A_I=w1, I_B=w2) for _, a, i, b, w0, w1, w2 in tri_c[:15]]),
                        disinhibition=dict(I_to_I_type_edges=dis, top=[dict(I1=a, I2=b, target=c, I1_I2=w, I2_target=w2) for a, b, c, w, w2 in dis_top[:15]], top_central=[dict(I1=a, I2=b, target=c, I1_I2=w, I2_target=w2) for a, b, c, w, w2 in dis_c[:15]]),
-                       normalisation_candidates=[dict(type=t, population=p, in_frac=fi, out_frac=fo, in_syn=n, n=c) for t, p, fi, fo, n, c in norm[:30]])
-    log('motifs: recip', dict(recc), 'FFI frac', R['motifs']['feedforward_inhibition']['frac'], 'norm cands', len(norm))
+                       normalisation_candidates=[dict(type=t, population=p, in_frac=fi, out_frac=fo, in_syn=n, n=c) for t, p, fi, fo, n, c in norm[:30]],
+                       feedforward_loops=ffl, null_model=nullz)
+    log('motifs: recip', dict(recc), 'FFI frac', R['motifs']['feedforward_inhibition']['frac'], 'norm cands', len(norm), 'ffl', ffl['by_middle'])
+
+# ---------------------------------------------------------------- FFL census + null model
+def _motif_metrics(Ab, tE, tI):
+    """Motif counts on a binary type graph (Ab[i,j]=1 means strong edge type i -> j)."""
+    T = Ab.shape[0]
+    DE, DI = sp.diags(tE.astype(np.int8)), sp.diags(tI.astype(np.int8))
+    AbE = DE @ Ab                                  # edges from excitatory types
+    # FFI: E edge a->c with an inhibitory mediator a->i->c
+    ffi = int(((AbE @ (DI @ Ab)).multiply(AbE)).nnz)
+    # reciprocal pairs by sign
+    rec = Ab.multiply(Ab.T > 0).tocoo(); m = rec.row < rec.col
+    pr, po = rec.row[m], rec.col[m]
+    cat = lambda a, b: 'E<->E' if tE[a] and tE[b] else 'I<->I' if tI[a] and tI[b] else 'E<->I'
+    rec_counts = collections.Counter(cat(a, b) for a, b in zip(pr, po))
+    # disinhibitory edges I->I
+    dis = int((DI @ Ab @ DI).nnz)
+    # FFLs by middle-node sign: path a->b->c plus direct a->c (coherent iff middle E:
+    # path sign a*b equals direct sign a only when b is excitatory)
+    P2E = (Ab @ (DE @ Ab)).tocsr(); P2E = P2E.multiply(Ab > 0).tocoo()
+    P2I = (Ab @ (DI @ Ab)).tocsr(); P2I = P2I.multiply(Ab > 0).tocoo()
+    by = {}
+    for nm, P2 in (('E', P2E), ('I', P2I)):
+        for sn, mask in (('E', tE), ('I', tI)):
+            sel = mask[P2.row]; d = P2.data[sel]
+            by[f'{sn}_{nm}'] = dict(instances=int(d.sum()), edges=int((d > 0).sum()))
+    return dict(ffi_frac=ffi / max(AbE.nnz, 1), ffi_edges=int(ffi), e_edges=int(AbE.nnz),
+                recip=dict(rec_counts), dis_II=dis, ffl=by, edges=int(Ab.nnz))
+
+def _rewire(Ab, tE, tI, rng, mult=4):
+    """Degree- and source-sign-preserving directed rewire of the binary type graph.
+    Swapping targets of two same-sign sources keeps every type's in/out degree and the
+    number of E/I edges exactly; only the pairing changes."""
+    co = Ab.tocoo(); E = Ab.nnz; T = Ab.shape[0]
+    pre = co.row.astype(np.int64).copy(); post = co.col.astype(np.int64).copy()
+    S = set((pre * np.int64(T) + post).tolist())
+    acc = 0
+    for _ in range(mult * E):
+        i, j = rng.integers(0, E, 2)
+        a, b = int(pre[i]), int(post[i]); c, d = int(pre[j]), int(post[j])
+        if a == c or b == d: continue                       # no-op swaps only; self-loops are allowed (they exist in the data)
+        if not ((tE[a] and tE[c]) or (tI[a] and tI[c])): continue
+        k1, k2 = a * T + d, c * T + b
+        if k1 in S or k2 in S: continue
+        S.discard(a * T + b); S.discard(c * T + d); S.add(k1); S.add(k2)
+        post[i] = d; post[j] = b; acc += 1
+    return sp.csr_matrix((np.ones(E, np.int8), (pre, post)), shape=Ab.shape), acc
+
+def ffl_census(A, Ab, tE, tI, ffi_count, ffi_pairs, K=6, seed=0):
+    obs = _motif_metrics(Ab, tE, tI)
+    rng = np.random.default_rng(seed)
+    nulls = []
+    for k in range(K):
+        An, acc = _rewire(Ab, tE, tI, rng)
+        nulls.append(_motif_metrics(An, tE, tI))
+        log(f'  null {k + 1}/{K}: accepted swaps {acc}, ffi_frac {nulls[-1]["ffi_frac"]:.3f}')
+    def zs(get):
+        vals = np.array([get(n) for n in nulls], float)
+        o = get(obs); sd = vals.std()
+        return dict(obs=round(float(o), 4), null_mean=round(float(vals.mean()), 4),
+                    null_std=round(float(sd), 4), z=round(float((o - vals.mean()) / sd) if sd > 0 else (float('inf') if o > vals.mean() else 0), 1))
+    nullz = dict(ffi_frac=zs(lambda n: n['ffi_frac']),
+                 dis_II_control=zs(lambda n: n['dis_II']),   # conserved by construction (same-sign sources keep I->I count); should give z=0
+                 recip_EE=zs(lambda n: n['recip'].get('E<->E', 0)), recip_II=zs(lambda n: n['recip'].get('I<->I', 0)),
+                 recip_EI=zs(lambda n: n['recip'].get('E<->I', 0)),
+                 ffl_coh_edges=zs(lambda n: n['ffl']['E_E']['edges'] + n['ffl']['I_E']['edges']),
+                 ffl_incoh_edges=zs(lambda n: n['ffl']['E_I']['edges'] + n['ffl']['I_I']['edges']),
+                 n_nulls=K)
+    ffl = dict(by_middle={k: obs['ffl'][k] for k in obs['ffl']},
+               coherent_edges=int(obs['ffl']['E_E']['edges'] + obs['ffl']['I_E']['edges']),
+               incoherent_edges=int(obs['ffl']['E_I']['edges'] + obs['ffl']['I_I']['edges']))
+    return ffl, nullz
 
 # ---------------------------------------------------------------- antennal lobe
 def antennal_lobe(tl, R):
@@ -245,7 +323,49 @@ def central_complex(tl, R):
         mi = sum(c * w for c, w in ci) / sum(w for _, w in ci); mo = sum(c * w for c, w in co) / sum(w for _, w in co)
         shift[re.sub(r'[_(].*', '', types[i])[:6]].append(mo - mi)
     fb_shift = {k: dict(n=len(v), median_shift=round(float(np.median(v)), 2), abs_shift_p50=round(float(np.median(np.abs(v))), 2)) for k, v in shift.items() if len(v) >= 8}
+    # per-neuron shift at sub-glomerular resolution: circular mean offset (period 8) of each PEN's
+    # EPG targets and each EPG's PEN sources. The true shift is half a glomerulus (one EB wedge),
+    # which shows up here as a fractional column offset (~±1.5).
+    epgset = set(epg.tolist()); penset = set(np.concatenate([pena, penb]).tolist())
+    def circ_off(i, targets, period=8):
+        if not col.get(i): return None
+        row = W[i].tocoo(); c = s = den = 0.0
+        for j, w in zip(row.col, row.data):
+            if j in targets and col.get(j):
+                d = ((pos(col[j]) - pos(col[i])) % period) * 2 * np.pi / period
+                c += w * np.cos(d); s += w * np.sin(d); den += w
+        return float(np.arctan2(s, c) * period / (2 * np.pi)) if den >= 20 else None
+    # per-PEN shift split by hemisphere: left and right PENs push the bump opposite ways,
+    # so the population is bimodal at +-1.5 columns and must be reported per side
+    def side_shifts(ix):
+        L = [v for v, i in ((circ_off(i, epgset), i) for i in ix) if v is not None and col[i][0] == 'L']
+        Rr = [v for v, i in ((circ_off(i, epgset), i) for i in ix) if v is not None and col[i][0] == 'R']
+        return L, Rr
+    penL, penR = side_shifts(np.concatenate([pena, penb]))
+    penaL, penaR = side_shifts(pena); penbL, penbR = side_shifts(penb)
+    pen_to_epg = penL + penR
+    pena_to_epg = penaL + penaR; penb_to_epg = penbL + penbR
+    epg_from_pen = []
+    for i in epg:
+        if not col.get(i): continue
+        cc = W[:, i].tocoo(); c = s = den = 0.0
+        for j, w in zip(cc.row, cc.data):
+            if j in penset and col.get(j):
+                d = ((pos(col[j]) - pos(col[i])) % 8) * np.pi / 4
+                c += w * np.cos(d); s += w * np.sin(d); den += w
+        if den >= 20: epg_from_pen.append(float(np.arctan2(s, c) * 4 / np.pi))
+    # cosine fit of the folded Delta7 kernel: v(k) ~ a - b cos(2 pi k / 8)
+    k8 = np.arange(8); a8 = d7v.mean(); b8 = -2 * float((d7v * np.cos(2 * np.pi * k8 / 8)).sum()) / 8
+    fitv = a8 - b8 * np.cos(2 * np.pi * k8 / 8)
+    r2 = 1 - float(((d7v - fitv) ** 2).sum() / max(((d7v - a8) ** 2).sum(), 1e-9))
+    q3 = lambda v: [round(float(x), 2) for x in np.percentile(v, [10, 50, 90])] if len(v) else None
     R['central_complex'] = dict(n=dict(EPG=len(epg), PEN1=len(pena), PEN2=len(penb), Delta7=len(d7), PEG=len(peg)), side_resolved_profiles=sideprof, fb_in_out_column_shift=fb_shift,
+                                pen_to_epg_shift_L=q3(penL), pen_to_epg_shift_R=q3(penR),
+                                pena_to_epg_shift_L=round(float(np.median(penaL)), 2) if penaL else None, pena_to_epg_shift_R=round(float(np.median(penaR)), 2) if penaR else None,
+                                penb_to_epg_shift_L=round(float(np.median(penbL)), 2) if penbL else None, penb_to_epg_shift_R=round(float(np.median(penbR)), 2) if penbR else None,
+                                epg_from_pen_shift_p10_50_90=q3(epg_from_pen),
+                                n_pen_shift=len(pen_to_epg), n_epg_shift=len(epg_from_pen),
+                                delta7_cosine_fit=dict(mean=round(float(a8), 1), amplitude=round(float(b8), 1), r2=round(r2, 3), contrast=round(float((d7v.max() - d7v.min()) / (d7v.max() + d7v.min())), 3)),
                                 offset_profiles_pb_line=prof, offset_profiles_mod8=folded,
                                 delta7_inhibition_min_offset=int(d7v.argmin()), delta7_inhibition_min_over_mean=round(float(d7v.min() / d7v.mean()), 3),
                                 pen1_peak_offset=int(max(pen1, key=pen1.get)), pen2_peak_offset=int(max(pen2, key=pen2.get)),
@@ -392,3 +512,214 @@ def hubs(R):
     R['hubs'] = dict(top_in=top_in, top_out=top_out, in_degree_tail_exponent=tail(ind), out_degree_tail_exponent=tail(outd),
                      synapses_in_p50_90_99=[int(v) for v in np.percentile(ind, [50, 90, 99])], synapses_out_p50_90_99=[int(v) for v in np.percentile(outd, [50, 90, 99])])
     log('hubs', top_in[:3], top_out[:3])
+
+# ---------------------------------------------------------------- helpers for the new sections
+def type_proj(mask):
+    """type x cells indicator matrix restricted to mask"""
+    tl = type_level_local()
+    tix = tl['tix']
+    ix = np.where(mask)[0]
+    return sp.csr_matrix((np.ones(len(ix)), (tix[ix], np.arange(len(ix)))), shape=(tl['T'], len(ix))), ix
+
+_TLL = None
+def type_level_local():
+    global _TLL
+    if _TLL is None:
+        ut, tix = np.unique(types, return_inverse=True)
+        _TLL = dict(ut=ut, tix=tix, T=len(ut))
+    return _TLL
+
+def tmat(src_ix, dst_ix):
+    """type -> type synapse matrix between two neuron index sets"""
+    tl = type_level_local()
+    Ps = sp.csr_matrix((np.ones(len(src_ix)), (tl['tix'][src_ix], np.arange(len(src_ix)))), shape=(tl['T'], len(src_ix)))
+    Pd = sp.csr_matrix((np.ones(len(dst_ix)), (tl['tix'][dst_ix], np.arange(len(dst_ix)))), shape=(tl['T'], len(dst_ix)))
+    return (Ps @ W[src_ix][:, dst_ix] @ Pd.T).tocsr()
+
+def top_target_types(ix, k=8, minw=1):
+    c = collections.Counter()
+    sub = W[ix].tocoo()
+    for j, w in zip(sub.col, sub.data):
+        t = types[j]
+        if t: c[t] += w
+    return [(t, int(w)) for t, w in c.most_common(k) if w >= minw]
+
+# ---------------------------------------------------------------- lateral horn: the innate-valence pathway
+def lateral_horn(tl, R):
+    lh = np.array([bool(re.match(r'^LH', t)) for t in types])
+    lhi = np.where(lh)[0]
+    o_in_lh = np.asarray(W[lhi][:, lhi].sum(1)).ravel(); o_all = np.asarray(W[lhi].sum(1)).ravel()
+    frac_to_lh = o_in_lh / np.maximum(o_all, 1)
+    # local = most output stays inside the LH; output = projects out
+    loc = lhi[frac_to_lh >= 0.5]; outc = lhi[frac_to_lh < 0.5]
+    loc_types = sorted(set(types[loc])); out_types = sorted(set(types[outc]))
+    # PN -> LH: which glomerular channels converge; per LH type, top-PN share and breadth
+    pn = cln == 'ALPN'; pi_ = np.where(pn)[0]
+    M = tmat(pi_, lhi)                                   # PN type x LH type
+    ut = tl['ut']; utix = {t: k for k, t in enumerate(ut)}
+    per_type = []
+    for t in out_types:
+        k = utix[t]; v = np.asarray(M[:, k].toarray()).ravel()
+        tot = v.sum()
+        if tot < 100: continue
+        per_type.append(dict(type=t, pn_syn=int(tot), top_share=round(float(v.max() / tot), 3),
+                             n_pn_types_ge5pct=int((v >= 0.05 * tot).sum())))
+    per_type.sort(key=lambda d: -d['pn_syn'])
+    breadth = np.array([d['n_pn_types_ge5pct'] for d in per_type]); topshare = np.array([d['top_share'] for d in per_type])
+    tot = lambda a, b: int(W[a][:, b].sum())
+    flows = {'PN->LH': tot(pi_, lhi), 'LH(local)->LH(out)': tot(loc, outc), 'LH(out)->LH(local)': tot(outc, loc),
+             'LH(local)->LH(local)': tot(loc, loc), 'LH(out)->LH(out)': tot(outc, outc), 'PN->KC': tot(pi_, np.where(cln == 'Kenyon_Cell')[0]),
+             'MBON->LH': tot(np.where(cln == 'MBON')[0], lhi), 'LH->MBON': tot(lhi, np.where(cln == 'MBON')[0]),
+             'LH->DN': tot(lhi, np.where(dn)[0]), 'LH->CX': tot(lhi, np.where(cln == 'CX')[0])}
+    dn_top = collections.Counter()
+    sub = W[lhi][:, np.where(dn)[0]].tocoo(); dni = np.where(dn)[0]
+    for c_, w in zip(sub.col, sub.data): dn_top[types[dni[c_]]] += w
+    # PN type breadth onto the LH population overall
+    pn_out = np.asarray((W[pi_][:, lhi] >= 3).sum(1)).ravel()
+    R['lateral_horn'] = dict(n_lh=int(lh.sum()), n_lh_types=len(set(types[lhi])), n_output_cells=int(len(outc)), n_local_cells=int(len(loc)),
+                             local_types=loc_types, n_output_types=len(out_types),
+                             pn_lh_vs_pn_kc=round(flows['PN->LH'] / max(flows['PN->KC'], 1), 3),
+                             pn_types_reaching_lh=int((np.asarray(M.sum(1)).ravel() > 0).sum()),
+                             lh_top_pn_share_p50=round(float(np.median(topshare)), 3) if len(topshare) else None,
+                             lh_pn_breadth_p50=int(np.median(breadth)) if len(breadth) else None,
+                             pn_cells_reaching_lh_frac=round(float((pn_out > 0).mean()), 3),
+                             synapse_flows=flows, per_type_pn=per_type[:20],
+                             lh_to_dn_top=[(t, int(w)) for t, w in dn_top.most_common(10)])
+    log('LH: cells', len(lhi), 'out/loc', len(outc), len(loc), 'PN->LH / PN->KC', R['lateral_horn']['pn_lh_vs_pn_kc'])
+
+# ---------------------------------------------------------------- optic glomeruli: visual feature channels
+def optic_glomeruli(tl, R):
+    vpn = np.array([s.startswith('visual_projection') for s in scn])
+    vi = np.where(vpn)[0]
+    # per VPN type -> target type matrix
+    tlL = type_level_local(); ut = tlL['ut']; T = tlL['T']
+    Pv, _ = type_proj(vpn)
+    P = sp.csr_matrix((np.ones(N), (tlL['tix'], np.arange(N))), shape=(T, N))
+    V2T = (Pv @ W[vi] @ P.T).tocsr()                   # type x target-type, only VPN rows nonzero
+    vrows = np.where(np.asarray(V2T.sum(1)).ravel() > 0)[0]
+    cnt = tl['cnt']
+    vtypes = [str(t) for t in ut[vrows] if t]
+    M = V2T[vrows].toarray()
+    # focus: share of output on the top target type; breadth: #target types with >=5%
+    focus = M.max(1) / np.maximum(M.sum(1), 1)
+    breadth = (M >= 0.05 * np.maximum(M.sum(1, keepdims=True), 1)).sum(1)
+    # channel separation: cosine similarity between VPN types' target profiles
+    strong = M.sum(1) >= 2000
+    Mv = M[strong]; Mn = Mv / np.maximum(np.linalg.norm(Mv, axis=1, keepdims=True), 1e-9)
+    S = Mn @ Mn.T; iu = np.triu_indices(S.shape[0], 1)
+    sim = S[iu]
+    # convergence: target types reached by many VPN types
+    conv = (M > 0).sum(0)
+    conv_top = [(str(ut[j]), int(conv[j]), int(M[:, j].sum())) for j in np.argsort(-conv)[:15]]
+    # VPN -> DN, VPN -> ER (compass), VPN -> LH
+    dni = np.where(dn)[0]; eri = np.where(np.array([bool(re.match(r'^ER\d|^EL$|^ExR', t)) for t in types]))[0]
+    lhi = np.where(np.array([bool(re.match(r'^LH', t)) for t in types]))[0]
+    vd = W[vi][:, dni].tocoo(); dn_pairs = collections.Counter()
+    for r, c, w in zip(vd.row, vd.col, vd.data): dn_pairs[(types[vi[r]], types[dni[c]])] += w
+    per_type = []
+    for k, tix_ in enumerate(vrows):
+        t = ut[tix_]
+        top = np.argsort(-M[k])[:4]
+        per_type.append(dict(type=str(t), n=int(cnt[tix_]), out_syn=int(M[k].sum()), focus=round(float(focus[k]), 2),
+                             n_targets_ge5pct=int(breadth[k]), top_targets=[(str(ut[j]), int(M[k, j])) for j in top if M[k, j] > 0][:4]))
+    per_type.sort(key=lambda d: -d['out_syn'])
+    R['optic_glomeruli'] = dict(n_vpn=int(vpn.sum()), n_vpn_types=len(vtypes),
+                                focus_median=round(float(np.median(focus)), 3), breadth_median=int(np.median(breadth)),
+                                pairwise_cosine_p50=round(float(np.median(sim)), 3), pairwise_cosine_p90=round(float(np.percentile(sim, 90)), 3),
+                                n_strong_types=int(strong.sum()), convergent_targets=conv_top,
+                                vpn_to_dn_synapses=int(W[vi][:, dni].sum()), vpn_to_er_synapses=int(W[vi][:, eri].sum()), vpn_to_lh_synapses=int(W[vi][:, lhi].sum()),
+                                vpn_dn_top=[(a, b, int(w)) for (a, b), w in dn_pairs.most_common(12)],
+                                per_type=per_type[:25])
+    log('OG: vpn types', len(vtypes), 'focus p50', R['optic_glomeruli']['focus_median'], 'cos p50', R['optic_glomeruli']['pairwise_cosine_p50'])
+
+# ---------------------------------------------------------------- MBON convergence: where compartments recombine
+def mbon_convergence(tl, R):
+    mi = np.where(cln == 'MBON')[0]
+    tlL = type_level_local(); ut = tlL['ut']; T = tlL['T']
+    P = sp.csr_matrix((np.ones(N), (tlL['tix'], np.arange(N))), shape=(T, N))
+    Pm, _ = type_proj(cln == 'MBON')
+    M = (Pm @ W[mi] @ P.T).tocsr()                       # type x type (MBON types rows)
+    rows = np.asarray(M.sum(1)).ravel() > 0; mrows = np.where(rows)[0]
+    Mn = M[mrows].toarray()
+    # convergence: targets fed by >=3 MBON types
+    thresh = Mn >= 50
+    nsrc = thresh.sum(0)
+    conv = [(str(ut[j]), int(nsrc[j]), int(Mn[:, j].sum())) for j in np.argsort(-nsrc)[:20] if nsrc[j] >= 2]
+    # valence channels: group MBONs by transmitter, within vs across target-profile similarity
+    sig = tl['tsign'][mrows]
+    Mnrm = Mn / np.maximum(np.linalg.norm(Mn, axis=1, keepdims=True), 1e-9)
+    S = Mnrm @ Mnrm.T
+    samecls = lambda a, b: (sig[a] > 0.2) == (sig[b] > 0.2) and (sig[a] < -0.2) == (sig[b] < -0.2)
+    same = [S[a, b] for a in range(len(mrows)) for b in range(a + 1, len(mrows)) if samecls(a, b)]
+    diff = [S[a, b] for a in range(len(mrows)) for b in range(a + 1, len(mrows)) if not samecls(a, b)]
+    dni = np.where(dn)[0]
+    vd = W[mi][:, dni].tocoo(); dn_pairs = collections.Counter()
+    for r, c, w in zip(vd.row, vd.col, vd.data): dn_pairs[(types[mi[r]], types[dni[c]])] += w
+    nt_split = collections.Counter(ntn[mi].tolist())
+    per_type = []
+    for k, r in enumerate(mrows):
+        top = np.argsort(-Mn[k])[:4]
+        per_type.append(dict(type=str(ut[r]), n=int(tl['cnt'][r]), out_syn=int(Mn[k].sum()),
+                             top_targets=[(str(ut[j]), int(Mn[k, j])) for j in top if Mn[k, j] > 0]))
+    per_type.sort(key=lambda d: -d['out_syn'])
+    # downstream classes
+    sc_out = collections.Counter(); wco = W[mi].tocoo()
+    for c_, w in zip(wco.col, wco.data): sc_out[scn[c_]] += w
+    R['mbon_convergence'] = dict(n_mbon=int(len(mi)), n_mbon_types=len(mrows), nt_split=dict(nt_split),
+                                 convergent_targets=conv, mbon_to_dn_synapses=int(W[mi][:, dni].sum()),
+                                 mbon_dn_top=[(a, b, int(w)) for (a, b), w in dn_pairs.most_common(12)],
+                                 same_valence_cosine_p50=round(float(np.median(same)), 3) if same else None,
+                                 diff_valence_cosine_p50=round(float(np.median(diff)), 3) if diff else None,
+                                 output_by_superclass={k: int(v) for k, v in sc_out.most_common(10)},
+                                 per_type=per_type[:25])
+    log('MBC: mbon types', len(mrows), 'conv targets', len(conv), 'same/diff valence cos', R['mbon_convergence']['same_valence_cosine_p50'], R['mbon_convergence']['diff_valence_cosine_p50'])
+
+# ---------------------------------------------------------------- state circuits: clock, sleep, peptides
+def state_circuits(tl, R):
+    groups = {
+        'clock': r'^(DN1a|DN1pA|DN1pB|s-LNv|LNd_[a-z]|LPN_[ab]|LNv)$',
+        'sleep': r'^(hDeltaC|ExR1|ER5|ExR2)$',
+        'octopamine': r'^OA-',
+        'serotonin': r'^5-HT',
+        'peptide': r'^(AstA|ITP|LK|CAPA|FMRFa|DH44|Hugin|CRZ|DSK|NPFL1-I|AstC|MIP|TK|ETH|BURS|MS|CNMa|NPF|CCAP)',
+    }
+    gi = {}
+    for gname, pat in groups.items():
+        m = np.array([bool(re.match(pat, str(t))) for t in types])
+        gi[gname] = np.where(m)[0]
+    allstate = np.concatenate(list(gi.values()))
+    utl = type_level_local()['ut']
+    # group x group weight
+    gm = {}
+    for a, ia in gi.items():
+        for b, ib in gi.items():
+            w = int(W[ia][:, ib].sum())
+            if w: gm[f'{a}->{b}'] = w
+    # clock interconnectivity at type level
+    CM = tmat(gi['clock'], gi['clock']).toarray()          # T x T, rows/cols indexed by type index
+    cti = sorted(set(types[gi['clock']]))
+    utix = {t: k for k, t in enumerate(utl)}
+    cm_rows = []
+    for t in cti:
+        r = utix[t]
+        row = {str(utl[c]): int(CM[r, c]) for c in range(CM.shape[1]) if CM[r, c] >= 20}
+        if row: cm_rows.append((t, row))
+    # where do state cells output? by superclass and top types
+    sc_out = collections.Counter(); tt = collections.Counter()
+    sub = W[allstate].tocoo()
+    for c_, w in zip(sub.col, sub.data):
+        sc_out[scn[c_]] += w
+        if types[c_]: tt[types[c_]] += w
+    per_group = {}
+    for gname, ix in gi.items():
+        if not len(ix): continue
+        per_group[gname] = dict(n=int(len(ix)), types=sorted(set(types[ix]))[:40], top_targets=top_target_types(ix, 8, 30))
+    # key links: state -> CX, -> DN, -> MBON, -> LH
+    cx = np.where(cln == 'CX')[0]; mb = np.where(cln == 'MBON')[0]
+    links = {'state->CX': int(W[allstate][:, cx].sum()), 'state->DN': int(W[allstate][:, np.where(dn)[0]].sum()),
+             'state->MBON': int(W[allstate][:, mb].sum()), 'CX->state': int(W[cx][:, allstate].sum()),
+             'state->state': int(W[allstate][:, allstate].sum())}
+    R['state_circuits'] = dict(group_flows=gm, per_group=per_group, clock_matrix=cm_rows,
+                               links=links, top_state_targets=[(t, int(w)) for t, w in tt.most_common(20)],
+                               output_by_superclass={k: int(v) for k, v in sc_out.most_common(10)})
+    log('state: cells', len(allstate), 'links', links)

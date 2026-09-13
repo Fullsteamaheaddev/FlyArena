@@ -156,13 +156,60 @@ def type_level():
     _TL = dict(ut=ut, tix=tix, T=T, TW=TW, cnt=cnt, tsign=tsign, ids=ids, tsc=np.array([scn[ids[t]][0] for t in ut]), tcls=np.array([cln[ids[t]][0] for t in ut]))
     return _TL
 
+# ---------------------------------------------------------------- 5. dynamics footprint: spectrum + net flow
+def spectral():
+    """Eigenspectrum of the signed weight matrix and per-neuron source/sink balance.
+    sign[i] is +1 excitatory / -1 inhibitory per presynaptic neuron."""
+    sw = weights * sign[pre]
+    S = sp.csr_matrix((sw, indices, indptr), shape=(N, N))
+    out = dict()
+    # power iteration: spectral radius (bound on loop gain)
+    rng = np.random.default_rng(0); v = rng.standard_normal(N); v /= np.linalg.norm(v)
+    lam = 0
+    for it in range(300):
+        w = S @ v; nrm = np.linalg.norm(w)
+        if nrm == 0: break
+        v = w / nrm; lam = float(v @ (S @ v))
+    out['spectral_radius_power_iter'] = round(float(np.linalg.norm(S @ v)), 1)
+    # ARPACK: largest eigenvalues by magnitude and by real part
+    try:
+        from scipy.sparse.linalg import eigs
+        vals, vecs = eigs(S, k=40, which='LM', ncv=100, maxiter=4000)
+        vals_lr, vecs_lr = eigs(S, k=20, which='LR', ncv=80, maxiter=4000)
+        ev = sorted(vals, key=lambda z: -abs(z))
+        out['eig_top_magnitude'] = [[round(float(z.real), 1), round(float(z.imag), 1), round(float(abs(z)), 1)] for z in ev[:15]]
+        out['n_eigs_positive_real_of40'] = int((vals.real > 1e-6).sum())
+        evlr = sorted(vals_lr, key=lambda z: -z.real)
+        out['eig_top_real'] = [[round(float(z.real), 1), round(float(z.imag), 1)] for z in evlr[:15]]
+        # localisation of the dominant eigenvector: participation ratio and dominant types
+        k0 = int(np.argmax(np.abs(vals))); vec = np.abs(vecs[:, k0]) ** 2
+        pr = float(vec.sum() ** 2 / (vec ** 2).sum())
+        out['dominant_eigvec_participation'] = round(pr, 1)
+        c2 = collections.Counter()
+        for i in np.argsort(-vec)[:200]: c2[types[i]] += vec[i]
+        out['dominant_eigvec_types'] = [(t, round(float(w), 3)) for t, w in c2.most_common(10)]
+    except Exception as e:
+        out['eigs_error'] = str(e)
+    # net flow: weighted out - in per neuron -> broadcasters vs receivers
+    net = np.asarray(W.sum(1)).ravel() - np.asarray(W.sum(0)).ravel()
+    by_sc = {s: round(float(np.median(net[scn == s])), 1) for s in meta['superclasses'] if (scn == s).sum() > 50}
+    bt = collections.Counter(); rt = collections.Counter()
+    for i in np.argsort(-net)[:300]: bt[types[i]] += 1
+    for i in np.argsort(net)[:300]: rt[types[i]] += 1
+    out['netflow_median_by_superclass'] = by_sc
+    out['top_broadcaster_types'] = bt.most_common(12)
+    out['top_receiver_types'] = rt.most_common(12)
+    R['spectral'] = out
+    log('spectral: radius~', out['spectral_radius_power_iter'], 'eigs' if 'eig_top_magnitude' in out else out.get('eigs_error'))
+
 if __name__ == '__main__':
-    want = set(sys.argv[1:]) or {'flow', 'rec', 'sign', 'bil', 'motif', 'al', 'mb', 'cx', 'ol', 'escape', 'dn', 'vnc', 'hubs'}
+    want = set(sys.argv[1:]) or {'flow', 'rec', 'sign', 'bil', 'spec', 'motif', 'al', 'mb', 'cx', 'ol', 'lh', 'og', 'mbc', 'state', 'escape', 'dn', 'vnc', 'hubs'}
     x = None
     if 'flow' in want: x = flow_hierarchy()
     if 'rec' in want: recurrence()
     if 'sign' in want: sign_structure()
     if 'bil' in want: bilateral()
+    if 'spec' in want: spectral()
     sys.path.insert(0, "scripts"); import algo_circuits as C
     C.run(want, globals(), R, x)
     json.dump(R, open('public/data/algo_structures.json', 'w'), indent=1, default=lambda v: v.item() if hasattr(v, 'item') else str(v))

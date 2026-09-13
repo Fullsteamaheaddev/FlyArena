@@ -431,13 +431,342 @@
    }
   ]
  },
+ "spectral": {
+  "spectral_radius_power_iter": 3771.3,
+  "eig_top_magnitude": [
+   [
+    3771.3,
+    0.0,
+    3771.3
+   ],
+   [
+    3706.7,
+    0.0,
+    3706.7
+   ],
+   [
+    517.9,
+    2604.5,
+    2655.5
+   ],
+   [
+    517.9,
+    -2604.5,
+    2655.5
+   ],
+   [
+    369.0,
+    2498.4,
+    2525.5
+   ],
+   [
+    369.0,
+    -2498.4,
+    2525.5
+   ],
+   [
+    483.5,
+    2161.3,
+    2214.7
+   ],
+   [
+    483.5,
+    -2161.3,
+    2214.7
+   ],
+   [
+    -2039.7,
+    0.0,
+    2039.7
+   ],
+   [
+    -1929.1,
+    0.0,
+    1929.1
+   ],
+   [
+    328.5,
+    1881.8,
+    1910.2
+   ],
+   [
+    328.5,
+    -1881.8,
+    1910.2
+   ],
+   [
+    287.6,
+    1864.9,
+    1886.9
+   ],
+   [
+    287.6,
+    -1864.9,
+    1886.9
+   ],
+   [
+    67.4,
+    1884.9,
+    1886.1
+   ]
+  ],
+  "n_eigs_positive_real_of40": 32,
+  "eig_top_real": [
+   [
+    3771.3,
+    0.0
+   ],
+   [
+    3706.7,
+    0.0
+   ],
+   [
+    1084.4,
+    1313.6
+   ],
+   [
+    1084.4,
+    -1313.6
+   ],
+   [
+    1019.7,
+    1197.3
+   ],
+   [
+    1019.7,
+    -1197.3
+   ],
+   [
+    930.2,
+    0.0
+   ],
+   [
+    925.0,
+    0.0
+   ],
+   [
+    822.6,
+    0.0
+   ],
+   [
+    806.3,
+    0.0
+   ],
+   [
+    802.4,
+    321.2
+   ],
+   [
+    802.4,
+    -321.2
+   ],
+   [
+    786.7,
+    0.0
+   ],
+   [
+    750.1,
+    462.5
+   ],
+   [
+    750.1,
+    -462.5
+   ]
+  ],
+  "dominant_eigvec_participation": 49.9,
+  "dominant_eigvec_types": [
+   [
+    "lLN1_bc",
+    0.605
+   ],
+   [
+    "lLN2F_b",
+    0.048
+   ],
+   [
+    "lLN2T_c",
+    0.036
+   ],
+   [
+    "lLN2X12",
+    0.03
+   ],
+   [
+    "DP1m_adPN",
+    0.016
+   ],
+   [
+    "VP1m_l2PN",
+    0.016
+   ],
+   [
+    "lLN2X11",
+    0.015
+   ],
+   [
+    "lLN1_a",
+    0.014
+   ],
+   [
+    "lLN2T_e",
+    0.013
+   ],
+   [
+    "DM1_lPN",
+    0.011
+   ]
+  ],
+  "netflow_median_by_superclass": {
+   "ascending_neuron": 440.0,
+   "cb_endocrine": -245.5,
+   "cb_intrinsic": -2.0,
+   "cb_motor": -2244.0,
+   "cb_sensory": 233.0,
+   "descending_neuron": 91.0,
+   "ol_intrinsic": 68.0,
+   "ol_sensory": 75.0,
+   "sensory_ascending": 290.0,
+   "unknown": 0.0,
+   "visual_centrifugal": 476.0,
+   "visual_projection": -66.0,
+   "vnc_efferent": -1600.5,
+   "vnc_intrinsic": 29.0,
+   "vnc_motor": -2462.0,
+   "vnc_sensory": 262.0
+  },
+  "top_broadcaster_types": [
+   [
+    "IN12B002",
+    6
+   ],
+   [
+    "IN09A001",
+    5
+   ],
+   [
+    "aMe17c",
+    4
+   ],
+   [
+    "MeVCMe1",
+    4
+   ],
+   [
+    "AN19B001",
+    4
+   ],
+   [
+    "LoVC19",
+    4
+   ],
+   [
+    "OA-AL2i2",
+    4
+   ],
+   [
+    "DNge172",
+    4
+   ],
+   [
+    "DM2_lPN",
+    3
+   ],
+   [
+    "ExR5",
+    3
+   ],
+   [
+    "IN13B001",
+    3
+   ],
+   [
+    "CT1",
+    2
+   ]
+  ],
+  "top_receiver_types": [
+   [
+    "Sternotrochanter MN",
+    8
+   ],
+   [
+    "VS",
+    7
+   ],
+   [
+    "Sternal anterior rotator MN",
+    7
+   ],
+   [
+    "Sternal posterior rotator MN",
+    5
+   ],
+   [
+    "ANXXX027",
+    5
+   ],
+   [
+    "Pm11",
+    4
+   ],
+   [
+    "Pleural remotor/abductor MN",
+    4
+   ],
+   [
+    "LPi12",
+    4
+   ],
+   [
+    "MBON09",
+    4
+   ],
+   [
+    "lLN2T_b",
+    4
+   ],
+   [
+    "AOTU041",
+    4
+   ],
+   [
+    "Ti extensor MN",
+    4
+   ]
+  ]
+ },
  "motifs": {
   "strong_type_edges": 473523,
   "fan_by_superclass": {
-   "cb_motor": {
-    "types": 43,
-    "median_in_types": 54.0,
+   "cb_intrinsic": {
+    "types": 6456,
+    "median_in_types": 31.0,
+    "median_out_types": 31.0
+   },
+   "vnc_sensory": {
+    "types": 161,
+    "median_in_types": 5.0,
+    "median_out_types": 49.0
+   },
+   "vnc_efferent": {
+    "types": 17,
+    "median_in_types": 31.0,
     "median_out_types": 0.0
+   },
+   "descending_neuron": {
+    "types": 473,
+    "median_in_types": 55.0,
+    "median_out_types": 60.0
+   },
+   "vnc_intrinsic": {
+    "types": 2676,
+    "median_in_types": 29.0,
+    "median_out_types": 27.0
+   },
+   "ol_sensory": {
+    "types": 11,
+    "median_in_types": 2.0,
+    "median_out_types": 11.0
    },
    "ascending_neuron": {
     "types": 545,
@@ -449,11 +778,6 @@
     "median_in_types": 73.0,
     "median_out_types": 0.0
    },
-   "sensory_ascending": {
-    "types": 28,
-    "median_in_types": 5.0,
-    "median_out_types": 54.5
-   },
    "ol_intrinsic": {
     "types": 263,
     "median_in_types": 19.0,
@@ -464,50 +788,30 @@
     "median_in_types": 25.0,
     "median_out_types": 41.0
    },
-   "descending_neuron": {
-    "types": 473,
-    "median_in_types": 55.0,
-    "median_out_types": 60.0
+   "cb_sensory": {
+    "types": 155,
+    "median_in_types": 6.0,
+    "median_out_types": 30.0
    },
-   "ol_sensory": {
-    "types": 11,
-    "median_in_types": 2.0,
-    "median_out_types": 11.0
-   },
-   "vnc_efferent": {
-    "types": 17,
-    "median_in_types": 31.0,
-    "median_out_types": 0.0
+   "sensory_ascending": {
+    "types": 28,
+    "median_in_types": 5.0,
+    "median_out_types": 54.5
    },
    "cb_endocrine": {
     "types": 10,
     "median_in_types": 12.5,
     "median_out_types": 0.0
    },
-   "cb_sensory": {
-    "types": 155,
-    "median_in_types": 6.0,
-    "median_out_types": 30.0
-   },
-   "vnc_sensory": {
-    "types": 161,
-    "median_in_types": 5.0,
-    "median_out_types": 49.0
-   },
-   "cb_intrinsic": {
-    "types": 6456,
-    "median_in_types": 31.0,
-    "median_out_types": 31.0
-   },
-   "vnc_intrinsic": {
-    "types": 2676,
-    "median_in_types": 29.0,
-    "median_out_types": 27.0
-   },
    "visual_centrifugal": {
     "types": 105,
     "median_in_types": 41.0,
     "median_out_types": 23.0
+   },
+   "cb_motor": {
+    "types": 43,
+    "median_in_types": 54.0,
+    "median_out_types": 0.0
    }
   },
   "top_convergent_types": [
@@ -1814,7 +2118,74 @@
     "in_syn": 16800,
     "n": 2
    }
-  ]
+  ],
+  "feedforward_loops": {
+   "by_middle": {
+    "E_E": {
+     "instances": 1312186,
+     "edges": 251212
+    },
+    "I_E": {
+     "instances": 881118,
+     "edges": 163805
+    },
+    "E_I": {
+     "instances": 852588,
+     "edges": 221798
+    },
+    "I_I": {
+     "instances": 510091,
+     "edges": 147239
+    }
+   },
+   "coherent_edges": 415017,
+   "incoherent_edges": 369037
+  },
+  "null_model": {
+   "ffi_frac": {
+    "obs": 0.7992,
+    "null_mean": 0.2546,
+    "null_std": 0.0018,
+    "z": 296.7
+   },
+   "dis_II_control": {
+    "obs": 78796.0,
+    "null_mean": 78796.0,
+    "null_std": 0.0,
+    "z": 0
+   },
+   "recip_EE": {
+    "obs": 8272.0,
+    "null_mean": 526.3333,
+    "null_std": 20.9099,
+    "z": 370.4
+   },
+   "recip_II": {
+    "obs": 6375.0,
+    "null_mean": 282.0,
+    "null_std": 14.6287,
+    "z": 416.5
+   },
+   "recip_EI": {
+    "obs": 21602.0,
+    "null_mean": 1194.3333,
+    "null_std": 34.7835,
+    "z": 586.7
+   },
+   "ffl_coh_edges": {
+    "obs": 415017.0,
+    "null_mean": 134573.0,
+    "null_std": 705.0551,
+    "z": 397.8
+   },
+   "ffl_incoh_edges": {
+    "obs": 369037.0,
+    "null_mean": 112842.1667,
+    "null_std": 1507.5614,
+    "z": 169.9
+   },
+   "n_nulls": 6
+  }
  },
  "antennal_lobe": {
   "glomeruli": 50,
@@ -2349,6 +2720,33 @@
     "median_shift": 0.27,
     "abs_shift_p50": 0.27
    }
+  },
+  "pen_to_epg_shift_L": [
+   1.42,
+   1.47,
+   1.55
+  ],
+  "pen_to_epg_shift_R": [
+   -1.55,
+   -1.45,
+   -1.37
+  ],
+  "pena_to_epg_shift_L": 1.5,
+  "pena_to_epg_shift_R": -1.49,
+  "penb_to_epg_shift_L": 1.45,
+  "penb_to_epg_shift_R": -1.42,
+  "epg_from_pen_shift_p10_50_90": [
+   -0.29,
+   -0.08,
+   0.38
+  ],
+  "n_pen_shift": 42,
+  "n_epg_shift": 46,
+  "delta7_cosine_fit": {
+   "mean": 873.0,
+   "amplitude": 889.7,
+   "r2": 0.99,
+   "contrast": 0.878
   },
   "offset_profiles_pb_line": {
    "EPG_to_PEN1": {
@@ -3889,6 +4287,2268 @@
      ]
     }
    }
+  }
+ },
+ "lateral_horn": {
+  "n_lh": 2028,
+  "n_lh_types": 422,
+  "n_output_cells": 1574,
+  "n_local_cells": 454,
+  "local_types": [
+   "LH005m",
+   "LHAD1c3",
+   "LHAD3a1",
+   "LHAD3f1_b",
+   "LHAV1a3",
+   "LHAV1d2",
+   "LHAV2a2",
+   "LHAV2h1",
+   "LHAV2k10",
+   "LHAV2k5",
+   "LHAV2k9",
+   "LHAV2m1",
+   "LHAV3b1",
+   "LHAV3b2_b",
+   "LHAV3b2_c",
+   "LHAV3b6_b",
+   "LHAV3b8",
+   "LHAV3e3_a",
+   "LHAV3e4_b",
+   "LHAV3e5",
+   "LHAV3e6",
+   "LHAV3f1",
+   "LHAV3g1",
+   "LHAV3i1",
+   "LHAV3k3",
+   "LHAV3o1",
+   "LHAV3q1",
+   "LHAV4a1_b",
+   "LHAV4a2",
+   "LHAV4a4",
+   "LHAV4a5",
+   "LHAV4a6",
+   "LHAV4a7",
+   "LHAV4b1",
+   "LHAV4b2",
+   "LHAV4b4",
+   "LHAV4d4",
+   "LHAV4d5",
+   "LHAV4e2_b1",
+   "LHAV4g1",
+   "LHAV4g13",
+   "LHAV4g14",
+   "LHAV4g17",
+   "LHAV4g4_b",
+   "LHAV4g7_a",
+   "LHAV4g7_b",
+   "LHAV4i1",
+   "LHAV4j1",
+   "LHAV5a2_a1",
+   "LHAV5a2_a2",
+   "LHAV5a2_a3",
+   "LHAV5a2_b",
+   "LHAV6a5",
+   "LHAV6b1",
+   "LHAV6b3",
+   "LHAV6c1",
+   "LHAV7a1",
+   "LHAV7a1_b",
+   "LHAV7a5",
+   "LHAV7a6",
+   "LHAV7a7",
+   "LHCENT12_a",
+   "LHCENT12_b",
+   "LHCENT13_b",
+   "LHCENT4",
+   "LHCENT5",
+   "LHPD2a6",
+   "LHPD3a2_b",
+   "LHPD3a2_c",
+   "LHPD3a4_b",
+   "LHPD3a4_c",
+   "LHPD3a5",
+   "LHPD4a1",
+   "LHPD4d1",
+   "LHPD4d2_b",
+   "LHPV1c2",
+   "LHPV2a1_a",
+   "LHPV2a1_c",
+   "LHPV2a1_d",
+   "LHPV2a1_e",
+   "LHPV2a3",
+   "LHPV2a4",
+   "LHPV2a5",
+   "LHPV2b1",
+   "LHPV2b2_a",
+   "LHPV2b3",
+   "LHPV2b4",
+   "LHPV2b5",
+   "LHPV3b1_b",
+   "LHPV4a1",
+   "LHPV4a10",
+   "LHPV4a11",
+   "LHPV4a2",
+   "LHPV4a3",
+   "LHPV4a5",
+   "LHPV4a7",
+   "LHPV4a7_d",
+   "LHPV4b1",
+   "LHPV4b2",
+   "LHPV4b3",
+   "LHPV4b4",
+   "LHPV4b5",
+   "LHPV4d4",
+   "LHPV4g1",
+   "LHPV4h1",
+   "LHPV4i1",
+   "LHPV4i3",
+   "LHPV4i4",
+   "LHPV4j2",
+   "LHPV4j4",
+   "LHPV4k1",
+   "LHPV5a1",
+   "LHPV5a2",
+   "LHPV5c1",
+   "LHPV5c1_a",
+   "LHPV5c1_d",
+   "LHPV5d1",
+   "LHPV5d3",
+   "LHPV5g1_b",
+   "LHPV5h2_a",
+   "LHPV5h2_b",
+   "LHPV6a1",
+   "LHPV6d1",
+   "LHPV6k1",
+   "LHPV6k2",
+   "LHPV6o1",
+   "LHPV7a1"
+  ],
+  "n_output_types": 368,
+  "pn_lh_vs_pn_kc": 1.036,
+  "pn_types_reaching_lh": 181,
+  "lh_top_pn_share_p50": 0.254,
+  "lh_pn_breadth_p50": 6,
+  "pn_cells_reaching_lh_frac": 0.987,
+  "synapse_flows": {
+   "PN->LH": 402595,
+   "LH(local)->LH(out)": 127374,
+   "LH(out)->LH(local)": 47007,
+   "LH(local)->LH(local)": 38156,
+   "LH(out)->LH(out)": 230797,
+   "PN->KC": 388674,
+   "MBON->LH": 34106,
+   "LH->MBON": 19347,
+   "LH->DN": 20645,
+   "LH->CX": 14421
+  },
+  "per_type_pn": [
+   {
+    "type": "LHPV12a1",
+    "pn_syn": 14610,
+    "top_share": 0.085,
+    "n_pn_types_ge5pct": 1
+   },
+   {
+    "type": "LHAV2b2_a",
+    "pn_syn": 6887,
+    "top_share": 0.291,
+    "n_pn_types_ge5pct": 3
+   },
+   {
+    "type": "LHAV1a1",
+    "pn_syn": 6533,
+    "top_share": 0.174,
+    "n_pn_types_ge5pct": 5
+   },
+   {
+    "type": "LHAV4a1_b",
+    "pn_syn": 4749,
+    "top_share": 0.149,
+    "n_pn_types_ge5pct": 9
+   },
+   {
+    "type": "LHAD1f2",
+    "pn_syn": 4708,
+    "top_share": 0.086,
+    "n_pn_types_ge5pct": 5
+   },
+   {
+    "type": "LHPD2a2",
+    "pn_syn": 4558,
+    "top_share": 0.103,
+    "n_pn_types_ge5pct": 6
+   },
+   {
+    "type": "LHPD5c1",
+    "pn_syn": 4458,
+    "top_share": 0.201,
+    "n_pn_types_ge5pct": 6
+   },
+   {
+    "type": "LH007m",
+    "pn_syn": 4271,
+    "top_share": 0.397,
+    "n_pn_types_ge5pct": 5
+   },
+   {
+    "type": "LHAV4a4",
+    "pn_syn": 4011,
+    "top_share": 0.706,
+    "n_pn_types_ge5pct": 3
+   },
+   {
+    "type": "LH008m",
+    "pn_syn": 3766,
+    "top_share": 0.731,
+    "n_pn_types_ge5pct": 2
+   },
+   {
+    "type": "LHPV4g1",
+    "pn_syn": 3498,
+    "top_share": 0.383,
+    "n_pn_types_ge5pct": 7
+   },
+   {
+    "type": "LHAD1b2",
+    "pn_syn": 3241,
+    "top_share": 0.164,
+    "n_pn_types_ge5pct": 5
+   },
+   {
+    "type": "LHAV3k1",
+    "pn_syn": 3072,
+    "top_share": 0.093,
+    "n_pn_types_ge5pct": 6
+   },
+   {
+    "type": "LHPV2a1_c",
+    "pn_syn": 2760,
+    "top_share": 0.117,
+    "n_pn_types_ge5pct": 8
+   },
+   {
+    "type": "LHAV2c1",
+    "pn_syn": 2726,
+    "top_share": 0.099,
+    "n_pn_types_ge5pct": 6
+   },
+   {
+    "type": "LHAV2b2_b",
+    "pn_syn": 2647,
+    "top_share": 0.11,
+    "n_pn_types_ge5pct": 6
+   },
+   {
+    "type": "LHAD1g1",
+    "pn_syn": 2612,
+    "top_share": 0.2,
+    "n_pn_types_ge5pct": 6
+   },
+   {
+    "type": "LH002m",
+    "pn_syn": 2607,
+    "top_share": 0.234,
+    "n_pn_types_ge5pct": 6
+   },
+   {
+    "type": "LHAV2b3",
+    "pn_syn": 2602,
+    "top_share": 0.184,
+    "n_pn_types_ge5pct": 4
+   },
+   {
+    "type": "LHCENT1",
+    "pn_syn": 2584,
+    "top_share": 0.168,
+    "n_pn_types_ge5pct": 9
+   }
+  ],
+  "lh_to_dn_top": [
+   [
+    "DNp32",
+    2322
+   ],
+   [
+    "pIP1",
+    2072
+   ],
+   [
+    "DNp06",
+    1214
+   ],
+   [
+    "DNp42",
+    1112
+   ],
+   [
+    "DNp29",
+    1072
+   ],
+   [
+    "DNp103",
+    1002
+   ],
+   [
+    "DNp43",
+    994
+   ],
+   [
+    "DNb05",
+    640
+   ],
+   [
+    "DNg40",
+    569
+   ],
+   [
+    "DNp62",
+    484
+   ]
+  ]
+ },
+ "optic_glomeruli": {
+  "n_vpn": 9203,
+  "n_vpn_types": 346,
+  "focus_median": 0.111,
+  "breadth_median": 4,
+  "pairwise_cosine_p50": 0.002,
+  "pairwise_cosine_p90": 0.05,
+  "n_strong_types": 301,
+  "convergent_targets": [
+   [
+    "",
+    232,
+    59305
+   ],
+   [
+    "Li14",
+    103,
+    22508
+   ],
+   [
+    "LC33",
+    100,
+    11960
+   ],
+   [
+    "LPLC4",
+    100,
+    35098
+   ],
+   [
+    "Li39",
+    99,
+    14179
+   ],
+   [
+    "TmY17",
+    90,
+    22396
+   ],
+   [
+    "LT51",
+    90,
+    24171
+   ],
+   [
+    "LT52",
+    88,
+    39029
+   ],
+   [
+    "Tm37",
+    81,
+    10034
+   ],
+   [
+    "LC10a",
+    80,
+    69367
+   ],
+   [
+    "TmY5a",
+    79,
+    4976
+   ],
+   [
+    "LoVCLo3",
+    79,
+    3937
+   ],
+   [
+    "LPLC1",
+    73,
+    21254
+   ],
+   [
+    "LC10d",
+    73,
+    54119
+   ],
+   [
+    "Li22",
+    71,
+    3981
+   ]
+  ],
+  "vpn_to_dn_synapses": 275710,
+  "vpn_to_er_synapses": 1250,
+  "vpn_to_lh_synapses": 23508,
+  "vpn_dn_top": [
+   [
+    "LC4",
+    "DNp04",
+    11597
+   ],
+   [
+    "LC4",
+    "DNp01",
+    6362
+   ],
+   [
+    "LPLC2",
+    "DNp103",
+    5065
+   ],
+   [
+    "LPLC2",
+    "DNp01",
+    4858
+   ],
+   [
+    "LPLC4",
+    "DNb05",
+    4712
+   ],
+   [
+    "LC4",
+    "DNp02",
+    4209
+   ],
+   [
+    "LPLC4",
+    "DNp03",
+    3740
+   ],
+   [
+    "LC4",
+    "DNp11",
+    3655
+   ],
+   [
+    "LPLC1",
+    "DNp03",
+    3602
+   ],
+   [
+    "LPLC2",
+    "DNp04",
+    3388
+   ],
+   [
+    "LPLC1",
+    "DNp35",
+    3194
+   ],
+   [
+    "LPLC2",
+    "DNg40",
+    2977
+   ]
+  ],
+  "per_type": [
+   {
+    "type": "LC17",
+    "n": 353,
+    "out_syn": 437679,
+    "focus": 0.15,
+    "n_targets_ge5pct": 8,
+    "top_targets": [
+     [
+      "LC17",
+      63733
+     ],
+     [
+      "PVLP061",
+      55293
+     ],
+     [
+      "PVLP072",
+      38922
+     ],
+     [
+      "PVLP011",
+      37386
+     ]
+    ]
+   },
+   {
+    "type": "LC12",
+    "n": 498,
+    "out_syn": 398773,
+    "focus": 0.23,
+    "n_targets_ge5pct": 7,
+    "top_targets": [
+     [
+      "PVLP097",
+      90778
+     ],
+     [
+      "PVLP025",
+      51791
+     ],
+     [
+      "PVLP013",
+      34129
+     ],
+     [
+      "PVLP037",
+      30781
+     ]
+    ]
+   },
+   {
+    "type": "LC10a",
+    "n": 275,
+    "out_syn": 248840,
+    "focus": 0.09,
+    "n_targets_ge5pct": 5,
+    "top_targets": [
+     [
+      "TuTuA_2",
+      23306
+     ],
+     [
+      "LC10a",
+      21243
+     ],
+     [
+      "AOTU008",
+      15685
+     ],
+     [
+      "AOTU041",
+      14186
+     ]
+    ]
+   },
+   {
+    "type": "LC9",
+    "n": 219,
+    "out_syn": 173038,
+    "focus": 0.2,
+    "n_targets_ge5pct": 4,
+    "top_targets": [
+     [
+      "LC9",
+      34386
+     ],
+     [
+      "PVLP004",
+      31192
+     ],
+     [
+      "MeLo13",
+      12140
+     ],
+     [
+      "LC10a",
+      9249
+     ]
+    ]
+   },
+   {
+    "type": "LC10d",
+    "n": 214,
+    "out_syn": 155725,
+    "focus": 0.18,
+    "n_targets_ge5pct": 4,
+    "top_targets": [
+     [
+      "AOTU041",
+      28428
+     ],
+     [
+      "AOTU008",
+      18238
+     ],
+     [
+      "LT52",
+      10814
+     ],
+     [
+      "AOTU019",
+      7806
+     ]
+    ]
+   },
+   {
+    "type": "LPLC2",
+    "n": 185,
+    "out_syn": 154743,
+    "focus": 0.24,
+    "n_targets_ge5pct": 4,
+    "top_targets": [
+     [
+      "LPLC2",
+      37032
+     ],
+     [
+      "PVLP111",
+      12849
+     ],
+     [
+      "PVLP011",
+      11623
+     ],
+     [
+      "PVLP069",
+      9053
+     ]
+    ]
+   },
+   {
+    "type": "LC11",
+    "n": 143,
+    "out_syn": 138090,
+    "focus": 0.12,
+    "n_targets_ge5pct": 3,
+    "top_targets": [
+     [
+      "PVLP098",
+      16913
+     ],
+     [
+      "LC11",
+      8891
+     ],
+     [
+      "AVLP282",
+      8695
+     ],
+     [
+      "LC17",
+      6380
+     ]
+    ]
+   },
+   {
+    "type": "LLPC1",
+    "n": 285,
+    "out_syn": 130793,
+    "focus": 0.1,
+    "n_targets_ge5pct": 5,
+    "top_targets": [
+     [
+      "PLP249",
+      13430
+     ],
+     [
+      "LLPC1",
+      10893
+     ],
+     [
+      "Nod1",
+      10783
+     ],
+     [
+      "PVLP011",
+      9547
+     ]
+    ]
+   },
+   {
+    "type": "LC4",
+    "n": 126,
+    "out_syn": 127303,
+    "focus": 0.12,
+    "n_targets_ge5pct": 5,
+    "top_targets": [
+     [
+      "LC4",
+      14814
+     ],
+     [
+      "DNp04",
+      11597
+     ],
+     [
+      "AMMC-A1",
+      10767
+     ],
+     [
+      "",
+      6771
+     ]
+    ]
+   },
+   {
+    "type": "LC18",
+    "n": 208,
+    "out_syn": 114181,
+    "focus": 0.11,
+    "n_targets_ge5pct": 3,
+    "top_targets": [
+     [
+      "PVLP107",
+      12002
+     ],
+     [
+      "",
+      8350
+     ],
+     [
+      "PVLP139",
+      6180
+     ],
+     [
+      "LoVC16",
+      5655
+     ]
+    ]
+   },
+   {
+    "type": "LPLC1",
+    "n": 134,
+    "out_syn": 106860,
+    "focus": 0.15,
+    "n_targets_ge5pct": 4,
+    "top_targets": [
+     [
+      "LPLC1",
+      15741
+     ],
+     [
+      "MeLo8",
+      6683
+     ],
+     [
+      "",
+      6554
+     ],
+     [
+      "PVLP113",
+      6320
+     ]
+    ]
+   },
+   {
+    "type": "LC21",
+    "n": 153,
+    "out_syn": 105646,
+    "focus": 0.16,
+    "n_targets_ge5pct": 3,
+    "top_targets": [
+     [
+      "PVLP099",
+      16700
+     ],
+     [
+      "MeLo8",
+      6798
+     ],
+     [
+      "AVLP325_b",
+      5404
+     ],
+     [
+      "CB0743",
+      5204
+     ]
+    ]
+   },
+   {
+    "type": "LPLC4",
+    "n": 97,
+    "out_syn": 103631,
+    "focus": 0.06,
+    "n_targets_ge5pct": 1,
+    "top_targets": [
+     [
+      "PLP172",
+      6011
+     ],
+     [
+      "DNb05",
+      4712
+     ],
+     [
+      "LPLC4",
+      3761
+     ],
+     [
+      "DNp03",
+      3740
+     ]
+    ]
+   },
+   {
+    "type": "MeTu1",
+    "n": 250,
+    "out_syn": 101755,
+    "focus": 0.23,
+    "n_targets_ge5pct": 5,
+    "top_targets": [
+     [
+      "MeTu1",
+      23692
+     ],
+     [
+      "TuBu08",
+      10415
+     ],
+     [
+      "Cm9",
+      9487
+     ],
+     [
+      "MeVPMe5",
+      7058
+     ]
+    ]
+   },
+   {
+    "type": "TmY14",
+    "n": 477,
+    "out_syn": 95371,
+    "focus": 0.19,
+    "n_targets_ge5pct": 6,
+    "top_targets": [
+     [
+      "Pm2b",
+      18099
+     ],
+     [
+      "Pm2a",
+      15330
+     ],
+     [
+      "Pm8",
+      8453
+     ],
+     [
+      "Pm5",
+      8159
+     ]
+    ]
+   },
+   {
+    "type": "LPC1",
+    "n": 224,
+    "out_syn": 91250,
+    "focus": 0.12,
+    "n_targets_ge5pct": 4,
+    "top_targets": [
+     [
+      "PLP018",
+      11064
+     ],
+     [
+      "PVLP011",
+      6597
+     ],
+     [
+      "PLP163",
+      6491
+     ],
+     [
+      "LPC1",
+      5927
+     ]
+    ]
+   },
+   {
+    "type": "LC15",
+    "n": 126,
+    "out_syn": 89560,
+    "focus": 0.1,
+    "n_targets_ge5pct": 2,
+    "top_targets": [
+     [
+      "PVLP121",
+      9120
+     ],
+     [
+      "MeLo8",
+      4799
+     ],
+     [
+      "CB2049",
+      3260
+     ],
+     [
+      "PVLP103",
+      3100
+     ]
+    ]
+   },
+   {
+    "type": "LC16",
+    "n": 182,
+    "out_syn": 87224,
+    "focus": 0.36,
+    "n_targets_ge5pct": 4,
+    "top_targets": [
+     [
+      "PVLP007",
+      30996
+     ],
+     [
+      "CB0829",
+      6879
+     ],
+     [
+      "LC16",
+      5892
+     ],
+     [
+      "CB1852",
+      5600
+     ]
+    ]
+   },
+   {
+    "type": "LC10c-2",
+    "n": 125,
+    "out_syn": 78674,
+    "focus": 0.12,
+    "n_targets_ge5pct": 5,
+    "top_targets": [
+     [
+      "TuTuA_1",
+      9348
+     ],
+     [
+      "LT52",
+      6220
+     ],
+     [
+      "LC10a",
+      5596
+     ],
+     [
+      "LC10d",
+      4795
+     ]
+    ]
+   },
+   {
+    "type": "LC13",
+    "n": 177,
+    "out_syn": 75546,
+    "focus": 0.25,
+    "n_targets_ge5pct": 5,
+    "top_targets": [
+     [
+      "PLP015",
+      18836
+     ],
+     [
+      "PLP016",
+      10742
+     ],
+     [
+      "PLP008",
+      7211
+     ],
+     [
+      "AVLP464",
+      6617
+     ]
+    ]
+   },
+   {
+    "type": "LC10c-1",
+    "n": 130,
+    "out_syn": 71708,
+    "focus": 0.11,
+    "n_targets_ge5pct": 5,
+    "top_targets": [
+     [
+      "LC10d",
+      7786
+     ],
+     [
+      "LC10a",
+      7508
+     ],
+     [
+      "AOTU041",
+      5840
+     ],
+     [
+      "LT52",
+      4605
+     ]
+    ]
+   },
+   {
+    "type": "LLPC3",
+    "n": 219,
+    "out_syn": 71374,
+    "focus": 0.11,
+    "n_targets_ge5pct": 3,
+    "top_targets": [
+     [
+      "PLP081",
+      7796
+     ],
+     [
+      "TmY14",
+      4700
+     ],
+     [
+      "Y3",
+      3848
+     ],
+     [
+      "LPi43",
+      3388
+     ]
+    ]
+   },
+   {
+    "type": "MeVPMe2",
+    "n": 10,
+    "out_syn": 63617,
+    "focus": 0.53,
+    "n_targets_ge5pct": 5,
+    "top_targets": [
+     [
+      "TmY3",
+      33954
+     ],
+     [
+      "Tm3",
+      4832
+     ],
+     [
+      "Dm12",
+      4686
+     ],
+     [
+      "Tm4",
+      3861
+     ]
+    ]
+   },
+   {
+    "type": "LC6",
+    "n": 124,
+    "out_syn": 60713,
+    "focus": 0.08,
+    "n_targets_ge5pct": 4,
+    "top_targets": [
+     [
+      "PVLP008_a1",
+      4735
+     ],
+     [
+      "PVLP008_a2",
+      3664
+     ],
+     [
+      "PVLP008_a3",
+      3568
+     ],
+     [
+      "PVLP008_a4",
+      3241
+     ]
+    ]
+   },
+   {
+    "type": "LT52",
+    "n": 34,
+    "out_syn": 58139,
+    "focus": 0.14,
+    "n_targets_ge5pct": 2,
+    "top_targets": [
+     [
+      "LC10d",
+      8421
+     ],
+     [
+      "LC10a",
+      4323
+     ],
+     [
+      "LPLC4",
+      2803
+     ],
+     [
+      "AOTU063_b",
+      2791
+     ]
+    ]
+   }
+  ]
+ },
+ "mbon_convergence": {
+  "n_mbon": 97,
+  "n_mbon_types": 37,
+  "nt_split": {
+   "glutamate": 26,
+   "acetylcholine": 50,
+   "gaba": 21
+  },
+  "convergent_targets": [
+   [
+    "",
+    13,
+    2400
+   ],
+   [
+    "LHCENT3",
+    10,
+    1977
+   ],
+   [
+    "CRE011",
+    8,
+    4403
+   ],
+   [
+    "LHPV4m1",
+    7,
+    1137
+   ],
+   [
+    "MBON11",
+    7,
+    1244
+   ],
+   [
+    "LHCENT4",
+    7,
+    1577
+   ],
+   [
+    "MBON26",
+    7,
+    2930
+   ],
+   [
+    "SIP087",
+    7,
+    1767
+   ],
+   [
+    "CRE001",
+    7,
+    1124
+   ],
+   [
+    "LHPV5e1",
+    6,
+    1316
+   ],
+   [
+    "MBON20",
+    6,
+    1294
+   ],
+   [
+    "MBON24",
+    6,
+    603
+   ],
+   [
+    "LHPV10d1",
+    6,
+    1360
+   ],
+   [
+    "CRE050",
+    6,
+    1791
+   ],
+   [
+    "CRE042",
+    6,
+    1635
+   ],
+   [
+    "LAL159",
+    6,
+    988
+   ],
+   [
+    "LHPD5d1",
+    6,
+    740
+   ],
+   [
+    "SMP177",
+    6,
+    1479
+   ],
+   [
+    "PPL101",
+    5,
+    890
+   ],
+   [
+    "APL",
+    5,
+    2347
+   ]
+  ],
+  "mbon_to_dn_synapses": 4073,
+  "mbon_dn_top": [
+   [
+    "MBON33",
+    "DNg104",
+    362
+   ],
+   [
+    "MBON20",
+    "DNp42",
+    334
+   ],
+   [
+    "MBON31",
+    "DNa03",
+    251
+   ],
+   [
+    "MBON33",
+    "DNge138",
+    205
+   ],
+   [
+    "MBON27",
+    "DNa03",
+    202
+   ],
+   [
+    "MBON33",
+    "DNge150",
+    167
+   ],
+   [
+    "MBON33",
+    "DNp68",
+    139
+   ],
+   [
+    "MBON32",
+    "DNa13",
+    136
+   ],
+   [
+    "MBON31",
+    "DNa02",
+    133
+   ],
+   [
+    "MBON33",
+    "DNg34",
+    122
+   ],
+   [
+    "MBON35",
+    "DNde003",
+    120
+   ],
+   [
+    "MBON26",
+    "DNa03",
+    105
+   ]
+  ],
+  "same_valence_cosine_p50": 0.026,
+  "diff_valence_cosine_p50": 0.02,
+  "output_by_superclass": {
+   "cb_intrinsic": 226932,
+   "descending_neuron": 4073,
+   "visual_centrifugal": 1406,
+   "visual_projection": 999,
+   "ascending_neuron": 286,
+   "unknown": 11
+  },
+  "per_type": [
+   {
+    "type": "MBON12",
+    "n": 4,
+    "out_syn": 18571,
+    "top_targets": [
+     [
+      "CRE011",
+      978
+     ],
+     [
+      "LH002m",
+      854
+     ],
+     [
+      "SMP177",
+      496
+     ],
+     [
+      "",
+      427
+     ]
+    ]
+   },
+   {
+    "type": "MBON01",
+    "n": 2,
+    "out_syn": 13655,
+    "top_targets": [
+     [
+      "AVLP749m",
+      1140
+     ],
+     [
+      "LH002m",
+      970
+     ],
+     [
+      "LHCENT3",
+      698
+     ],
+     [
+      "MBON09",
+      528
+     ]
+    ]
+   },
+   {
+    "type": "MBON09",
+    "n": 4,
+    "out_syn": 12575,
+    "top_targets": [
+     [
+      "MBON21",
+      901
+     ],
+     [
+      "MBON01",
+      879
+     ],
+     [
+      "SMP075",
+      668
+     ],
+     [
+      "CRE055",
+      644
+     ]
+    ]
+   },
+   {
+    "type": "MBON20",
+    "n": 2,
+    "out_syn": 12098,
+    "top_targets": [
+     [
+      "PPM1201",
+      629
+     ],
+     [
+      "LHCENT4",
+      430
+     ],
+     [
+      "DNp42",
+      334
+     ],
+     [
+      "SLP131",
+      327
+     ]
+    ]
+   },
+   {
+    "type": "MBON26",
+    "n": 2,
+    "out_syn": 11909,
+    "top_targets": [
+     [
+      "LAL051",
+      1092
+     ],
+     [
+      "LAL171",
+      1088
+     ],
+     [
+      "LAL172",
+      1074
+     ],
+     [
+      "LAL173",
+      796
+     ]
+    ]
+   },
+   {
+    "type": "MBON30",
+    "n": 2,
+    "out_syn": 11246,
+    "top_targets": [
+     [
+      "CRE075",
+      783
+     ],
+     [
+      "APL",
+      491
+     ],
+     [
+      "MBON04",
+      430
+     ],
+     [
+      "CRE067",
+      381
+     ]
+    ]
+   },
+   {
+    "type": "MBON35",
+    "n": 2,
+    "out_syn": 11217,
+    "top_targets": [
+     [
+      "CRE011",
+      903
+     ],
+     [
+      "LAL008",
+      452
+     ],
+     [
+      "LAL042",
+      442
+     ],
+     [
+      "LAL129",
+      407
+     ]
+    ]
+   },
+   {
+    "type": "MBON04",
+    "n": 2,
+    "out_syn": 10888,
+    "top_targets": [
+     [
+      "CRE011",
+      1196
+     ],
+     [
+      "SIP087",
+      685
+     ],
+     [
+      "PPL107",
+      671
+     ],
+     [
+      "",
+      608
+     ]
+    ]
+   },
+   {
+    "type": "MBON05",
+    "n": 2,
+    "out_syn": 9780,
+    "top_targets": [
+     [
+      "KCg-m",
+      1638
+     ],
+     [
+      "MBON30",
+      1400
+     ],
+     [
+      "LHPV7c1",
+      688
+     ],
+     [
+      "CRE011",
+      425
+     ]
+    ]
+   },
+   {
+    "type": "MBON33",
+    "n": 2,
+    "out_syn": 9739,
+    "top_targets": [
+     [
+      "OA-VUMa6",
+      1147
+     ],
+     [
+      "OA-VPM4",
+      451
+     ],
+     [
+      "LoVCLo3",
+      441
+     ],
+     [
+      "OA-VUMa8",
+      365
+     ]
+    ]
+   },
+   {
+    "type": "MBON11",
+    "n": 2,
+    "out_syn": 9120,
+    "top_targets": [
+     [
+      "APL",
+      1302
+     ],
+     [
+      "MBON29",
+      895
+     ],
+     [
+      "CRE072",
+      807
+     ],
+     [
+      "CRE050",
+      720
+     ]
+    ]
+   },
+   {
+    "type": "MBON13",
+    "n": 2,
+    "out_syn": 8471,
+    "top_targets": [
+     [
+      "CRE055",
+      537
+     ],
+     [
+      "SIP015",
+      392
+     ],
+     [
+      "LHPV5e1",
+      375
+     ],
+     [
+      "LHCENT4",
+      235
+     ]
+    ]
+   },
+   {
+    "type": "MBON32",
+    "n": 2,
+    "out_syn": 7289,
+    "top_targets": [
+     [
+      "MBON26",
+      905
+     ],
+     [
+      "LAL170",
+      557
+     ],
+     [
+      "LAL171",
+      483
+     ],
+     [
+      "LAL173",
+      478
+     ]
+    ]
+   },
+   {
+    "type": "MBON21",
+    "n": 2,
+    "out_syn": 6178,
+    "top_targets": [
+     [
+      "FB4R",
+      756
+     ],
+     [
+      "MBON26",
+      353
+     ],
+     [
+      "CRE100",
+      337
+     ],
+     [
+      "LAL159",
+      248
+     ]
+    ]
+   },
+   {
+    "type": "MBON06",
+    "n": 2,
+    "out_syn": 5956,
+    "top_targets": [
+     [
+      "KCab-s",
+      1056
+     ],
+     [
+      "MBON23",
+      414
+     ],
+     [
+      "MBON07",
+      381
+     ],
+     [
+      "MBON14",
+      279
+     ]
+    ]
+   },
+   {
+    "type": "MBON02",
+    "n": 2,
+    "out_syn": 5922,
+    "top_targets": [
+     [
+      "SIP088",
+      489
+     ],
+     [
+      "LHAV3k1",
+      421
+     ],
+     [
+      "LHPD4c1",
+      412
+     ],
+     [
+      "MBON14",
+      380
+     ]
+    ]
+   },
+   {
+    "type": "MBON31",
+    "n": 2,
+    "out_syn": 5876,
+    "top_targets": [
+     [
+      "MBON26",
+      552
+     ],
+     [
+      "LAL173",
+      360
+     ],
+     [
+      "SMP568_b",
+      304
+     ],
+     [
+      "CRE011",
+      270
+     ]
+    ]
+   },
+   {
+    "type": "MBON03",
+    "n": 2,
+    "out_syn": 5504,
+    "top_targets": [
+     [
+      "MBON12",
+      635
+     ],
+     [
+      "CB1357",
+      442
+     ],
+     [
+      "CRE042",
+      424
+     ],
+     [
+      "SMP177",
+      412
+     ]
+    ]
+   },
+   {
+    "type": "MBON14",
+    "n": 4,
+    "out_syn": 5438,
+    "top_targets": [
+     [
+      "PRW003",
+      1096
+     ],
+     [
+      "SIP088",
+      414
+     ],
+     [
+      "SIP015",
+      214
+     ],
+     [
+      "LHAD1b2_d",
+      209
+     ]
+    ]
+   },
+   {
+    "type": "MBON18",
+    "n": 2,
+    "out_syn": 5232,
+    "top_targets": [
+     [
+      "LHCENT1",
+      651
+     ],
+     [
+      "LHCENT9",
+      335
+     ],
+     [
+      "LHCENT6",
+      300
+     ],
+     [
+      "LHAV3k1",
+      251
+     ]
+    ]
+   },
+   {
+    "type": "MBON22",
+    "n": 2,
+    "out_syn": 4396,
+    "top_targets": [
+     [
+      "CRE055",
+      406
+     ],
+     [
+      "ALIN1",
+      346
+     ],
+     [
+      "CRE050",
+      323
+     ],
+     [
+      "CRE052",
+      319
+     ]
+    ]
+   },
+   {
+    "type": "MBON07",
+    "n": 4,
+    "out_syn": 4079,
+    "top_targets": [
+     [
+      "LHAD1b5",
+      612
+     ],
+     [
+      "LHAD1b2_d",
+      361
+     ],
+     [
+      "LHPV6a1",
+      296
+     ],
+     [
+      "SLP406",
+      207
+     ]
+    ]
+   },
+   {
+    "type": "MBON27",
+    "n": 2,
+    "out_syn": 4075,
+    "top_targets": [
+     [
+      "DNa03",
+      202
+     ],
+     [
+      "LAL159",
+      197
+     ],
+     [
+      "LAL120_b",
+      183
+     ],
+     [
+      "MBON26",
+      134
+     ]
+    ]
+   },
+   {
+    "type": "MBON29",
+    "n": 2,
+    "out_syn": 3617,
+    "top_targets": [
+     [
+      "MBON04",
+      231
+     ],
+     [
+      "CRE050",
+      202
+     ],
+     [
+      "MBON26",
+      171
+     ],
+     [
+      "SMP120",
+      169
+     ]
+    ]
+   },
+   {
+    "type": "MBON19",
+    "n": 4,
+    "out_syn": 3234,
+    "top_targets": [
+     [
+      "SMP408_d",
+      387
+     ],
+     [
+      "SLP396",
+      381
+     ],
+     [
+      "SMP347",
+      263
+     ],
+     [
+      "SMP405",
+      225
+     ]
+    ]
+   }
+  ]
+ },
+ "state_circuits": {
+  "group_flows": {
+   "clock->clock": 947,
+   "clock->octopamine": 3,
+   "clock->serotonin": 8,
+   "clock->peptide": 54,
+   "sleep->sleep": 32614,
+   "sleep->octopamine": 36,
+   "octopamine->sleep": 502,
+   "octopamine->octopamine": 736,
+   "octopamine->serotonin": 463,
+   "octopamine->peptide": 129,
+   "serotonin->clock": 3,
+   "serotonin->octopamine": 595,
+   "serotonin->serotonin": 51,
+   "serotonin->peptide": 28,
+   "peptide->clock": 151,
+   "peptide->octopamine": 118,
+   "peptide->serotonin": 50,
+   "peptide->peptide": 548
+  },
+  "per_group": {
+   "clock": {
+    "n": 40,
+    "types": [
+     "DN1a",
+     "DN1pA",
+     "DN1pB",
+     "LNd_b",
+     "LNd_c",
+     "LPN_a",
+     "LPN_b",
+     "s-LNv"
+    ],
+    "top_targets": [
+     [
+      "5thsLNv_LNd6",
+      1710
+     ],
+     [
+      "CB4091",
+      1211
+     ],
+     [
+      "SMP105_a",
+      679
+     ],
+     [
+      "MeVC21",
+      570
+     ],
+     [
+      "LNd_b",
+      494
+     ],
+     [
+      "TuTuB_b",
+      474
+     ],
+     [
+      "TuBu01",
+      462
+     ],
+     [
+      "SMP220",
+      451
+     ]
+    ]
+   },
+   "sleep": {
+    "n": 49,
+    "types": [
+     "ER5",
+     "ExR1",
+     "ExR2",
+     "hDeltaC"
+    ],
+    "top_targets": [
+     [
+      "ER5",
+      21102
+     ],
+     [
+      "EL",
+      14973
+     ],
+     [
+      "ExR1",
+      11071
+     ],
+     [
+      "EPG",
+      10024
+     ],
+     [
+      "FC2B",
+      2391
+     ],
+     [
+      "FB5I",
+      1686
+     ],
+     [
+      "ER4d",
+      1596
+     ],
+     [
+      "vDeltaE",
+      1587
+     ]
+    ]
+   },
+   "octopamine": {
+    "n": 37,
+    "types": [
+     "OA-AL2i1",
+     "OA-AL2i2",
+     "OA-AL2i3",
+     "OA-AL2i4",
+     "OA-ASM1",
+     "OA-ASM2",
+     "OA-ASM3",
+     "OA-VPM3",
+     "OA-VPM4",
+     "OA-VUMa1",
+     "OA-VUMa2",
+     "OA-VUMa3",
+     "OA-VUMa4",
+     "OA-VUMa5",
+     "OA-VUMa6",
+     "OA-VUMa8"
+    ],
+    "top_targets": [
+     [
+      "TmY5a",
+      12593
+     ],
+     [
+      "Dm12",
+      7453
+     ],
+     [
+      "MeLo8",
+      5481
+     ],
+     [
+      "Pm4",
+      5458
+     ],
+     [
+      "Pm6",
+      4270
+     ],
+     [
+      "Dm18",
+      3950
+     ],
+     [
+      "Dm10",
+      3593
+     ],
+     [
+      "Pm3",
+      3509
+     ]
+    ]
+   },
+   "serotonin": {
+    "n": 8,
+    "types": [
+     "5-HTPLP01",
+     "5-HTPMPD01",
+     "5-HTPMPV01",
+     "5-HTPMPV03"
+    ],
+    "top_targets": [
+     [
+      "LoVC16",
+      1138
+     ],
+     [
+      "AVLP500",
+      836
+     ],
+     [
+      "AVLP537",
+      716
+     ],
+     [
+      "AVLP538",
+      637
+     ],
+     [
+      "AVLP536",
+      564
+     ],
+     [
+      "AVLP078",
+      359
+     ],
+     [
+      "AVLP076",
+      358
+     ],
+     [
+      "OA-VUMa3",
+      336
+     ]
+    ]
+   },
+   "peptide": {
+    "n": 53,
+    "types": [
+     "AstA1",
+     "CAPA",
+     "CAPA_a",
+     "CAPA_b",
+     "CRZ01",
+     "CRZ02",
+     "DH44",
+     "DSKMP3",
+     "FMRFa_Tv",
+     "Hugin-RG",
+     "ITP",
+     "LK",
+     "NPFL1-I"
+    ],
+    "top_targets": [
+     [
+      "CL071_b",
+      607
+     ],
+     [
+      "CL257",
+      604
+     ],
+     [
+      "CL269",
+      482
+     ],
+     [
+      "AVLP442",
+      470
+     ],
+     [
+      "AVLP040",
+      466
+     ],
+     [
+      "AVLP210",
+      449
+     ],
+     [
+      "CL065",
+      444
+     ],
+     [
+      "CL086_c",
+      441
+     ]
+    ]
+   }
+  },
+  "clock_matrix": [
+   [
+    "DN1pA",
+    {
+     "DN1pA": 26,
+     "LNd_b": 409
+    }
+   ],
+   [
+    "DN1pB",
+    {
+     "LNd_b": 30
+    }
+   ],
+   [
+    "LNd_b",
+    {
+     "LNd_b": 26
+    }
+   ],
+   [
+    "LNd_c",
+    {
+     "LNd_c": 83
+    }
+   ],
+   [
+    "LPN_a",
+    {
+     "LPN_a": 184,
+     "LPN_b": 28
+    }
+   ],
+   [
+    "s-LNv",
+    {
+     "DN1a": 25,
+     "s-LNv": 31
+    }
+   ]
+  ],
+  "links": {
+   "state->CX": 101159,
+   "state->DN": 8686,
+   "state->MBON": 3392,
+   "CX->state": 111308,
+   "state->state": 37036
+  },
+  "top_state_targets": [
+   [
+    "ER5",
+    21102
+   ],
+   [
+    "EL",
+    14976
+   ],
+   [
+    "TmY5a",
+    12602
+   ],
+   [
+    "ExR1",
+    11077
+   ],
+   [
+    "EPG",
+    10254
+   ],
+   [
+    "Dm12",
+    7509
+   ],
+   [
+    "MeLo8",
+    5520
+   ],
+   [
+    "Pm4",
+    5458
+   ],
+   [
+    "Pm6",
+    4270
+   ],
+   [
+    "Dm18",
+    3950
+   ],
+   [
+    "Dm10",
+    3647
+   ],
+   [
+    "Pm3",
+    3509
+   ],
+   [
+    "Cm7",
+    3450
+   ],
+   [
+    "MeLo12",
+    3188
+   ],
+   [
+    "Dm1",
+    2781
+   ],
+   [
+    "Lawf1",
+    2508
+   ],
+   [
+    "FC2B",
+    2465
+   ],
+   [
+    "lLN2F_b",
+    2243
+   ],
+   [
+    "Cm3",
+    2212
+   ],
+   [
+    "Pm10",
+    2189
+   ]
+  ],
+  "output_by_superclass": {
+   "cb_intrinsic": 379502,
+   "ol_intrinsic": 103991,
+   "visual_projection": 24721,
+   "visual_centrifugal": 12122,
+   "descending_neuron": 8686,
+   "ascending_neuron": 3394,
+   "cb_sensory": 464,
+   "sensory_ascending": 318,
+   "cb_endocrine": 289,
+   "vnc_endocrine": 202
   }
  },
  "escape": {

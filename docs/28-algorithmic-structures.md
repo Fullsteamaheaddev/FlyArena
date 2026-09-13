@@ -11,18 +11,25 @@ python3 scripts/algo_structures.py            # ~3 min, writes public/data/algo_
 python3 scripts/algo_structures.py cx mb      # only some sections
 ```
 
-Sections: `flow rec sign bil motif al mb cx ol escape dn vnc hubs`. The circuit sections live in
-`scripts/algo_circuits.py`. Column, glomerulus and compartment labels come from the neuron
-instance names (`EPG(PB08)_L4`, `hDeltaB_08_C7`, `ORN_DA1`, `MBON06(B1>a)`).
+Sections: `flow rec sign bil spec motif al lh mb mbc cx ol og escape dn vnc state hubs`. The circuit
+sections live in `scripts/algo_circuits.py`. Column, glomerulus and compartment labels come from the
+neuron instance names (`EPG(PB08)_L4`, `hDeltaB_08_C7`, `ORN_DA1`, `MBON06(B1>a)`).
+
+The tables in `<!-- GEN -->` blocks are regenerated from the JSON by `python3
+scripts/render_doc28.py`; everything else is prose. `scripts/validate_dynamics.mjs` re-runs the
+structure-vs-dynamics checks of section 4 against the live LIF model and writes
+`public/data/dynamics_validation.json`.
 
 ## 1. Global organisation
 
 **Shallow feedforward skeleton, deep recurrence.** Breadth-first from all sensory neurons over
 connections of 5 or more synapses:
 
-| hops from sensory | 0 | 1 | 2 | 3 | 4 | 5+ |
-|---|---|---|---|---|---|---|
-| neurons | 15,912 | 27,495 | 84,711 | 35,214 | 902 | 31 |
+<!-- GEN:flow_hops -->
+| hops from sensory | 0 | 1 | 2 | 3 | 4 | 5+ | ∞ |
+|---|---|---|---|---|---|---|---|
+| neurons | 15,912 | 27,495 | 84,711 | 35,214 | 902 | 31 | 857 |
+<!-- /GEN:flow_hops -->
 
 Half the descending neurons are one hop from a sensory neuron and nearly all the rest two; 465 of 708
 motor neurons are one hop. So the longest sensor-to-muscle chain the wiring needs is three synapses,
@@ -40,9 +47,11 @@ central-brain intrinsic, descending, ascending and visual-projection neuron is i
 terminals, motor neurons and endocrine cells sit outside. 19% of connections and 27% of synaptic
 weight are reciprocal (both directions between the same two neurons). Reciprocal pairs by sign:
 
+<!-- GEN:recip_pairs -->
 | E↔I | E↔E | I↔I |
 |---|---|---|
 | 616,156 | 263,808 | 126,371 |
+<!-- /GEN:recip_pairs -->
 
 Feedback inhibition is the dominant two-cycle, twice as common as recurrent excitation.
 
@@ -58,6 +67,34 @@ more often inhibitory (44%) than ipsilateral ones (38%). The strongest left↔ri
 between homologous types is in the central complex: ER4d (10,156 / 10,083 synapses each way), Delta7,
 ER2_c, ER5, ER4m, ER3d_b, ER3m — the ring neurons that carry visual and self-motion inputs into the
 ellipsoid body compete across hemispheres.
+
+**Dynamics footprint.** Treating the signed weight matrix as a linear operator bounds what the
+network's dynamics can do: the largest eigenvalue of the signed synapse-count matrix is the loop gain
+the resting state must stabilise, and the spread of the dominant eigenvector says whether the biggest
+loop is local or global. The source–sink axis (each neuron's output minus input synapse weight)
+separates broadcasters — sensory, modulatory and command cells — from receivers, the motor pools and
+output neurons that integrate the whole brain's vote.
+
+<!-- GEN:spectral -->
+| metric | value |
+|---|---|
+| spectral radius (synapse weight) | 3.77e+03 |
+| largest 40 eigenvalues with Re(λ)>0 | 32 |
+| dominant-eigenvector participation (cells) | 49.9 |
+
+| dominant-mode types | share |
+|---|---|
+| lLN1_bc | 60.5% |
+| lLN2F_b | 4.8% |
+| lLN2T_c | 3.6% |
+| lLN2X12 | 3.0% |
+| DP1m_adPN | 1.6% |
+| VP1m_l2PN | 1.6% |
+| lLN2X11 | 1.5% |
+| lLN1_a | 1.4% |
+| lLN2T_e | 1.3% |
+| DM1_lPN | 1.1% |
+<!-- /GEN:spectral -->
 
 ## 2. Motif census at the cell-type level
 
@@ -76,6 +113,17 @@ neuron and 20 in total leaves 473,523 edges.
 - **Disinhibition**: 78,796 I→I type edges. Top central chains: ER2_c→ER2_a→EPG, ER2_a→ER2_c→EPG,
   ER3a_a→ER3m→EPG (ring-neuron chains gating the heading bump), lLN2P_c→lLN2F_b→lLN2T_c in the
   antennal lobe, IN08A002→IN19A002→IN19B003 in the VNC.
+- **Feedforward loops.** The other classic three-node motif, A→B→C plus direct A→C. Coherent loops
+  (the middle neuron is excitatory, so the indirect path pushes the same way) act as delay lines and
+  coincidence detectors; incoherent ones (inhibitory middle) shape pulses and accelerate
+  responses — feedforward inhibition in triad form.
+
+<!-- GEN:ffl -->
+| feedforward loops | edges in loop | loop instances |
+|---|---|---|
+| coherent (E middle) | 415,017 | 2,193,304 |
+| incoherent (I middle) | 369,037 | 1,362,679 |
+<!-- /GEN:ffl -->
 - **Normalisation cells**: inhibitory types whose main input population is also their main output
   population, i.e. they read a population's total activity and feed it back. APL (90% in / 94% out
   Kenyon cells), lLN2F_b and lLN2P (olfactory), Delta7 (99% / 100% central complex), ER4d, ER2_c,
@@ -83,6 +131,26 @@ neuron and 20 in total leaves 473,523 edges.
 - **Hubs** are the same cells: the two APL neurons (119k and 113k input synapses), CT1 (139k output),
   LPi21, Am1, Li39, DPM, il3LN6. Degree distributions have a heavy tail with exponent about 1.0
   (in) and 1.15 (out) above 100 synapses; median in 260, 99th percentile 6,301.
+
+**Are these counts surprising?** Rewiring the type graph while keeping every type's in- and
+out-degree and the sign of each edge's source — so only the pairing of pre- to post-synaptic types
+is shuffled — gives the null distribution. Every motif is far above chance: the wiring concentrates
+feedback, feedforward and winner-take-all structure far beyond what degree statistics alone predict.
+The I→I count is conserved exactly by this null (a control), so it is reported without a z-score.
+
+<!-- GEN:null_model -->
+| metric | observed | null mean ± sd | z |
+|---|---|---|---|
+| FFI share of E edges | 80% | 25% ± 0.0018 | 297 |
+| reciprocal E↔E | 8,272 | 526 ± 20.9 | 370 |
+| reciprocal I↔I | 6,375 | 282 ± 14.6 | 416 |
+| reciprocal E↔I | 21,602 | 1,194 ± 34.8 | 587 |
+| edges in coherent FFL | 415,017 | 134,573 ± 705 | 398 |
+| edges in incoherent FFL | 369,037 | 112,842 ± 1.51e+03 | 170 |
+| I→I edges (control) | 78,796 | 78,796 ± 0 | 0 |
+
+*6 degree- and sign-preserving rewires of the type graph.*
+<!-- /GEN:null_model -->
 
 ## 3. Circuits
 
@@ -95,6 +163,38 @@ neuron and 20 in total leaves 473,523 edges.
   synapse back onto ORN terminals (169k synapses, 41% of the ORN→PN weight): the presynaptic
   gain control the simulation models as GABA_B. LN→LN weight (626k) exceeds LN→PN (283k). LNs are
   mixed: 115 GABA, 99 glutamate, 137 acetylcholine (the excitatory LNs), 67 unknown.
+
+### Lateral horn: the innate pathway, wired at the same weight as the learnable one
+Projection neurons split their output between the mushroom body and the lateral horn, and the split
+is even: the innate readout receives as much PN weight as the associative one. The horn has its own
+local interneurons — the same normalisation pattern as the antennal lobe — and output cells that pool
+a broader set of PN channels than the labelled lines upstream but a narrower one than the mushroom
+body's near-random sampling. Learned and innate channels are not isolated: MBONs synapse back onto
+the horn, and the horn reaches the descending bottleneck directly.
+
+<!-- GEN:lh -->
+| metric | value |
+|---|---|
+| LH neurons / types | 2,028 / 422 |
+| output cells / local cells | 1,574 / 454 |
+| PN→LH / PN→KC weight | 1.036 |
+| PN types per LH output (median) | 6 |
+| top-PN share of input (median) | 25% |
+| PNs reaching the LH | 99% |
+
+| LH→descending | synapses |
+|---|---|
+| DNp32 | 2,322 |
+| pIP1 | 2,072 |
+| DNp06 | 1,214 |
+| DNp42 | 1,112 |
+| DNp29 | 1,072 |
+| DNp103 | 1,002 |
+| DNp43 | 994 |
+| DNb05 | 640 |
+| DNg40 | 569 |
+| DNp62 | 484 |
+<!-- /GEN:lh -->
 
 ### Mushroom body: random expansion, global feedback, compartmental readout with three-factor gating
 - **Expansion**: 4,064 Kenyon cells from 686 PNs (5.9×; 15× against the 267 uniglomerular PNs).
@@ -112,15 +212,48 @@ neuron and 20 in total leaves 473,523 edges.
   DAN→MBON weight is within a matching compartment. MBON→DAN (9k) and MBON→MBON (25k) close the loop
   that lets the output of one compartment set the teaching signal of another.
 
+### MBON convergence: where the compartments' votes recombine
+The compartmental readout is not the end of the pathway — MBON outputs of different compartments and
+opposite valence signs converge on shared downstream targets, and a direct channel reaches the
+descending bottleneck. Same-sign MBONs share more of their target repertoire than opposite-sign
+pairs, so the valence channels stay separable where they meet.
+
+<!-- GEN:mbc -->
+| metric | value |
+|---|---|
+| MBON cells / types | 97 / 37 |
+| transmitters | 26 glutamate, 50 acetylcholine, 21 gaba |
+| targets fed by ≥2 MBON types | 20 |
+| same-sign / cross-sign target cosine | 0.026 / 0.02 |
+| MBON→DN synapses | 4,073 |
+
+| convergent target | MBON types | synapses |
+|---|---|---|
+|  | 13 | 2,400 |
+| LHCENT3 | 10 | 1,977 |
+| CRE011 | 8 | 4,403 |
+| LHPV4m1 | 7 | 1,137 |
+| MBON11 | 7 | 1,244 |
+| LHCENT4 | 7 | 1,577 |
+| MBON26 | 7 | 2,930 |
+| SIP087 | 7 | 1,767 |
+| CRE001 | 7 | 1,124 |
+| LHPV5e1 | 6 | 1,316 |
+| MBON20 | 6 | 1,294 |
+| MBON24 | 6 | 603 |
+<!-- /GEN:mbc -->
+
 ### Central complex: a ring attractor with a shifter, and vector shifts in the fan-shaped body
 Protocerebral-bridge glomeruli from the instance names give each EPG, PEN, PEG and Delta7 neuron a
 column; the heading ring has period 8 per side. Results are mean synapses between column groups.
 
 - **Cosine inhibition kernel.** Two-hop EPG→Delta7→EPG weight against column offset (mod 8):
 
-  | offset | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
-  |---|---|---|---|---|---|---|---|---|
-  | synapses | 115 | 184 | 830 | 1510 | 1771 | 1555 | 828 | 190 |
+<!-- GEN:d7_kernel -->
+| offset | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| synapses | 115 | 184 | 830 | 1.51e+03 | 1.77e+03 | 1.56e+03 | 828 | 190 |
+<!-- /GEN:d7_kernel -->
 
   Minimum at the bump, maximum opposite it: the 1 − cos Δθ inhibition of a ring attractor. Each
   Delta7 reads a median 32 EPGs and writes onto 8, and Delta7 are 99% central-complex in and out.
@@ -130,10 +263,25 @@ column; the heading ring has period 8 per side. Results are mean synapses betwee
   at offset 0, 3 at offset ±1) and reciprocally with PEG (EPG→PEG 93 per pair at offset 0).
 - **Shifter.** EPG→PEN goes to column +1 and PEN→EPG returns to −1 and −2 on the same side. Split by
   the PEN's hemisphere the two-hop EPG→PEN→EPG loop is asymmetric: through left PENs, weight to −1
-  exceeds +1 by 1.7:1 on the left; through right PENs by 1.3:1 on the right. Because the two
-  halves are mirror-mapped, "−1" on each side is the opposite direction round the ring, so left and
-  right PEN populations push the bump opposite ways — angular-velocity integration. The true shift is
-  half a glomerulus (one ellipsoid-body wedge), which column names cannot resolve, hence the modest ratios.
+  exceeds +1 by 1.7:1 on the left; through right PENs by 1.3:1 on the right. Resolving the shift
+  combinatorially — each PEN's EPG targets weighted on the ring — gives a clean bimodal picture:
+  left-hemisphere PENs write ~+1.5 columns ahead, right-hemisphere PENs ~−1.5 the other way
+  (PEN1 and PEN2 alike). The pooled median is near zero only because the two hemispheres cancel.
+  Because the two halves are mirror-mapped, left and right PEN populations push the bump opposite
+  ways — angular-velocity integration.
+
+<!-- GEN:pen_shift -->
+| population | p10 | median | p90 |
+|---|---|---|---|
+| PEN (both types), left | +1.42 | +1.47 | +1.55 |
+| PEN, right | -1.55 | -1.45 | -1.37 |
+| PEN1 only, left | — | +1.50 | — |
+| PEN1, right | — | -1.49 | — |
+| PEN2 only, left | — | +1.45 | — |
+| PEN2, right | — | -1.42 | — |
+
+Delta7 kernel cosine fit: mean 873.0, amplitude 889.7, R² 0.99, contrast 0.878.
+<!-- /GEN:pen_shift -->
 - **Ring-neuron competition.** Inputs to the ring (ER types) show the strongest mutual inhibition
   in the brain, both between hemispheres (section 1) and between subtypes (ER2_a↔ER2_c 5.8k/6.1k),
   and disinhibitory chains onto EPG. Inputs compete before they reach the attractor.
@@ -161,6 +309,38 @@ column; the heading ring has period 8 per side. Results are mean synapses betwee
   400–540 T4a and T5a and no other subtype; H2 from 760 T4b/T5b; VS from 225 T4d/T5d with some a and
   b. Thousands of local detectors to one integrator.
 
+### Optic glomeruli: the visual feature menu
+Visual projection neurons carry the optic lobe's computed features to the glomeruli of the central
+brain. Each channel is focused on a small set of target classes and the channels are largely
+non-redundant (low pairwise target-profile similarity), but downstream they recombine on shared
+targets — the feature detectors hand off to integrators, including the compass ring neurons,
+descending neurons and the lateral horn.
+
+<!-- GEN:og -->
+| metric | value |
+|---|---|
+| VPN neurons / types | 9,203 / 346 |
+| top-target share (median) | 11% |
+| target types at ≥5% (median) | 4 |
+| channel cosine p50 / p90 | 0.002 / 0.05 |
+| VPN→DN / →ring / →LH synapses | 275,710 / 1,250 / 23,508 |
+
+| convergent target | VPN types | synapses |
+|---|---|---|
+|  | 232 | 59,305 |
+| Li14 | 103 | 22,508 |
+| LC33 | 100 | 11,960 |
+| LPLC4 | 100 | 35,098 |
+| Li39 | 99 | 14,179 |
+| TmY17 | 90 | 22,396 |
+| LT51 | 90 | 24,171 |
+| LT52 | 88 | 39,029 |
+| Tm37 | 81 | 10,034 |
+| LC10a | 80 | 69,367 |
+| TmY5a | 79 | 4,976 |
+| LoVCLo3 | 79 | 3,937 |
+<!-- /GEN:og -->
+
 ### Escape: a three-synapse funnel
 Giant fibre input is 36k synapses. LC4 (126 neurons, 55–71 converging on each GF) provides 17.6%,
 LPLC2 (182 neurons, about 90 per GF) 13.4%; the rest is spread over hundreds of types. Photoreceptor
@@ -182,7 +362,59 @@ weight crosses the midline and 53% of that is inhibitory; the strongest reciproc
 type pairs (IN16B049↔INXXX217, IN13A001↔IN19A001, IN08A002↔IN19A011, IN01B003↔IN13B021) are
 half-centre candidates.
 
-## 4. Summary of the algorithms the wiring supports
+### State: clock, sleep and modulator cells woven through the fast circuits
+A small set of identified cells carries brain state — circadian clock neurons (DN1a, DN1p, s-LNv,
+LNd, LPN), sleep-need integrators (hDeltaC, ExR1/2, ER5), octopamine and serotonin broadcasters and
+peptidergic populations. They are few, but their wiring is dense where it matters: a heavy two-way
+loop with the compass (state→CX and CX→state are the two largest flows), a direct channel onto the
+descending command neurons, onto the mushroom-body readout, and a strongly connected internal web.
+State is not a layer on top of the network; it is threaded through it.
+
+<!-- GEN:state -->
+| link | synapses |
+|---|---|
+| CX→state | 111,308 |
+| state→CX | 101,159 |
+| state→state | 37,036 |
+| state→DN | 8,686 |
+| state→MBON | 3,392 |
+
+| group | cells | example types |
+|---|---|---|
+| clock | 40 | DN1a, DN1pA, DN1pB, LNd_b, LNd_c, LPN_a, LPN_b, s-LNv |
+| sleep | 49 | ER5, ExR1, ExR2, hDeltaC |
+| octopamine | 37 | OA-AL2i1, OA-AL2i2, OA-AL2i3, OA-AL2i4, OA-ASM1, OA-ASM2, OA-ASM3, OA-VPM3 |
+| serotonin | 8 | 5-HTPLP01, 5-HTPMPD01, 5-HTPMPV01, 5-HTPMPV03 |
+| peptide | 53 | AstA1, CAPA, CAPA_a, CAPA_b, CRZ01, CRZ02, DH44, DSKMP3 |
+<!-- /GEN:state -->
+
+## 4. Structure vs dynamics
+The claims above are about wiring. `scripts/validate_dynamics.mjs` asks whether the same structure
+does the computation in the calibrated LIF model (`src/lif.js`, the same graph and sign conventions
+as the browser simulation):
+
+- **Delta7 kernel.** Firing each Delta7 cell and reading the inhibitory conductance it writes onto
+  the EPG ring reproduces the structural kernel: minimum at the cell's preferred bump wedge, maximum
+  on the opposite side.
+- **PEN shifter.** Driving one column's PENs depolarises the EPG wedges about +1.5 columns ahead for
+  left-hemisphere PENs and −1.5 for right — the mirror-symmetric push that integrates angular
+  velocity. A freely rotating bump is *not* reproduced: the calibrated LIF does not sustain EPG
+  recurrence without external drive, so rotation shows up as the push field rather than as drift of
+  a persistent bump.
+- **APL sparsening.** With the same PN drive, silencing APL (raising its threshold so it cannot
+  spike) increases the fraction of active Kenyon cells — the global feedback that keeps the expanded
+  code sparse.
+
+<!-- GEN:validation -->
+| probe | measured |
+|---|---|
+| Delta7 kernel (aligned gI profile) | min near bump: True, max at wedge 4, cosine R² 0.58 |
+| PEN push field (median offset, columns) | L 1.49, R -1.46 — opposite signs: True |
+| APL sparsening | active KCs 0.16 → 0.31 without APL; 0.89 → 1.96 Hz/cell |
+| verdict | bump_kernel: ✓, pen_shifter: ✓, apl_sparsening: ✓ |
+<!-- /GEN:validation -->
+
+## 5. Summary of the algorithms the wiring supports
 
 | Structure | Where | Evidence |
 |---|---|---|
@@ -200,7 +432,7 @@ half-centre candidates.
 | Sensorimotor bottleneck with loops | descending neurons | 1,314 DNs, 3.7% of brain output, AN→DN ≈ DN→AN |
 | Motor pools with commissural inhibition | VNC | 15× shared premotor input, 53% inhibitory crossing |
 
-## 5. Caveats
+## 6. Caveats
 - Signs come from predicted transmitters; 3,602 neurons are graded rather than binary.
 - Connections under 3 synapses are absent from the graph; the motif census uses 3 per target neuron.
 - Central-complex offsets are at glomerulus resolution (45°). The PEN shift is one wedge (22.5°), so it
