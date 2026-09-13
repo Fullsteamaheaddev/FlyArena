@@ -7,11 +7,11 @@ import path from 'path';
 
 const DIR = 'docs/textbook';
 const PARTS = [
-  { name: 'Foundations', slugs: ['01-introduction', '02-data-and-ir', '03-generic-structures'] },
-  { name: 'The Method', slugs: ['04-operators', '05-ensemble-method'] },
-  { name: 'Three Circuits', slugs: ['06-heading-lab', '07-field-model', '08-cross-validation', '09-phasor-circuit', '10-mushroom-body'] },
-  { name: 'Assessment', slugs: ['11-benchmark', '12-compiler', '13-synthesis'] },
-  { name: 'Appendix', slugs: ['A-reproduction'] },
+  { name: 'Foundations', slugs: ['01-introduction', '02-data-and-ir', '03-generic-structures', '04-circuits-tour'] },
+  { name: 'The Method', slugs: ['05-operators', '06-ensemble-method'] },
+  { name: 'Three Circuits', slugs: ['07-heading-lab', '08-field-model', '09-cross-validation', '10-phasor-circuit', '11-mushroom-body'] },
+  { name: 'Assessment', slugs: ['12-benchmark', '13-compiler', '14-embodied', '15-synthesis'] },
+  { name: 'Appendices', slugs: ['A-reproduction', 'B-references'] },
 ];
 
 const files = fs.readdirSync(DIR).filter(f => f.endsWith('.md')).sort();

@@ -65,7 +65,8 @@ function route() {
   progressEl.innerHTML = part.chapters.map(s =>
     `<a class="seg${s === ch.slug ? ' cur' : ''}" href="#${s}"></a>`).join('');
 
-  $('chap-label').textContent = ch.slug.startsWith('A-') ? 'Appendix' : `Chapter ${idx + 1}`;
+  const app = ch.slug.match(/^([A-Z])-/);
+  $('chap-label').textContent = app ? `Appendix ${app[1]}` : `Chapter ${idx + 1}`;
   $('chap-title').textContent = ch.title;
   contentEl.innerHTML = ch.html.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>/, '');
   tocEl.querySelectorAll('.toc-row').forEach(a => a.classList.toggle('active', a.dataset.slug === ch.slug));

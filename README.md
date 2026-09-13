@@ -1,81 +1,63 @@
 # fly-brain
 
-**Live demo:** [arena](https://lulzx.com/fly-brain/arena.html) · [connectome viewer](https://lulzx.com/fly-brain/) · [algorithmic structures](https://lulzx.com/fly-brain/structures.html) (desktop Chrome/Edge/Firefox; the viewer downloads about 30 MB, the arena about 23 MB)
+The complete wiring diagram of a male fruit fly's nervous system is now a file: 165,122
+neurons, 104 million synapses. This project runs that file as a spiking brain, inside a
+physics-simulated body, in a web browser, and then asks a simple question: which of the
+fly's behaviours does the wiring produce on its own, and which had to be added from
+outside the graph? The second list turned out to be as interesting as the first.
 
-Full documentation: [docs/README.md](docs/README.md).
+**Try it:** [arena](https://lulzx.com/fly-brain/arena.html) ·
+[connectome viewer](https://lulzx.com/fly-brain/) ·
+[algorithmic structures](https://lulzx.com/fly-brain/structures.html) ·
+[the textbook](https://lulzx.com/fly-brain/textbook/)
+(desktop Chrome, Edge or Firefox; the viewer downloads about 30 MB, the arena about 23 MB)
 
-Embodied, whole-CNS simulation of the **male *Drosophila* connectome** in the browser.
-Each fly is a 165,122-neuron connectome brain (male CNS v1.0, Janelia FlyEM + Google, CC-BY 4.0) living in a
-physics-simulated flybody body (MuJoCo, Janelia/DeepMind) with a trained compound-eye front end (flyvis,
-Lappalainen et al. 2024). The brain turns what the fly senses into its actions. An endogenous-activity module
-supplies the spontaneous drive the connectome model lacks: when to walk, pause, groom, turn or take off.
-It acts only as synaptic input to identified descending neurons ([docs/23-behaviour.md](docs/23-behaviour.md)).
+## Start here
 
-- `index.html` – the connectome viewer: 3D skeletons of all neurons, stimulate any cell type, watch activity.
-- `structures.html` – the algorithmic structures of the connectome: ring attractor, expansion coding, convolution kernels, motif census ([docs/28-algorithmic-structures.md](docs/28-algorithmic-structures.md)).
-- `arena.html` – the embodied arena: add flies (male or female), place sugar, odour, bitter patches, heat,
-  blocks; launch a looming threat or activate a fly's takeoff neurons; change wind and light; follow a fly
-  and watch its brain in the inset. Zoom in for the full scan, setae, eye facets and wing interference;
-  detail scales down with distance. `[` and `]` fold the side panels.
-- `fly.html` – an interactive 3D fly with Blender-subdivided geometry, baked Cycles lighting and live
-  eye reflections, setae, sex comb, abdominal bands and wing interference; male or female,
-  wings folded, spread or flying. [Blender scenes and rendering workflow](art/fly/README.md).
+- [What this is](docs/guide/what-this-is.md). One fly is a 165,122-neuron connectome brain
+  in a MuJoCo body with a trained compound eye. What the pieces are and why each one is there.
+- [Run it](docs/guide/run.md). Two commands to get the arena running locally, and what the
+  browser actually loads.
+- [The four apps](docs/guide/apps.md). The connectome viewer, the structures page, the arena,
+  and the 3D fly.
 
-## Run
-```sh
-npm install
-npm run dev            # http://localhost:5173/arena.html  (needs cross-origin isolation, set in vite.config.js)
-```
-The preprocessed data in `public/` is produced by the scripts below. The browser loads compact packed
-versions of the connectome, skeletons and neuron table (27 MB in total, see [docs/22-codecs.md](docs/22-codecs.md)).
+## How it works
 
-## What happens every simulated millisecond (per fly, in its own Web Worker)
-1. **Senses** (`src/sim/senses.js`, `src/sim/vision.js`): taste (labellum, taste pegs, each leg), odour plumes
-   per antenna (glomerulus-specific ORNs with GABA_B-like gain control; each other fly carries a short-range
-   cVA-like pheromone plume), phasic tarsal touch, leg proprioceptors, body bristles, halteres,
-   antennal wind, heat. Vision: 2 × 721 rays → flyvis optic-lobe model (50 Hz) → drives the matching
-   ~62,000 male-CNS optic-lobe neurons (same cell type, same retinotopic column).
-2. **Brain** (`src/wasm/lif.c`, WebAssembly; or a WebGPU kernel, `src/lifgpu.js`, when the browser has
-   WebGPU — `?gpu=0` on the arena forces WASM): conductance-based LIF over 10.5 M connections, parameters
-   fitted to published behaviours (see PLAN.md).
-3. **Motor** (`src/sim/motor.js`): descending-neuron populations → walking/turning/backing (stepping pattern
-   generator), head grooming, escape jump (giant fibre / looming takeoff DNs); proboscis and antennae driven
-   by their own motor neurons. Optional "full connectome VNC" mode drives every leg muscle from its MNs.
-4. **Physics** (`src/sim/world.js`): flybody fly with exact inertias, adhesive claws, 0.2 ms MuJoCo steps.
-5. **Endogenous behaviour** (`src/sim/intrinsic.js`): walk, pause and grooming bouts, saccades, turning away
-   from obstacles and heat, feeding stops, local search, voluntary takeoff. All delivered as DN synaptic input.
-   **Neuromodulation** (`src/sim/neuromod.js`): hunger sets AKH and insulin, which drive octopaminergic
-   neurons; their release lowers their targets' thresholds and sets the arousal the bout rules use.
-   Locomotion drives the optic-lobe octopamine cells, raising visual gain while walking or flying
-   (Suver et al. 2012) ([docs/25-neuromodulation.md](docs/25-neuromodulation.md)).
-   **Courtship** ([docs/26-courtship.md](docs/26-courtship.md)): a male detects a nearby fly through LC10
-   small-object neurons and her cVA-like plume; the connectome's fru/dsx circuit readout (pIP10, DNp13)
-   gates a court state — chase on her bearing, sing with the wing facing her.
-6. **Flight** (`src/sim/flight.js`): takeoff after the jump, then blade-element aerodynamic forces computed
-   every physics substep on the real 218 Hz wing stroke — lift and thrust are emergent — with brain
-   steering, collision-avoidance saccades, and landing ([docs/24-flight.md](docs/24-flight.md)).
+- [What happens every simulated millisecond](docs/guide/loop.md). Senses, brain, motor,
+  physics, endogenous behaviour, neuromodulation, courtship, flight. Each stage in a
+  paragraph, with the file that implements it.
+- [What the wiring gives you, and what it does not](docs/guide/what-the-wiring-gives.md).
+  The honest boundary: which behaviours are read out of the connectome and which are
+  supplied by code around it.
+- [Building the data](docs/guide/pipeline.md). From the raw 10 GB of Janelia tables to the
+  27 MB the browser loads, and the calibration and gait fits on top.
+- [Headless experiments](docs/guide/experiments.md). Running flies in Node without a browser,
+  and the behavioural benchmark suite.
 
-## Data / model pipeline
-```sh
-uv venv .venv && uv pip install --python .venv/bin/python pyarrow pandas numpy scipy mujoco trimesh fast-simplification cma h5py
-.venv/bin/python scripts/prep_graph.py 3        # neurons.bin, graph_w3.bin, meta.json   (flat connectome tables)
-node --max-old-space-size=16000 scripts/prep_skel_tree.mjs   # skeletons.flys          (5.5 GB of skeletons -> 12 MB)
-.venv/bin/python scripts/prep_body.py 0.25      # fly_physics.xml, fly_visual.*           (flybody model)
-.venv/bin/python scripts/prep_bodymap.py        # bodymap.json: motor/sensory/eye neuron maps
-.venv-flyvis/bin/python ...                     # flyvis export (see session notes) -> public/vision/
-.venv/bin/python scripts/prep_flyvis_map.py     # flyvis node <-> male-CNS neuron map (retinotopy via connectome)
-node scripts/pack_data.mjs                      # graph.flyg, neurons.flyn                 (packed for the browser)
-node scripts/calib_search.mjs '{"coba":true}'   # fit brain parameters to behavioural benchmarks
-node scripts/neuromod_calib.mjs 60              # neuromod.json: octopamine and insulin cell thresholds (fed fly)
-.venv/bin/python scripts/gait_opt2.py 60        # stepping pattern generator (multi-condition CMA-ES)
-```
+## Going deeper
 
-## Headless experiments
-```sh
-node scripts/run_fly.mjs 6 nearodor     # walk toward food and odour
-node scripts/run_fly.mjs 3 onfood       # tarsal sugar: stop / proboscis
-node scripts/run_fly.mjs 2 threat       # looming object -> giant fibre -> jump -> run
-node scripts/calib_eval.mjs "$(cat public/data/brain_params.json)"   # behavioural benchmark suite
-```
-Sources: male-cns.janelia.org · neuprint.janelia.org · github.com/TuragaLab/flybody · github.com/TuragaLab/flyvis ·
-github.com/TuragaLab/FlySuite (real-fly walking kinematics).
+- [Full documentation index](docs/README.md). Thirty documents covering every subsystem,
+  the calibration, the limitations and the roadmap.
+- [Compiling the Fly Brain](docs/textbook/) is the book-length write-up. It covers the
+  other half of the project: reading algorithms out of the wiring, testing them with model
+  ensembles, and finding where the connectome runs out of answers.
+  [Read online](https://lulzx.com/fly-brain/textbook/) or
+  [download the PDF](public/fly-brain-textbook.pdf).
+- [Sources and credits](docs/guide/sources.md). The connectome, the body, the eye, the
+  walking data, and the licences.
+
+## Layout
+
+| path | contents |
+|---|---|
+| `index.html`, `src/main.js` | connectome viewer |
+| `arena.html`, `src/arena.js` | embodied arena |
+| `structures.html`, `src/structures.js` | algorithmic-structure visualisation |
+| `textbook/`, `src/textbook.js` | ebook reader for `docs/textbook/` |
+| `src/sim/` | fly agent, world, senses, vision, motor, endogenous behaviour, neuromodulation, flight, worker |
+| `src/lif.js`, `src/lifwasm.js`, `src/lifgpu.js`, `src/wasm/lif.c` | brain model in JavaScript, WebAssembly and WebGPU |
+| `src/brainmodel.js`, `src/brainsetup.js` | calibrated brain construction, shared memory |
+| `src/flyvis.js` | flyvis optic-lobe runtime |
+| `public/` | preprocessed data served to the browser |
+| `scripts/` | preprocessing, calibration, optimisation, analysis, tests |
+| `docs/` | documentation, the guide, and the textbook source |

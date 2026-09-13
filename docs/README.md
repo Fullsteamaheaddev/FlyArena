@@ -7,6 +7,10 @@ supplies the spontaneous drive the model lacks, and hunger reaches the brain as 
 
 ## Index
 
+The short version of all this is the [guide](guide/what-this-is.md) linked from the
+repository README. The long version is the textbook, [Compiling the Fly Brain](textbook/),
+which covers the structural analysis and the model ensembles.
+
 ### Start here
 1. [Overview](01-overview.md): what the system is and how the pieces fit
 2. [Quickstart](02-quickstart.md): install, run, and use the apps

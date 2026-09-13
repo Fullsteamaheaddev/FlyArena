@@ -1,8 +1,8 @@
 ---
 title: "Compiling the Fly Brain"
-subtitle: "From Connectome to Computation: Extracting Algorithms from a Complete Nervous System"
+subtitle: "What a Complete Wiring Diagram Does and Does Not Determine"
 author: "The fly-brain project"
-date: "Working draft"
+date: "Working draft, September 2026"
 ---
 
 \newpage

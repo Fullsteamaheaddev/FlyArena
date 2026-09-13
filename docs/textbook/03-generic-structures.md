@@ -1,77 +1,155 @@
-# Structure Before Dynamics: What the Graph Tells You
+# Structure Before Dynamics: What the Graph Alone Tells You
 
-Before any neuron fires in any model, the wiring diagram already contains a great
-deal of computation-shaped information. `algo_ir.py` runs the generic passes; this
-chapter surveys what they found and — equally important — where structure stops being
-sufficient.
+Before any neuron fires in any model, the wiring diagram already contains a lot of
+computation-shaped information. This chapter is about what the generic passes find, and
+just as importantly, about where structure stops being enough. Everything here is
+obtained without simulating a single spike.
 
-## Flow: the brain is a layered machine with deep recurrence
+## The brain is shallow going forward and deep going around
 
-Ordering the DAG condensation (304 iterations to reach a stable topological layering)
-splits the fly's synaptic weight into:
+Do a breadth-first search from every sensory neuron over connections of 5 or more
+synapses, and count how many hops each neuron is from the nearest sensor:
 
-- **50.1% lateral** — within-layer connections. Half the brain's wiring is horizontal.
-- **37.5% forward** — the sensory→motor direction.
-- **12.4% feedback** — backward edges, a small but strategic minority.
+| hops from sensory | 0 | 1 | 2 | 3 | 4 | 5+ | unreachable |
+|---|---|---|---|---|---|---|---|
+| neurons | 15,912 | 27,495 | 84,711 | 35,214 | 902 | 31 | 857 |
 
-Sensory neurons sit at hop 0; descending neurons are reachable in 1–3 hops from
-sensory input — the fly is *shallow* in the feedforward direction. Whatever long
-processing it does is done by recurrence, not depth. This is the single most
-important global fact for interpreting everything else: **computation lives in the
-lateral and feedback channels.**
+Half the descending neurons are one hop from a sensory neuron and nearly all the rest are
+two. 465 of 708 motor neurons are one hop. So the longest sensor-to-muscle chain the
+wiring *needs* is three synapses, and almost every neuron in the brain is within three
+hops of a sensor.
 
-## Sign: inhibition is nearly half the budget
+A more careful ordering uses a harmonic depth: pin sensory neurons at 0 and motor and
+efferent neurons at 1, and give every other neuron the mean depth of its partners. The
+superclasses then fall into a sensible order: sensory 0, antennal-lobe local neurons
+0.09, projection neurons 0.15, Kenyon cells 0.19, MBONs 0.26, central-brain intrinsic
+0.33, central complex 0.35, descending 0.49, VNC intrinsic 0.52, motor 1. Measured
+against this order, synaptic weight splits as:
 
-61.2% of synaptic weight is excitatory, 38.2% inhibitory, 0.5% unsigned. Inhibition is
-not a correction term in this brain — it is a primary computational resource. The
-bilateral data sharpens this: edges that cross the midline are 44% inhibitory versus
-38% for ipsilateral edges, and there are 25 pairs of left/right homologues in mutual
-inhibition — the wiring pattern for hemispheric competition and comparison.
+- **50% lateral**, between neurons at the same depth.
+- **37% forward**, in the sensory-to-motor direction.
+- **12% feedback**.
 
-## Motifs: a canonical vocabulary
+The optic lobe alone is 89,390 neurons of lateral processing. So the picture is a
+feedforward skeleton three synapses deep, with most of the wiring, and therefore most of
+the computation, happening sideways and backwards. If you want to interpret anything
+else in this book, this is the fact to keep in mind: whatever long processing the fly
+does, it does by recurrence, not by depth.
 
-At the cell-type level (11,752 types, 473,523 strong type-level edges), the
-reciprocity census gives:
+**One giant loop.** 97.2% of neurons (160,514) sit in a single strongly connected
+component. Every central-brain intrinsic, descending, ascending and visual-projection
+neuron is in it. Only sensory terminals, motor neurons and endocrine cells are outside.
+19% of connections and 27% of synaptic weight are reciprocal, meaning both directions
+exist between the same two cells.
 
-- **20,816 excitatory↔inhibitory reciprocal pairs** — the dominant reciprocal motif is
-  *signed*: a type excites another and is inhibited back. That is the wiring of
-  feedback gain control, repeated twenty thousand times.
-- 8,272 E↔E and 6,375 I↔I pairs, and only 786 mixed.
-- The top recurrent excitation pairs concentrate in the optic lobe (L2↔L4, L2↔L5,
-  Mi1↔T2 — the motion pathway's front end) and the mushroom body (DPM↔KCg-m,
-  KCg-m↔PPL103 — memory and dopaminergic feedback).
+## Inhibition is not a correction term
 
-Convergence/divergence asymmetries are extreme: sensory and intrinsic types fan out
-to tens of types (median out-degree 49 for VNC sensory) while motor neurons fan in
-(median in-degree 73 for VNC motor, out-degree 0). The graph's own vocabulary already
-sketches the functional direction.
+61% of synaptic weight is excitatory (acetylcholine 60%), 38% inhibitory (GABA 21%,
+glutamate 16%, histamine 0.5%), 0.5% unsigned. The median neuron receives 44% of its
+input from inhibitory cells, with a 10th to 90th percentile range of 24% to 69%.
+Central-complex neurons are the most inhibited class at 54%, MBONs (14%) and Kenyon cells
+(18%) the least.
 
-## Hubs and spectral structure
+Reciprocal pairs at neuron level, by sign:
 
-Degree distributions are heavy-tailed (in-degree tail exponent ~1.0, out-degree ~1.15).
-The dominant eigenvector of the weighted graph has participation ratio ~50 — a small
-set of neurons carries the dominant mode — and 32 eigenvalues have positive real
-part: the signed wiring is *linearly unstable* at many modes, i.e., activity in the
-real network is sculpted by nonlinearity and inhibition, not by passive decay.
+| E↔I | E↔E | I↔I |
+|---|---|---|
+| 616,156 | 263,808 | 126,371 |
 
-## Region structure
+Feedback inhibition is the dominant two-cycle, more than twice as common as recurrent
+excitation. The bilateral wiring sharpens this. 22% of weight crosses the midline (3% in
+the optic lobe, 27% in the central brain, 44% in the VNC, 47% for descending and 62% for
+ascending neurons), and crossing synapses are more often inhibitory (44%) than
+ipsilateral ones (38%). The strongest left-right mutual inhibition between homologous
+types is in the central complex: ER4d at 10,156 and 10,083 synapses each way, then
+Delta7, ER2_c, ER5, ER4m, ER3d_b and ER3m. These are the ring neurons that carry visual
+and self-motion inputs into the ellipsoid body, and they compete across hemispheres
+before the heading circuit ever sees them.
 
-The per-region passes find the canonical specializations:
+Neuromodulatory neurons are broadcasters. The median octopaminergic cell contacts 27
+cell types (maximum 1,462), serotonergic 50, dopaminergic 8.
 
-- **Optic lobe** — 47 columnar types, with retinotopic weight-sharing: the same
-  input-weight profile repeated across columns (a convolved front end, Chapter 4).
-- **Mushroom body** — 4,064 KCs fed by 282 projection neurons (expansion ratio ~6),
-  each KC sampling a median of ~56 PN inputs through ~3 claws; APL covers 100% of KCs
-  and is driven by 100% of them — the textbook random-projection-plus-normalization
-  architecture.
-- **Central complex** — the columnar ring analyzed in Chapters 6–8; the measured
-  Delta7 kernel fits a cosine at R²=0.99.
+## The motif vocabulary, and whether it is surprising
 
-## The ceiling of structure
+Condense the 165k neurons into 11,752 types and keep type-to-type edges of at least 3
+synapses per target neuron and 20 in total. That leaves 473,523 type-level edges. On
+that graph:
 
-Everything above is obtained without simulating a single spike. But a recurring
-result of the dynamical chapters is that **structure systematically overstates what
-dynamics delivers**: wired kernels are realized, wired phase shifts are realized at a
-third of their amplitude, wired attractors appear only in narrow gain regimes. The
-graph is a hypothesis generator of high quality and limited authority — the rest of
-the book is about how to test what it proposes.
+- **Feedforward inhibition is the rule, not a motif.** Of 277,512 strong excitatory type
+  edges A→B, 80% have a parallel path A→I→B through an inhibitory type. The largest
+  central-brain instances are EPG→Delta7→(Delta7, PEN), Kenyon cell→APL→Kenyon cell,
+  ExR1→ER5→ER5/EL, and ORN_DA1→lLN2F_b→lLN2T_b.
+- **Reciprocal type pairs:** 20,816 E↔I, 8,272 E↔E, 6,375 I↔I. The strongest central E↔E
+  pairs are DPM↔KCγ-m, KCγ-m↔PPL103, EPG↔PEN and KC↔PAM dopamine neurons. The strongest
+  I↔I pairs, the winner-take-all candidates, are ER2_a↔ER2_c, lLN2F_b↔lLN2P_c,
+  ER3a_a↔ER3m and LNO1↔LNO2. The strongest E↔I is APL with every Kenyon-cell subtype
+  (79,151 and 79,270 synapses with KCγ-m alone).
+- **Disinhibition:** 78,796 I→I type edges. The top central chains are
+  ER2_c→ER2_a→EPG, ER2_a→ER2_c→EPG and ER3a_a→ER3m→EPG, ring-neuron chains gating the
+  heading bump.
+- **Feedforward loops**, A→B→C plus a direct A→C: 415,017 edges in coherent loops
+  (excitatory middle, acting as delay lines and coincidence detectors) and 369,037 in
+  incoherent ones (inhibitory middle, pulse shaping).
+- **Normalisation cells**: inhibitory types whose main input population is also their
+  main output population, so they read a population's total and feed it back. APL (90%
+  in, 94% out Kenyon cells), lLN2F_b and lLN2P in the antennal lobe, Delta7 (99% in,
+  100% out central complex), the ER ring neurons, and in the VNC the tactile IN01B and
+  gustatory IN05B interneurons.
+- **Hubs** are the same cells. The two APL neurons (119k and 113k input synapses), CT1
+  (139k output), LPi21, Am1, Li39, DPM. Degree distributions have a heavy tail with
+  exponent about 1.0 in and 1.15 out above 100 synapses. Median in-degree is 260, the
+  99th percentile 6,301.
+
+Now the important question: are these counts large because the wiring is organised, or
+just because some types are big? The way to answer is a null model. Rewire the type graph
+while keeping every type's in-degree, out-degree and the sign of each edge's source, so
+that only the pairing of pre- to post-synaptic types is shuffled, and count the motifs
+again. Six rewires give:
+
+| metric | observed | null mean ± sd | z |
+|---|---|---|---|
+| feedforward-inhibition share of E edges | 80% | 25% ± 0.0018 | 297 |
+| reciprocal E↔E | 8,272 | 526 ± 21 | 370 |
+| reciprocal I↔I | 6,375 | 282 ± 15 | 416 |
+| reciprocal E↔I | 21,602 | 1,194 ± 35 | 587 |
+| edges in coherent feedforward loops | 415,017 | 134,573 ± 705 | 398 |
+| edges in incoherent feedforward loops | 369,037 | 112,842 ± 1,510 | 170 |
+| I→I edges (control) | 78,796 | 78,796 ± 0 | 0 |
+
+Every motif is hundreds of standard deviations above chance. The I→I count is conserved
+exactly by this null, which is why it is there: it is the control that shows the
+shuffling is doing what it claims. So the answer is yes, the wiring concentrates feedback
+inhibition, feedforward inhibition and mutual inhibition far beyond what the degree
+statistics predict. This is the kind of result that a large graph makes easy to get and
+easy to overinterpret, so I want to flag what the z-scores do and do not say: they say the
+motifs are not degree artifacts. They do not say what the motifs compute. That is the
+job of the rest of the book.
+
+## The spectral footprint
+
+Treat the signed synapse-count matrix as a linear operator and you get a crude bound on
+what the dynamics can do. Its spectral radius is 3,771. Of the largest 40 eigenvalues, 32
+have positive real part. The dominant eigenvector has a participation ratio of 49.9
+cells, and 60% of it sits on one antennal-lobe local-neuron type, lLN1_bc, with the rest
+on other lLN2 subtypes and a few projection neurons.
+
+The way to read this is: the signed wiring is linearly unstable at many modes, so
+activity in the real network is shaped by nonlinearity and inhibition, not by passive
+decay. And the biggest single loop in the brain, as the linear algebra sees it, is local
+to the antennal lobe. The source-minus-sink axis (each neuron's output weight minus its
+input weight) separates the broadcasters, which are sensory, modulatory and command
+cells, from the receivers, which are the motor pools and output neurons that integrate
+everyone else's vote.
+
+## Where structure stops
+
+Everything above was obtained from the graph. A recurring result of the dynamical
+chapters is that **structure systematically overstates what dynamics delivers**. Wired
+inhibitory kernels are realised, but at a fraction of their structural contrast. Wired
+phase shifts are realised only with help from recurrence. Wired attractors appear only in
+narrow gain regimes. Wired normalisation loops sometimes cannot carry their function at
+count-calibrated weights.
+
+So the right way to think of the graph is as a hypothesis generator of high quality and
+limited authority. Chapter 4 finishes the structural tour circuit by circuit. Everything
+after that is about how to test what the graph proposes.
