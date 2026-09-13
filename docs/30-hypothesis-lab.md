@@ -97,13 +97,26 @@ With the literal shifted-synapse kernels at that predicted gain, the field track
 velocity linearly at ~0.85× (the 15% deficit is the second-order correction — the shifted
 input also distorts the bump profile, which the leading-order projection ignores). Under
 fluctuating velocity, however, the literal mechanism degrades badly: each shifted injection
-distorts the bump shape, not just its phase. Two biological features likely repair this in
-the real circuit — PENs are their own field population (a second ring whose own dynamics
-smooths the feedback), and graded synapses add temporal filtering (tau_pen alone did not
-suffice). The reduced algorithm therefore uses `pen_mode='advect'`: the spectral translation
-that is provably the first-order equivalent of the shifted feedback. **The residual gap
-between 'shifted' and 'advect' is itself a hypothesis-lab output** — it says the single-field
-reduction drops something the real two-population circuit needs.
+distorts the bump shape, not just its phase.
+
+**Two-population PEN models discriminated how the real circuit must work.** Three
+mechanisms were implemented and benchmarked under identical noisy drive:
+
+| pen_mode | mechanism | noisy RMS |
+|---|---|---|
+| `shifted` | amplitude coding: om scales shifted-arm injection into EPG | 1.29 |
+| `shifted2` | amplitude coding through a second attractor field | 1.61 |
+| `shifted3` | **position coding**: om displaces the PEN bump; EPG pulled toward it | **0.60** |
+| `advect` | idealized transport of u itself (reduced algorithm) | 0.41 |
+
+Amplitude coding fails under sign-flipping drive regardless of filtering (τ_pen 0.02–0.3
+scanned) or of a second field. Position coding — velocity displaces the PEN bump and the
+summed shifted projections drag EPG toward it — halves the error and is robust, but
+plateaus at ~0.60 because u always chases v with a stage of lag. Direct advection of u
+(0.41) is the bound when transport acts on the transported field itself. The ~50% gap
+between `shifted3` and `advect` is the price of indirect transport — and position coding
+carries a testable neural signature the amplitude models lack: an EPG–PEN phase offset
+during rotation, which is what calcium imaging of the fly circuit actually shows.
 
 ### Cross-formalism perturbation check (`scripts/perturb_pde.py`)
 

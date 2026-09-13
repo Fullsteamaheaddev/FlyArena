@@ -39,14 +39,25 @@ class RingField:
         s = int(round(self.s))
         self.Wp = np.roll(np.maximum(0.0, c) ** 4, +s)     # +s column offset arm
         self.Wm = np.roll(np.maximum(0.0, c) ** 4, -s)     # -s arm
+        self.W0 = np.maximum(0.0, c) ** 4                  # unshifted arm (shifted3 pull)
         # 'shifted' = literal shifted-synapse feedback (the mechanism). 'advect' = its
         # reduced-algorithm equivalent (first-order identical by mode projection).
         # Finding: 'shifted' tracks clean velocity at ~0.85x but distorts the bump
-        # under fluctuating drive — the single-field reduction is inadequate; the real
-        # circuit's second population (PEN as its own field) is likely load-bearing.
+        # under fluctuating drive. A second PEN field with amplitude coding does not
+        # fix it ('shifted2'); position coding does ('shifted3': om displaces the PEN
+        # bump, EPG is pulled toward it — noisy RMS 0.60 vs 1.29, matching the observed
+        # EPG-PEN phase offset during turns).
         self.pen_mode = 'advect'
         self.tau_pen = 0.06                                # PEN synaptic filtering (velocity channel)
         self.om_sm = 0.0
+        # 'shifted2': amplitude coding — PEN field tracks u, shifted arms gated by om.
+        # 'shifted3': position coding — velocity displaces the PEN bump (the observed
+        # EPG-PEN phase offset during turns); EPG is pulled toward the displaced bump.
+        self.v = np.zeros(n)
+        self.tau_p = 0.06                                  # PEN field time constant
+        self.g_drive = 2.0                                 # EPG -> PEN drive
+        self.pen_pull = 1.5                                # PEN -> EPG pull strength (shifted3)
+        self.pen_arms = False                              # True: pull via Wp+Wm; False: tight W0
         # velocity gain from translation-mode projection on an equilibrated bump:
         # phi_dot = om * <u*', Wshift*f(u*)> / (tau * <u*',u*'>)  ->  pen_gain = 1/coef
         th = np.linspace(0, 2 * np.pi, n, endpoint=False)
@@ -70,7 +81,22 @@ class RingField:
         F = np.fft.fft(fu)
         rec = np.fft.ifft(np.fft.fft(self.W) * F).real
         pen = 0.0
-        if om:
+        if self.pen_mode == 'shifted3':
+            # position coding: velocity input displaces the PEN bump (spectral
+            # advection of v); the summed shifted arms pull EPG toward v's
+            # displaced position. v keeps its own attractor + tracks u.
+            m = np.fft.fftfreq(self.n) * self.n
+            delta = om * dt * self.vel_gain * self.n / (2 * np.pi)
+            if om:
+                self.v = np.fft.ifft(np.fft.fft(self.v) * np.exp(-2j * np.pi * m * delta / self.n)).real
+            fv = self.f(self.v)
+            rec_v = np.fft.ifft(np.fft.fft(self.W) * np.fft.fft(fv)).real
+            self.v += dt / self.tau_p * (-self.v + rec_v + self.g_drive * fu)
+            fv = self.f(self.v)
+            Fv = np.fft.fft(fv)
+            Wpen = self.Wp + self.Wm if self.pen_arms else self.W0
+            pen = self.pen_pull * np.fft.ifft(np.fft.fft(Wpen) * Fv).real
+        elif om:
             # pen_mask gates the two PEN arms: +om engages arm 0, -om arm 1.
             if self.pen_mode == 'advect':
                 om = om * (pen_mask[0] if om > 0 else pen_mask[1])
@@ -86,8 +112,20 @@ class RingField:
                 self.om_sm += (om - self.om_sm) * dt / self.tau_pen
                 om_s = 2.0 * np.tanh(self.om_sm / 2.0)
                 vp, vm = pen_mask[0] * max(om_s, 0.0), pen_mask[1] * max(-om_s, 0.0)
-                pen = self.pen_gain * (vp * np.fft.ifft(np.fft.fft(self.Wp) * F).real
-                                     + vm * np.fft.ifft(np.fft.fft(self.Wm) * F).real)
+                if self.pen_mode == 'shifted2':
+                    # PEN as its own attractor field driven by the EPG bump;
+                    # its recurrence keeps f(v) bump-shaped, so the shifted
+                    # injection is clean even when u is momentarily distorted.
+                    fv = self.f(self.v)
+                    rec_v = np.fft.ifft(np.fft.fft(self.W) * np.fft.fft(fv)).real
+                    self.v += dt / self.tau_p * (-self.v + rec_v + self.g_drive * fu)
+                    fv = self.f(self.v)
+                    Fv = np.fft.fft(fv)
+                    pen = self.pen_gain * (vp * np.fft.ifft(np.fft.fft(self.Wp) * Fv).real
+                                         + vm * np.fft.ifft(np.fft.fft(self.Wm) * Fv).real)
+                else:
+                    pen = self.pen_gain * (vp * np.fft.ifft(np.fft.fft(self.Wp) * F).real
+                                         + vm * np.fft.ifft(np.fft.fft(self.Wm) * F).real)
         lm = 0.0
         if landmark is not None:
             th = np.linspace(0, 2 * np.pi, self.n, endpoint=False)
