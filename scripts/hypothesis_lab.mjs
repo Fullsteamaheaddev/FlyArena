@@ -17,12 +17,11 @@
 // Run: node scripts/hypothesis_lab.mjs   (writes public/data/hypothesis_lab.json)
 import fs from 'node:fs';
 import { loadAll } from './lib_node.mjs';
-import { makeLIF } from './lifprobe.mjs';
+import { seedRng, makeBuilder, run, silence, circRes, circAngle, rankExperiments } from './lif_ensemble.mjs';
 
-// deterministic RNG for the LIF noise source (mulberry32) — ensemble must be reproducible
+// deterministic RNG for the LIF noise source — ensemble must be reproducible
 const SEED = +process.argv[2] || 20260704;
-let rs = SEED;
-Math.random = () => { rs |= 0; rs = rs + 0x6D2B79F5 | 0; let t = Math.imul(rs ^ rs >>> 15, 1 | rs); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+seedRng(SEED);
 
 const D = loadAll(), { meta, N } = D;
 const f2 = (v) => +(v).toFixed(3);
@@ -38,32 +37,15 @@ const penR = penAll.filter(i => pbcol(meta.instances[i])?.[0] === 'R');
 const wedges = Array.from({ length: 8 }, () => []);
 epg.forEach((i) => { const w = wedgeOf(i); if (w >= 0) wedges[w].push(i); });
 
-// per-neuron type name (meta.types is indexed by neuron) for weight-class scaling
-const tix = meta.types;
-const inSet = (arr) => { const s = new Set(arr); return (i) => s.has(i); };
-const isEPG = inSet(epg), isD7 = inSet(d7), isPEN = inSet(penAll);
+// edge-class gain scaling + tonic bias via the generic ensemble builder
+const penSet = new Set(penAll);
+const buildNet = makeBuilder(D, [
+  { pre: 'EPG', post: 'EPG', param: 'epgRecur' },
+  { pre: 'Delta7', post: 'EPG', param: 'd7Gain' },
+  { pre: penSet, post: 'EPG', param: 'penGain' },
+]);
 
-function buildNet({ epgRecur = 1, d7Gain = 1, penGain = 1, epgTonic = 0 }) {
-  const net = makeLIF(D, {});
-  // scale synapse classes: weights[j] is edge pre->post; pre = row via indptr
-  for (let i = 0; i < N; i++) {
-    const t = tix[i];
-    if (t !== 'EPG' && t !== 'Delta7' && t !== 'PEN_a(PEN1)' && t !== 'PEN_b(PEN2)') continue;
-    for (let j = D.indptr[i]; j < D.indptr[i + 1]; j++) {
-      const q = D.indices[j];
-      if (t === 'EPG' && isEPG(q)) net.weights[j] *= epgRecur;
-      else if (t === 'Delta7' && isEPG(q)) net.weights[j] *= d7Gain;
-      else if ((t === 'PEN_a(PEN1)' || t === 'PEN_b(PEN2)') && isEPG(q)) net.weights[j] *= penGain;
-    }
-  }
-  if (epgTonic) net.setBias(epg, epgTonic);
-  return net;
-}
-
-const run = (net, ms) => { for (let s = 0; s < Math.round(ms / net.p.dt); s++) net.step(); };
 const wedgeRates = (net, b0) => wedges.map(ws => ws.reduce((a, i) => a + (net.spikeCount[i] - (b0 ? b0[i] : 0)), 0) / Math.max(ws.length, 1));
-const circRes = (r) => { let x = 0, y = 0, n = 0; r.forEach((v, w) => { x += v * Math.cos(w * Math.PI / 4); y += v * Math.sin(w * Math.PI / 4); n += v; }); return n > 1e-9 ? Math.hypot(x, y) / n : 0; };
-const circAngle = (r) => { let x = 0, y = 0; r.forEach((v, w) => { x += v * Math.cos(w * Math.PI / 4); y += v * Math.sin(w * Math.PI / 4); }); return Math.atan2(y, x); };
 const clean = (net, tonic) => { net.drive.fill(0); net.bias.fill(0); net.thr.fill(0); net.reset(); if (tonic) net.setBias(epg, tonic); };
 
 // ---- observable: bump persistence after a seeded bump is released ----
@@ -162,20 +144,13 @@ for (const p of grid) {
 
 // ---- rank experiments by discriminative power across the ensemble ----
 const cls = (v) => v > 0.5 ? 'sustains' : v > 0.2 ? 'partial' : 'decays';
-function spread(vals) { const m = vals.reduce((a, b) => a + b, 0) / vals.length; return vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length; }
-const experiments = {
-  tonic_sweep: { score: null, note: 'separates attractor_free from attractor_tonic by construction', outcome: members.map(m => cls(m.baseline.persistence.concentration)) },
+const ranked = rankExperiments({
+  tonic_sweep: { note: 'separates attractor_free from attractor_tonic by construction', outcome: members.map(m => cls(m.baseline.persistence.concentration)) },
   d7_silence: { outcome: members.map(m => cls(m.perturbations.d7_silence.concentration)) },
   peg_lesion: { outcome: members.map(m => cls(m.perturbations.peg_lesion.concentration)) },
   unilateral_pen_L: { outcome: members.map(m => m.baseline.rotL.drift > 0.05 ? 'rotates' : 'none') },
   unilateral_pen_R: { outcome: members.map(m => m.baseline.rotR.drift < -0.05 ? 'rotates' : 'none') },
-};
-for (const [name, e] of Object.entries(experiments)) {
-  let diff = 0, tot = 0;
-  for (let i = 0; i < members.length; i++) for (let j = i + 1; j < members.length; j++) { tot++; if (e.outcome[i] !== e.outcome[j]) diff++; }
-  e.score = f2(diff / Math.max(tot, 1));   // fraction of model pairs separated
-}
-const ranked = Object.entries(experiments).sort((a, b) => b[1].score - a[1].score);
+});
 
 const byHyp = {};
 for (const m of members) (byHyp[m.hypothesis] ||= []).push(m.params);
