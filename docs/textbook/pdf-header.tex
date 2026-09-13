@@ -1,4 +1,16 @@
-% Glyphs the text fonts lack are set in math mode instead.
+% Both PDF builders can locate the artwork from their working directory.
+\usepackage{graphicx}
+\graphicspath{{art/textbook/}{../../art/textbook/}}
+\usepackage{eso-pic}
+\AtBeginDocument{%
+  \hypersetup{pageanchor=false}%
+  \thispagestyle{empty}%
+  \AddToShipoutPictureBG*{%
+    \AtPageCenter{\makebox(0,0){\includegraphics[height=\paperheight]{cover-print.jpg}}}%
+  }%
+  \null\clearpage
+  \hypersetup{pageanchor=true}%
+}
 \pagestyle{plain}
 \let\cleardoublepage\clearpage
 \raggedbottom
@@ -8,6 +20,7 @@
 \displaywidowpenalty=10000
 \setcounter{tocdepth}{1}
 \setcounter{secnumdepth}{0}
+% Glyphs the text fonts lack are set in math mode instead.
 \usepackage{newunicodechar}
 \newunicodechar{→}{\ensuremath{\rightarrow}}
 \newunicodechar{←}{\ensuremath{\leftarrow}}
