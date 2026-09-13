@@ -1,0 +1,1973 @@
+{
+  "date": "2026-09-13",
+  "baselineCommit": "9d89509",
+  "notes": [
+    "Warm 180-frame samples, 1400x900 CSS pixels at device scale 1; headless Chrome, ANGLE Metal, Apple M4 Pro.",
+    "CPU submit times cover the main Three.js render, not asynchronous GPU completion or the brain inset.",
+    "Active simulation samples are live and nondeterministic; compare the actual limits, not a guaranteed FPS.",
+    "Earlier tuning runs were excluded after hot reload and transient frame-time interference; these samples used the separate HMR-disabled server on port 5174.",
+    "Final adaptive resolution run. Device scale is 1, but the render DPR drops to 0.9 in active macro and begins recovering in the subsequent wide sample; per-scenario DPR is recorded.",
+    "Retina final check: device scale 2, 5-second adaptation warmup, then 120 frames per page, paused macro views. Effective render DPR settled near 0.997 with full geometry retained. Front/rear/top/eye-close screenshots also inspected.",
+    "The before/after table and initial Retina check precede the material revision. materialRevision records the reduced sheen, filtered surface texture, amber light wrap and restrained wing/eye reflections; same hardware, browser, viewport and 180-frame harness. Live worker timings vary between runs.",
+    "Blender detail revision: a shared 512-square packed data tile replaces procedural cuticle noise; facial hairs are shorter and denser. Reported active-simulation FPS remains workload dependent; the short social sample is supplemented by a separate 600-frame check after ten seconds of simulation warmup.",
+    "Current fly.html is always interactive 3D. blenderInteractive records the Blender-subdivided geometry, Cycles body/hair irradiance and AgX display transform. The earlier renderedPage gallery was removed; its measurements are historical only."
+  ],
+  "before": {
+    "baseline": true,
+    "browser": "152.0.7977.83",
+    "frames": 180,
+    "results": [
+      {
+        "name": "fly-rest",
+        "frameMs": {
+          "median": 16.71,
+          "p95": 17.98,
+          "mean": 16.645
+        },
+        "cpuSubmitMs": {
+          "median": 1.955,
+          "p95": 3.015,
+          "mean": 2.056
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 534,
+          "p95": 640,
+          "mean": 569.333
+        },
+        "triangles": {
+          "median": 4667744,
+          "p95": 4999134,
+          "mean": 4778207.333
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true
+      },
+      {
+        "name": "fly-flight-dark",
+        "frameMs": {
+          "median": 19.99,
+          "p95": 23.345,
+          "mean": 19.849
+        },
+        "cpuSubmitMs": {
+          "median": 3.395,
+          "p95": 4.305,
+          "mean": 3.416
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 644,
+          "p95": 746,
+          "mean": 678
+        },
+        "triangles": {
+          "median": 4986032,
+          "p95": 5303966,
+          "mean": 5092010
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true
+      },
+      {
+        "name": "arena-default-paused",
+        "frameMs": {
+          "median": 16.685,
+          "p95": 18.18,
+          "mean": 16.628
+        },
+        "cpuSubmitMs": {
+          "median": 0.69,
+          "p95": 1.115,
+          "mean": 0.714
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 182,
+          "p95": 182,
+          "mean": 182
+        },
+        "triangles": {
+          "median": 139892,
+          "p95": 139892,
+          "mean": 139892
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "detail": [
+          null
+        ]
+      },
+      {
+        "name": "arena-macro-paused",
+        "frameMs": {
+          "median": 16.675,
+          "p95": 18.14,
+          "mean": 16.664
+        },
+        "cpuSubmitMs": {
+          "median": 0.635,
+          "p95": 0.85,
+          "mean": 0.642
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 180,
+          "p95": 180,
+          "mean": 180
+        },
+        "triangles": {
+          "median": 139796,
+          "p95": 139796,
+          "mean": 139796
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "detail": [
+          null
+        ]
+      },
+      {
+        "name": "arena-macro-running",
+        "frameMs": {
+          "median": 16.71,
+          "p95": 19.22,
+          "mean": 16.599
+        },
+        "cpuSubmitMs": {
+          "median": 0.42,
+          "p95": 0.5,
+          "mean": 0.434
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 180,
+          "p95": 181,
+          "mean": 180.111
+        },
+        "triangles": {
+          "median": 139796,
+          "p95": 139844,
+          "mean": 139801.333
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "detail": [
+          null
+        ]
+      },
+      {
+        "name": "arena-wide-paused",
+        "frameMs": {
+          "median": 16.385,
+          "p95": 19.93,
+          "mean": 16.623
+        },
+        "cpuSubmitMs": {
+          "median": 0.605,
+          "p95": 1.03,
+          "mean": 0.633
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 182,
+          "p95": 182,
+          "mean": 182
+        },
+        "triangles": {
+          "median": 139892,
+          "p95": 139892,
+          "mean": 139892
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "detail": [
+          null
+        ]
+      },
+      {
+        "name": "arena-social-paused",
+        "frameMs": {
+          "median": 16.54,
+          "p95": 20.205,
+          "mean": 16.598
+        },
+        "cpuSubmitMs": {
+          "median": 1.645,
+          "p95": 1.945,
+          "mean": 1.629
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 826,
+          "p95": 826,
+          "mean": 826
+        },
+        "triangles": {
+          "median": 685943,
+          "p95": 685943,
+          "mean": 685943
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "detail": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "name": "arena-social-running",
+        "frameMs": {
+          "median": 21.75,
+          "p95": 55.09,
+          "mean": 26.816
+        },
+        "cpuSubmitMs": {
+          "median": 1.36,
+          "p95": 1.775,
+          "mean": 1.394
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 828,
+          "p95": 829,
+          "mean": 791.489
+        },
+        "triangles": {
+          "median": 686290,
+          "p95": 686473,
+          "mean": 658045.106
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "detail": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    ],
+    "errors": []
+  },
+  "after": {
+    "baseline": false,
+    "browser": "152.0.7977.83",
+    "frames": 180,
+    "results": [
+      {
+        "name": "fly-rest",
+        "frameMs": {
+          "median": 16.615,
+          "p95": 20.39,
+          "mean": 16.66
+        },
+        "cpuSubmitMs": {
+          "median": 1.55,
+          "p95": 2.98,
+          "mean": 1.675
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 357,
+          "p95": 461,
+          "mean": 398.6
+        },
+        "triangles": {
+          "median": 2099009,
+          "p95": 2429399,
+          "mean": 2231165
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "counters": {
+          "shadowUpdates": 72
+        }
+      },
+      {
+        "name": "fly-flight-dark",
+        "frameMs": {
+          "median": 16.715,
+          "p95": 19.38,
+          "mean": 16.633
+        },
+        "cpuSubmitMs": {
+          "median": 1.59,
+          "p95": 3.495,
+          "mean": 1.903
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 349,
+          "p95": 451,
+          "mean": 387.533
+        },
+        "triangles": {
+          "median": 2056481,
+          "p95": 2374415,
+          "mean": 2176589.4
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "counters": {
+          "shadowUpdates": 68
+        }
+      },
+      {
+        "name": "arena-default-paused",
+        "frameMs": {
+          "median": 16.68,
+          "p95": 18.52,
+          "mean": 16.596
+        },
+        "cpuSubmitMs": {
+          "median": 0.635,
+          "p95": 1.455,
+          "mean": 0.725
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 116,
+          "p95": 116,
+          "mean": 116
+        },
+        "triangles": {
+          "median": 132540,
+          "p95": 132540,
+          "mean": 132540
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 71
+        }
+      },
+      {
+        "name": "arena-macro-paused",
+        "frameMs": {
+          "median": 16.825,
+          "p95": 20.87,
+          "mean": 16.901
+        },
+        "cpuSubmitMs": {
+          "median": 1.025,
+          "p95": 2.21,
+          "mean": 1.129
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 270,
+          "p95": 270,
+          "mean": 270
+        },
+        "triangles": {
+          "median": 1811041,
+          "p95": 1811041,
+          "mean": 1811041
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 73
+        }
+      },
+      {
+        "name": "arena-macro-running",
+        "frameMs": {
+          "median": 17.175,
+          "p95": 23.085,
+          "mean": 17.935
+        },
+        "cpuSubmitMs": {
+          "median": 0.75,
+          "p95": 0.955,
+          "mean": 0.76
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 270,
+          "p95": 357,
+          "mean": 302.456
+        },
+        "triangles": {
+          "median": 1811041,
+          "p95": 2083567,
+          "mean": 1913975.533
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 0.9,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 68,
+          "brainUploads": 27,
+          "brainDraws": 78
+        }
+      },
+      {
+        "name": "arena-flight-fixture",
+        "frameMs": {
+          "median": 16.645,
+          "p95": 18.55,
+          "mean": 16.61
+        },
+        "cpuSubmitMs": {
+          "median": 1.155,
+          "p95": 2.24,
+          "mean": 1.214
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 268,
+          "p95": 268,
+          "mean": 268
+        },
+        "triangles": {
+          "median": 1785489,
+          "p95": 1785489,
+          "mean": 1785489
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 0.9,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 70
+        }
+      },
+      {
+        "name": "arena-wide-paused",
+        "frameMs": {
+          "median": 16.66,
+          "p95": 18.295,
+          "mean": 16.627
+        },
+        "cpuSubmitMs": {
+          "median": 0.39,
+          "p95": 1.14,
+          "mean": 0.459
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 95,
+          "p95": 95,
+          "mean": 95.467
+        },
+        "triangles": {
+          "median": 69793,
+          "p95": 69793,
+          "mean": 70171.556
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 0.9450000000000001,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          0
+        ],
+        "counters": {
+          "shadowUpdates": 1,
+          "brainUploads": 0,
+          "brainDraws": 70
+        }
+      },
+      {
+        "name": "arena-social-paused",
+        "frameMs": {
+          "median": 16.67,
+          "p95": 18.135,
+          "mean": 16.632
+        },
+        "cpuSubmitMs": {
+          "median": 1.69,
+          "p95": 2.18,
+          "mean": 1.714
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 489,
+          "p95": 489,
+          "mean": 489
+        },
+        "triangles": {
+          "median": 638877,
+          "p95": 638877,
+          "mean": 638877
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 70
+        }
+      },
+      {
+        "name": "arena-social-running",
+        "frameMs": {
+          "median": 21.475,
+          "p95": 58.54,
+          "mean": 27.907
+        },
+        "cpuSubmitMs": {
+          "median": 1.315,
+          "p95": 1.69,
+          "mean": 1.303
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 775,
+          "p95": 918,
+          "mean": 666.667
+        },
+        "triangles": {
+          "median": 1052522,
+          "p95": 1210088,
+          "mean": 901336.5
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 94,
+          "brainUploads": 42,
+          "brainDraws": 94
+        }
+      }
+    ],
+    "errors": []
+  },
+  "retina": {
+    "errors": [],
+    "evidence": [
+      {
+        "name": "fly",
+        "fps": 60.41261818230215,
+        "dpr": 0.9971447332497019,
+        "width": 1396,
+        "height": 897
+      },
+      {
+        "name": "arena",
+        "fps": 60.07434199826762,
+        "dpr": 0.9971447332497019,
+        "width": 1396,
+        "height": 897
+      }
+    ]
+  },
+  "materialRevision": {
+    "baseline": false,
+    "browser": "152.0.7977.83",
+    "frames": 180,
+    "results": [
+      {
+        "name": "fly-rest",
+        "frameMs": {
+          "median": 16.615,
+          "p95": 18.24,
+          "mean": 16.619
+        },
+        "cpuSubmitMs": {
+          "median": 1.28,
+          "p95": 2.205,
+          "mean": 1.409
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 357,
+          "p95": 461,
+          "mean": 397.444
+        },
+        "triangles": {
+          "median": 2099009,
+          "p95": 2429399,
+          "mean": 2227494
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "counters": {
+          "shadowUpdates": 70
+        }
+      },
+      {
+        "name": "fly-flight-dark",
+        "frameMs": {
+          "median": 16.57,
+          "p95": 18.39,
+          "mean": 16.619
+        },
+        "cpuSubmitMs": {
+          "median": 1.52,
+          "p95": 2.555,
+          "mean": 1.64
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 349,
+          "p95": 451,
+          "mean": 388.667
+        },
+        "triangles": {
+          "median": 2056481,
+          "p95": 2374415,
+          "mean": 2180122
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "counters": {
+          "shadowUpdates": 70
+        }
+      },
+      {
+        "name": "arena-default-paused",
+        "frameMs": {
+          "median": 16.655,
+          "p95": 17.73,
+          "mean": 16.613
+        },
+        "cpuSubmitMs": {
+          "median": 0.755,
+          "p95": 1.47,
+          "mean": 0.842
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 116,
+          "p95": 116,
+          "mean": 116
+        },
+        "triangles": {
+          "median": 132540,
+          "p95": 132540,
+          "mean": 132540
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 71
+        }
+      },
+      {
+        "name": "arena-macro-paused",
+        "frameMs": {
+          "median": 16.725,
+          "p95": 20.125,
+          "mean": 16.975
+        },
+        "cpuSubmitMs": {
+          "median": 1.115,
+          "p95": 1.86,
+          "mean": 1.162
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 270,
+          "p95": 270,
+          "mean": 270
+        },
+        "triangles": {
+          "median": 1811041,
+          "p95": 1811041,
+          "mean": 1811041
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 73
+        }
+      },
+      {
+        "name": "arena-macro-running",
+        "frameMs": {
+          "median": 16.68,
+          "p95": 18.06,
+          "mean": 16.617
+        },
+        "cpuSubmitMs": {
+          "median": 0.76,
+          "p95": 0.955,
+          "mean": 0.77
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 270,
+          "p95": 355,
+          "mean": 300.367
+        },
+        "triangles": {
+          "median": 1811041,
+          "p95": 2083471,
+          "mean": 1907911.933
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 64,
+          "brainUploads": 25,
+          "brainDraws": 73
+        }
+      },
+      {
+        "name": "arena-flight-fixture",
+        "frameMs": {
+          "median": 16.68,
+          "p95": 17.815,
+          "mean": 16.64
+        },
+        "cpuSubmitMs": {
+          "median": 1.175,
+          "p95": 1.55,
+          "mean": 1.176
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 268,
+          "p95": 268,
+          "mean": 268
+        },
+        "triangles": {
+          "median": 1785489,
+          "p95": 1785489,
+          "mean": 1785489
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 71
+        }
+      },
+      {
+        "name": "arena-wide-paused",
+        "frameMs": {
+          "median": 16.66,
+          "p95": 17.56,
+          "mean": 16.65
+        },
+        "cpuSubmitMs": {
+          "median": 0.65,
+          "p95": 1.245,
+          "mean": 0.731
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 95,
+          "p95": 95,
+          "mean": 95
+        },
+        "triangles": {
+          "median": 69793,
+          "p95": 69793,
+          "mean": 69793
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          0
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 70
+        }
+      },
+      {
+        "name": "arena-social-paused",
+        "frameMs": {
+          "median": 16.655,
+          "p95": 16.935,
+          "mean": 16.63
+        },
+        "cpuSubmitMs": {
+          "median": 1.555,
+          "p95": 1.9,
+          "mean": 1.538
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 489,
+          "p95": 489,
+          "mean": 489
+        },
+        "triangles": {
+          "median": 638877,
+          "p95": 638877,
+          "mean": 638877
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 69
+        }
+      },
+      {
+        "name": "arena-social-running",
+        "frameMs": {
+          "median": 19.56,
+          "p95": 63.805,
+          "mean": 26.886
+        },
+        "cpuSubmitMs": {
+          "median": 1.285,
+          "p95": 1.845,
+          "mean": 1.324
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 493,
+          "p95": 918,
+          "mean": 625.3
+        },
+        "triangles": {
+          "median": 642653,
+          "p95": 1210088,
+          "mean": 836360.672
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 88,
+          "brainUploads": 40,
+          "brainDraws": 89
+        }
+      }
+    ],
+    "errors": []
+  },
+  "materialRevisionRetina": {
+    "errors": [],
+    "evidence": [
+      {
+        "name": "fly",
+        "fps": 60.094348126576634,
+        "dpr": 0.9,
+        "width": 1260,
+        "height": 810
+      },
+      {
+        "name": "arena",
+        "fps": 60.42341709531342,
+        "dpr": 0.9971447332497019,
+        "width": 1396,
+        "height": 897
+      }
+    ]
+  },
+  "blenderDetailRevision": {
+    "baseline": false,
+    "browser": "152.0.7977.83",
+    "frames": 180,
+    "results": [
+      {
+        "name": "fly-rest",
+        "frameMs": {
+          "median": 16.675,
+          "p95": 18.655,
+          "mean": 16.638
+        },
+        "cpuSubmitMs": {
+          "median": 1.57,
+          "p95": 3.48,
+          "mean": 1.817
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 357,
+          "p95": 461,
+          "mean": 398.022
+        },
+        "triangles": {
+          "median": 2222889,
+          "p95": 2553279,
+          "mean": 2353209.5
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "counters": {
+          "shadowUpdates": 71
+        }
+      },
+      {
+        "name": "fly-flight-dark",
+        "frameMs": {
+          "median": 16.545,
+          "p95": 19.775,
+          "mean": 16.628
+        },
+        "cpuSubmitMs": {
+          "median": 1.815,
+          "p95": 4.06,
+          "mean": 2.134
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 349,
+          "p95": 451,
+          "mean": 387.533
+        },
+        "triangles": {
+          "median": 2180361,
+          "p95": 2498295,
+          "mean": 2300469.4
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "counters": {
+          "shadowUpdates": 68
+        }
+      },
+      {
+        "name": "arena-default-paused",
+        "frameMs": {
+          "median": 16.595,
+          "p95": 21.01,
+          "mean": 16.616
+        },
+        "cpuSubmitMs": {
+          "median": 0.65,
+          "p95": 1.955,
+          "mean": 0.948
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 116,
+          "p95": 116,
+          "mean": 116
+        },
+        "triangles": {
+          "median": 132540,
+          "p95": 132540,
+          "mean": 132540
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 72
+        }
+      },
+      {
+        "name": "arena-macro-paused",
+        "frameMs": {
+          "median": 16.52,
+          "p95": 21.47,
+          "mean": 16.619
+        },
+        "cpuSubmitMs": {
+          "median": 1.235,
+          "p95": 3.17,
+          "mean": 1.751
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 270,
+          "p95": 270,
+          "mean": 270
+        },
+        "triangles": {
+          "median": 1934921,
+          "p95": 1934921,
+          "mean": 1934921
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 70
+        }
+      },
+      {
+        "name": "arena-macro-running",
+        "frameMs": {
+          "median": 16.66,
+          "p95": 20.44,
+          "mean": 16.589
+        },
+        "cpuSubmitMs": {
+          "median": 0.93,
+          "p95": 1.385,
+          "mean": 0.976
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 270,
+          "p95": 355,
+          "mean": 299.006
+        },
+        "triangles": {
+          "median": 1934921,
+          "p95": 2207351,
+          "mean": 2027254.1
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 61,
+          "brainUploads": 25,
+          "brainDraws": 69
+        }
+      },
+      {
+        "name": "arena-flight-fixture",
+        "frameMs": {
+          "median": 15.945,
+          "p95": 20.405,
+          "mean": 16.62
+        },
+        "cpuSubmitMs": {
+          "median": 0.895,
+          "p95": 1.465,
+          "mean": 0.975
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 268,
+          "p95": 268,
+          "mean": 268
+        },
+        "triangles": {
+          "median": 1909369,
+          "p95": 1909369,
+          "mean": 1909369
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": true,
+        "detail": [
+          2
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 70
+        }
+      },
+      {
+        "name": "arena-wide-paused",
+        "frameMs": {
+          "median": 16.605,
+          "p95": 20.065,
+          "mean": 16.638
+        },
+        "cpuSubmitMs": {
+          "median": 0.56,
+          "p95": 1.805,
+          "mean": 0.838
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 95,
+          "p95": 95,
+          "mean": 95
+        },
+        "triangles": {
+          "median": 69793,
+          "p95": 69793,
+          "mean": 69793
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          0
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 69
+        }
+      },
+      {
+        "name": "arena-social-paused",
+        "frameMs": {
+          "median": 16.43,
+          "p95": 20.67,
+          "mean": 16.599
+        },
+        "cpuSubmitMs": {
+          "median": 1.415,
+          "p95": 3.485,
+          "mean": 1.737
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 489,
+          "p95": 489,
+          "mean": 489
+        },
+        "triangles": {
+          "median": 638877,
+          "p95": 638877,
+          "mean": 638877
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 0,
+          "brainUploads": 0,
+          "brainDraws": 67
+        }
+      },
+      {
+        "name": "arena-social-running",
+        "frameMs": {
+          "median": 16.415,
+          "p95": 21.26,
+          "mean": 16.639
+        },
+        "cpuSubmitMs": {
+          "median": 1.9,
+          "p95": 4.14,
+          "mean": 2.192
+        },
+        "gpuMs": null,
+        "calls": {
+          "median": 493,
+          "p95": 918,
+          "mean": 654.8
+        },
+        "triangles": {
+          "median": 642653,
+          "p95": 1210088,
+          "mean": 863474.872
+        },
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "dpr": 1,
+        "viewport": [
+          1400,
+          900
+        ],
+        "ao": false,
+        "detail": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "counters": {
+          "shadowUpdates": 71,
+          "brainUploads": 24,
+          "brainDraws": 71
+        }
+      }
+    ],
+    "errors": []
+  },
+  "blenderDetailSocialLong": {
+    "warmupSeconds": 10,
+    "frames": 600,
+    "viewport": [
+      1400,
+      900
+    ],
+    "deviceScale": 1,
+    "initial": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fps": 59.992590915025566,
+    "meanMs": 16.668724999999007,
+    "p95Ms": 21.905000001192093,
+    "before": [
+      1086,
+      1107,
+      1178,
+      1189,
+      1077
+    ],
+    "after": [
+      2194,
+      2185,
+      2216,
+      2209,
+      2132
+    ],
+    "dpr": 1,
+    "details": [
+      1,
+      0,
+      1,
+      1,
+      1
+    ],
+    "errors": []
+  },
+  "renderedPage": {
+    "date": "2026-09-13",
+    "fullBodyRender": {
+      "blender": "5.2.1 LTS",
+      "engine": "CYCLES",
+      "device": "GPU",
+      "samples": 256,
+      "resolution": [
+        2400,
+        1600
+      ],
+      "view": "full",
+      "seconds_including_scene_setup": 43.85,
+      "render": "/Users/lulzx/work/fly-brain/art/fly/full-body.png",
+      "blend": "/Users/lulzx/work/fly-brain/art/fly/fly-full-body.blend"
+    },
+    "production": {
+      "initialResources": [
+        {
+          "name": "http://localhost:5175/assets/fly-CStD3qv7.js",
+          "bytes": 3205
+        },
+        {
+          "name": "http://localhost:5175/assets/modulepreload-polyfill-P2Xu9kJm.js",
+          "bytes": 970
+        },
+        {
+          "name": "http://localhost:5175/assets/fly-CaXpff7T.css",
+          "bytes": 1802
+        },
+        {
+          "name": "http://localhost:5175/body/renders/full-body.webp",
+          "bytes": 218364
+        },
+        {
+          "name": "http://localhost:5175/favicon.ico",
+          "bytes": 300
+        }
+      ],
+      "passed": true,
+      "errors": []
+    },
+    "status": "Superseded: photo gallery removed in favor of one interactive Blender-prepared 3D viewer."
+  },
+  "blenderInteractive": {
+    "bake": {
+      "generator": "Blender 5.2.1 LTS / Cycles",
+      "samples": 128,
+      "parts": 85,
+      "triangles": 1169030,
+      "vertices": 587293,
+      "seconds": 171.89,
+      "bytes": 28334050,
+      "gzipBytes": 17859163,
+      "packedBytes": 9261127,
+      "maxPositionError": 0.0000020377648515569613,
+      "maxLightError": 0.004396501697325306
+    },
+    "production": {
+      "readyMs": 441,
+      "assets": {
+        "generator": "Blender 5.2.1 LTS / Cycles",
+        "parts": 85,
+        "triangles": 1169030,
+        "irradiance": true,
+        "bakedHairs": 35038,
+        "lights": 4,
+        "ao": false
+      },
+      "resources": [
+        {
+          "name": "/assets/fly-ChkCsMFe.js",
+          "bytes": 122704
+        },
+        {
+          "name": "/assets/OrbitControls-SCYECjiS.js",
+          "bytes": 189134
+        },
+        {
+          "name": "/assets/modulepreload-polyfill-P2Xu9kJm.js",
+          "bytes": 970
+        },
+        {
+          "name": "/assets/render-resolution-BWNvmIvc.js",
+          "bytes": 16847
+        },
+        {
+          "name": "/assets/fly-BuQ8j7DC.css",
+          "bytes": 1428
+        },
+        {
+          "name": "/body/blender/fly.json",
+          "bytes": 22016
+        },
+        {
+          "name": "/body/blender/fly.mesh",
+          "bytes": 9261427
+        },
+        {
+          "name": "/body/cuticle_detail.png",
+          "bytes": 491808
+        },
+        {
+          "name": "/body/blender/agx-look.png",
+          "bytes": 43951
+        },
+        {
+          "name": "/favicon.ico",
+          "bytes": 300
+        }
+      ],
+      "fullBody": {
+        "fps": 60.01104203157642,
+        "medianMs": 16.614999994635582,
+        "p95Ms": 17.61999998986721,
+        "dpr": 1,
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "metrics": {
+          "calls": 267,
+          "triangles": 3742331,
+          "renderMs": 1.2000000029802322,
+          "shadowUpdates": 184
+        }
+      },
+      "headDetail": {
+        "fps": 60.08839002177217,
+        "medianMs": 16.689999997615814,
+        "p95Ms": 18.625,
+        "dpr": 1,
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "metrics": {
+          "calls": 201,
+          "triangles": 3542571,
+          "renderMs": 1.3450000137090683,
+          "shadowUpdates": 366
+        }
+      },
+      "flying": {
+        "fps": 60.06432889629805,
+        "medianMs": 16.62000000476837,
+        "p95Ms": 21.200000002980232,
+        "dpr": 1,
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "metrics": {
+          "calls": 269,
+          "triangles": 3753869,
+          "renderMs": 3.1749999970197678,
+          "shadowUpdates": 615
+        }
+      },
+      "passed": true,
+      "errors": []
+    },
+    "retina": {
+      "fps": 60.31858264732499,
+      "p95Ms": 18.549999997019768,
+      "deviceDpr": 2,
+      "renderDpr": 1.3801311186847085,
+      "triangles": 1169030,
+      "viewport": [
+        1400,
+        900
+      ],
+      "errors": []
+    },
+    "arena": {
+      "baseline": false,
+      "browser": "152.0.7977.83",
+      "frames": 180,
+      "results": [
+        {
+          "name": "fly-rest",
+          "frameMs": {
+            "median": 16.43,
+            "p95": 19.795,
+            "mean": 16.64
+          },
+          "cpuSubmitMs": {
+            "median": 1.365,
+            "p95": 3.935,
+            "mean": 1.788
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 268,
+            "p95": 375,
+            "mean": 309.611
+          },
+          "triangles": {
+            "median": 3742395,
+            "p95": 4969331,
+            "mean": 4219536.778
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": false,
+          "counters": {
+            "shadowUpdates": 70
+          }
+        },
+        {
+          "name": "fly-flight-dark",
+          "frameMs": {
+            "median": 16.895,
+            "p95": 20.19,
+            "mean": 16.809
+          },
+          "cpuSubmitMs": {
+            "median": 1.29,
+            "p95": 3.555,
+            "mean": 1.548
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 258,
+            "p95": 363,
+            "mean": 302.917
+          },
+          "triangles": {
+            "median": 3688511,
+            "p95": 4902991,
+            "mean": 4208038.556
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": false,
+          "counters": {
+            "shadowUpdates": 77
+          }
+        },
+        {
+          "name": "arena-default-paused",
+          "frameMs": {
+            "median": 16.68,
+            "p95": 18.495,
+            "mean": 16.609
+          },
+          "cpuSubmitMs": {
+            "median": 0.915,
+            "p95": 2.04,
+            "mean": 1.112
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 116,
+            "p95": 116,
+            "mean": 116
+          },
+          "triangles": {
+            "median": 132540,
+            "p95": 132540,
+            "mean": 132540
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": false,
+          "detail": [
+            1
+          ],
+          "counters": {
+            "shadowUpdates": 0,
+            "brainUploads": 0,
+            "brainDraws": 72
+          }
+        },
+        {
+          "name": "arena-macro-paused",
+          "frameMs": {
+            "median": 16.74,
+            "p95": 18.905,
+            "mean": 16.664
+          },
+          "cpuSubmitMs": {
+            "median": 1.22,
+            "p95": 3.175,
+            "mean": 1.632
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 270,
+            "p95": 270,
+            "mean": 270
+          },
+          "triangles": {
+            "median": 1934921,
+            "p95": 1934921,
+            "mean": 1934921
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": true,
+          "detail": [
+            2
+          ],
+          "counters": {
+            "shadowUpdates": 0,
+            "brainUploads": 0,
+            "brainDraws": 71
+          }
+        },
+        {
+          "name": "arena-macro-running",
+          "frameMs": {
+            "median": 16.69,
+            "p95": 18.87,
+            "mean": 16.607
+          },
+          "cpuSubmitMs": {
+            "median": 0.93,
+            "p95": 1.35,
+            "mean": 0.973
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 270,
+            "p95": 355,
+            "mean": 298.806
+          },
+          "triangles": {
+            "median": 1934921,
+            "p95": 2207351,
+            "mean": 2027244.5
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": true,
+          "detail": [
+            2
+          ],
+          "counters": {
+            "shadowUpdates": 61,
+            "brainUploads": 25,
+            "brainDraws": 72
+          }
+        },
+        {
+          "name": "arena-flight-fixture",
+          "frameMs": {
+            "median": 16.67,
+            "p95": 20.36,
+            "mean": 16.616
+          },
+          "cpuSubmitMs": {
+            "median": 1.155,
+            "p95": 3.17,
+            "mean": 1.568
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 268,
+            "p95": 268,
+            "mean": 268
+          },
+          "triangles": {
+            "median": 1909369,
+            "p95": 1909369,
+            "mean": 1909369
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": true,
+          "detail": [
+            2
+          ],
+          "counters": {
+            "shadowUpdates": 0,
+            "brainUploads": 0,
+            "brainDraws": 72
+          }
+        },
+        {
+          "name": "arena-wide-paused",
+          "frameMs": {
+            "median": 16.475,
+            "p95": 19.99,
+            "mean": 16.655
+          },
+          "cpuSubmitMs": {
+            "median": 1.29,
+            "p95": 2.01,
+            "mean": 1.189
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 95,
+            "p95": 95,
+            "mean": 95
+          },
+          "triangles": {
+            "median": 69793,
+            "p95": 69793,
+            "mean": 69793
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": false,
+          "detail": [
+            0
+          ],
+          "counters": {
+            "shadowUpdates": 0,
+            "brainUploads": 0,
+            "brainDraws": 69
+          }
+        },
+        {
+          "name": "arena-social-paused",
+          "frameMs": {
+            "median": 16.665,
+            "p95": 19.405,
+            "mean": 16.649
+          },
+          "cpuSubmitMs": {
+            "median": 1.39,
+            "p95": 3.845,
+            "mean": 1.733
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 489,
+            "p95": 489,
+            "mean": 489
+          },
+          "triangles": {
+            "median": 638877,
+            "p95": 638877,
+            "mean": 638877
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": false,
+          "detail": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "counters": {
+            "shadowUpdates": 0,
+            "brainUploads": 0,
+            "brainDraws": 70
+          }
+        },
+        {
+          "name": "arena-social-running",
+          "frameMs": {
+            "median": 16.705,
+            "p95": 19.465,
+            "mean": 16.629
+          },
+          "cpuSubmitMs": {
+            "median": 1.725,
+            "p95": 3.38,
+            "mean": 1.893
+          },
+          "gpuMs": null,
+          "calls": {
+            "median": 493,
+            "p95": 918,
+            "mean": 630.078
+          },
+          "triangles": {
+            "median": 642653,
+            "p95": 1210088,
+            "mean": 843612.439
+          },
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+          "dpr": 1,
+          "viewport": [
+            1400,
+            900
+          ],
+          "ao": false,
+          "detail": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "counters": {
+            "shadowUpdates": 68,
+            "brainUploads": 25,
+            "brainDraws": 68
+          }
+        }
+      ],
+      "errors": []
+    },
+    "notes": [
+      "Production fly page: 1400x900 CSS pixels, Chrome 152/ANGLE Metal, M4 Pro, 300 warm frames per view, device scale 1.",
+      "The default, head and flight views retain 1,169,030 body triangles plus instanced hairs. The diffuse bake replaces screen-space AO.",
+      "The 9,261,127-byte mesh includes the original sampler, subdivided geometry and body/hair lighting. No fly photographs load.",
+      "Retina sample: 8 seconds warmup then 180 frames, actual render density reported separately from device scale.",
+      "Baked diffuse lighting follows the fixed studio/rest pose. Gloss, wings and camera interaction are live; pose-dependent self-shadowing and female scattering remain approximations.",
+      "Arena regression checks use its dynamic-lighting appearance and verify all five workers advance; these are render FPS measurements, not neural throughput."
+    ]
+  }
+}

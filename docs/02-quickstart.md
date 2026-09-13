@@ -13,7 +13,7 @@ npm run dev
 Then open:
 - `http://localhost:5173/` for the connectome viewer
 - `http://localhost:5173/arena.html` for the embodied arena
-- `http://localhost:5173/fly.html` for the anatomy viewer: the flybody body at full scan resolution with setae, wing interference colours and the compound eye's pseudopupil (mesh from `scripts/prep_fly_hd.py`)
+- `http://localhost:5173/fly.html` for the interactive Blender-prepared fly. Drag to orbit around the whole body; scroll or pinch to zoom. **Head detail** and **Full body** reposition the same 3D camera. Display controls change sex, wings, backdrop, setae and focus.
 
 The dev server sends the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers set in
 `vite.config.js`. Without them the arena cannot share memory between fly workers.
@@ -30,6 +30,10 @@ the [data pipeline](03-data-pipeline.md).
 5. Adjust **wind** and **light**. **+ ♀** adds a female; males detect and court her (the Courtship preset
    starts a pair).
 6. Click a fly to select it. Its brain activity appears in the inset, and its vital signs in the panel.
+
+Scroll closer to inspect the full-resolution scan anatomy: eye facets and pseudopupils,
+setae, sex-specific abdominal pigmentation and translucent iridescent wings. The arena chooses detail
+from the fly's size on screen. The anatomy page also has macro focus and hover labels.
 
 The brain uses a WebGPU kernel when the browser provides WebGPU; append `?gpu=0` to the arena URL to force
 the WebAssembly kernel.

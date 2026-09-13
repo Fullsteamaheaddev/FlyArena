@@ -1,7 +1,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { createFlyAppearance, loadCuticleDetail } from './fly-appearance.js';
+import { RenderResolution } from './render-resolution.js';
 import { loadConnectome } from './data.js';
-import { DEFAULT_ENV, PRESETS } from './sim/world.js';
+import { PRESETS } from './sim/world.js';
 import { allocBrainMemory, MAX_FLIES } from './brainsetup.js';
 import { parseFlyVis } from './flyvis.js';
 import { buildGroups } from './sim/groups.js';
@@ -23,15 +30,16 @@ async function main() {
   const data = await loadConnectome(status);
   meta = data.meta;
   status('loading body model');
-  const [bm, xml, g, vj, vb, sz, sg, bp, wasmBytes, fvb, fvj, fvi, fvm, nmc] = await Promise.all([
+  const [bm, xml, g, vj, vb, hj, hb, sz, sg, bp, wasmBytes, fvb, fvj, fvi, fvm, nmc, detail] = await Promise.all([
     fetch(`${BASE}data/bodymap.json`).then(r => r.json()), fetch(`${BASE}body/fly_physics.xml`).then(r => r.text()), fetch(`${BASE}body/gait.json`).then(r => r.json()),
     fetch(`${BASE}body/fly_visual.json`).then(r => r.json()), fetch(`${BASE}body/fly_visual.bin`).then(r => r.arrayBuffer()),
+    fetch(`${BASE}body/fly_hd.json`).then(r => r.json()), fetch(`${BASE}body/fly_hd.bin`).then(r => r.arrayBuffer()),
     fetch(`${BASE}data/neuron_size.bin`).then(r => r.arrayBuffer()), fetch(`${BASE}data/ntsign.bin`).then(r => r.arrayBuffer()),
     fetch(`${BASE}data/brain_params.json`).then(r => r.ok ? r.json() : {}).catch(() => ({})), fetch(`${BASE}lif.wasm`).then(r => r.arrayBuffer()),
     fetch(`${BASE}vision/flyvis.bin`).then(r => r.arrayBuffer()), fetch(`${BASE}vision/flyvis.json`).then(r => r.json()), fetch(`${BASE}vision/flyvis_inputs.json`).then(r => r.json()), fetch(`${BASE}vision/flyvis_map.json`).then(r => r.json()),
-    fetch(`${BASE}data/neuromod.json`).then(r => r.ok ? r.json() : null).catch(() => null)]);
+    fetch(`${BASE}data/neuromod.json`).then(r => r.ok ? r.json() : null).catch(() => null), loadCuticleDetail(`${BASE}body/cuticle_detail.png`)]);
   const vision = { model: parseFlyVis(fvb, fvj, fvi), map: fvm };
-  bodymap = bm; flyXML = xml; gait = g; visual = { json: vj, bin: vb };
+  bodymap = bm; flyXML = xml; gait = g; visual = createFlyAppearance(hj, hb, { json: vj, bin: vb }, detail);
   shared = { N: data.N, E: data.E, indptr: toShared(data.indptr), indices: toShared(data.indices), weights: toShared(data.weights), nt: toShared(data.nt),
     side: toShared(data.side), superclass: toShared(data.superclass), cls: toShared(data.cls), size: toShared(new Float32Array(sz)), sign: toShared(new Float32Array(sg)) };
   brainParams = { ...bp, neuromod: !!(bp.neuromod && nmc) };
@@ -51,38 +59,71 @@ async function main() {
   else { await addFly([st0[0], st0[1]], st0[2]);
     for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
-  window.__arena = { camera, controls, flies, env, THREE };
+  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, addFly, rebuildEnv };
   animate();
 }
 
 // ---------------- scene ----------------
-let renderer, scene, camera, controls, envGroup, raycaster, floorMesh;
+let renderer, scene, camera, controls, envGroup, raycaster, floorMesh, sun, composer, gtao, resolution;
+let shadowDirty = true, lastShadow = -Infinity, shadowExtent = 0, lastBrainDraw = 0, brainDirty = true;
+let brainColorFly = -1, brainColorHover = -2;
+const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint = new THREE.Vector3();
+const viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4(), flyBounds = new THREE.Sphere(new THREE.Vector3(), 0.24);
+const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0, brainUploads: 0, brainDraws: 0 };
 let brainRenderer, brainScene, brainCam, brainPts, brainAct;
 function buildScene(data) {
-  renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
-  renderer.shadowMap.enabled = true;
+  renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
+  resolution = new RenderResolution(() => resize());
+  renderer.setPixelRatio(resolution.ratio); renderer.setSize(innerWidth, innerHeight);
+  renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;
+  renderer.info.autoReset = false;
   scene = new THREE.Scene(); scene.background = new THREE.Color('#0b0e14');
-  camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.01, 100); camera.up.set(0, 0, 1);
+  scene.matrixAutoUpdate = false;
+  const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment();
+  scene.environment = pmrem.fromScene(room, 0.04).texture; scene.environmentIntensity = 0.24;
+  room.dispose(); pmrem.dispose();
+  camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, 100); camera.up.set(0, 0, 1);
   camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
-  scene.add(new THREE.HemisphereLight('#dde6ff', '#3a3020', 1.1));
-  const sun = new THREE.DirectionalLight('#ffffff', 1.6); sun.position.set(3, 2, 8); sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 20 }); scene.add(sun);
+  controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5;
+  scene.add(new THREE.HemisphereLight('#f4f2ed', '#514432', 0.22));
+  sun = new THREE.DirectionalLight('#fff1da', 2.7); sun.position.set(3, 2, 8); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.00002; sun.shadow.normalBias = 0.0003; sun.shadow.radius = 2;
+  Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.1, far: 20 }); scene.add(sun, sun.target);
+  const rim = new THREE.DirectionalLight('#f9e5c4', 0.65); rim.position.set(-3, -2, 3); scene.add(rim);
+  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, rt); composer.addPass(new RenderPass(scene, camera));
+  gtao = new GTAOPass(scene, camera, 1, 1);
+  gtao.updateGtaoMaterial({ radius: 0.012, distanceExponent: 1.5, thickness: 0.6, scale: 1, samples: 8 });
+  composer.addPass(gtao); composer.addPass(new OutputPass());
+  // Only solid cuticle/environment surfaces belong in AO. Films, plume overlays and subpixel hairs do not.
+  const override = gtao._renderOverride, hidden = [];
+  gtao._renderOverride = function (...args) {
+    scene.traverseVisible(o => { if (o.isMesh && (o.isInstancedMesh || o.material.transparent)) { hidden.push(o); o.visible = false; } });
+    try { return override.apply(this, args); } finally { for (const o of hidden) o.visible = true; hidden.length = 0; }
+  };
+  function resize() {
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    renderer.setPixelRatio(resolution.ratio); renderer.setSize(innerWidth, innerHeight);
+    composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
+    gtao.setSize(Math.ceil(innerWidth * renderer.getPixelRatio() / 2), Math.ceil(innerHeight * renderer.getPixelRatio() / 2));
+    shadowDirty = true;
+  }
+  addEventListener('resize', () => { resolution.reset(); resize(); }); resize();
   envGroup = new THREE.Group(); scene.add(envGroup); rebuildEnv();
   raycaster = new THREE.Raycaster();
   renderer.domElement.addEventListener('pointerdown', e => { pd = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener('pointerup', e => { if (pd && Math.hypot(e.clientX - pd[0], e.clientY - pd[1]) < 4) onClick(e); });
-  addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
   // brain inset: soma point cloud colored by activity of the selected fly
   const bw = $('#brain').clientWidth || 358, bh = $('#brain').clientHeight || 220;
-  brainRenderer = new THREE.WebGLRenderer({ canvas: $('#brain'), antialias: false, alpha: true }); brainRenderer.setPixelRatio(devicePixelRatio);
+  brainRenderer = new THREE.WebGLRenderer({ canvas: $('#brain'), antialias: false, alpha: true }); brainRenderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   brainRenderer.setSize(bw, bh, false);
   brainScene = new THREE.Scene(); brainCam = new THREE.PerspectiveCamera(40, bw / bh, 1, 20000);
   const pos = new Float32Array(data.N * 3), col = new Float32Array(data.N * 3); const c = new THREE.Vector3(); let n = 0;
   for (let i = 0; i < data.N; i++) { const x = data.soma[i * 3]; if (!Number.isFinite(x)) { pos[i * 3] = 1e6; continue; } pos[i * 3] = x * 8e-3; pos[i * 3 + 1] = data.soma[i * 3 + 1] * 8e-3; pos[i * 3 + 2] = data.soma[i * 3 + 2] * 8e-3; c.x += pos[i * 3]; c.y += pos[i * 3 + 1]; c.z += pos[i * 3 + 2]; n++; }
   c.divideScalar(n); for (let i = 0; i < data.N; i++) { pos[i * 3] -= c.x; pos[i * 3 + 1] -= c.y; pos[i * 3 + 2] -= c.z; col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = 0.12; }
-  const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); bg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); bg.setAttribute('color', new THREE.BufferAttribute(col, 3).setUsage(THREE.DynamicDrawUsage));
   brainPts = new THREE.Points(bg, new THREE.PointsMaterial({ size: 1.3, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false }));
   brainPts.rotation.x = Math.PI; brainScene.add(brainPts);
   hlPts = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, transparent: true, opacity: 1, depthWrite: false, depthTest: false }));
@@ -92,12 +133,14 @@ function buildScene(data) {
 let pd = null;
 function discMesh(r, color, opacity = 1, z = 0.0015) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color, transparent: opacity < 1, opacity, roughness: 0.8 })); m.position.z = z; m.receiveShadow = true; return m; }
 function rebuildEnv() {
-  envGroup.clear();
+  // Placement rebuilds own their resources; release old GPU buffers/textures before replacing them.
+  envGroup.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
+  envGroup.clear(); shadowDirty = true;
   const R = env.arena.radius;
   // floor: same 0.4 cm checker the flies' eyes see
   const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d');
   for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { cx.fillStyle = ((i + j) & 1) ? '#9c907a' : '#6f6554'; cx.fillRect(i * 32, j * 32, 32, 32); }
-  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set((R + 0.2) * 2 / 0.8, (R + 0.2) * 2 / 0.8); tex.magFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace;
+  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set((R + 0.2) * 2 / 0.8, (R + 0.2) * 2 / 0.8); tex.magFilter = THREE.LinearFilter; tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); tex.colorSpace = THREE.SRGBColorSpace;
   floorMesh = new THREE.Mesh(new THREE.CircleGeometry(R + 0.1, 96), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
   floorMesh.receiveShadow = true; envGroup.add(floorMesh);
   // striped wall (24 stripes), matching the visual environment used for the compound eye
@@ -117,56 +160,43 @@ function rebuildEnv() {
     const m = new THREE.Mesh(new THREE.CircleGeometry(o.sigma * 2.2, 48), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(g), transparent: true, depthWrite: false }));
     m.position.set(o.x, o.y, 0.004); envGroup.add(m); }
 }
-function buildFlyMesh(color) {
-  const group = new THREE.Group(); const bodies = {};
-  const { json, bin } = visual;
-  const mats = new Map();
-  for (const p of json.parts) {
-    let b = bodies[p.body]; if (!b) { b = bodies[p.body] = new THREE.Group(); group.add(b); }
-    const pos = new Float32Array(bin, p.vOff, p.vCount * 3), idx = new Uint32Array(bin, p.iOff, p.iCount);
-    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setIndex(new THREE.BufferAttribute(idx, 1)); geo.computeVertexNormals();
-    const key = p.rgba.join(',');
-    let mat = mats.get(key); if (!mat) { const [r, g2, b2, a] = p.rgba; mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r, g2, b2), transparent: a < 0.99, opacity: a, roughness: 0.55, metalness: 0.05, side: a < 0.99 ? THREE.DoubleSide : THREE.FrontSide }); mats.set(key, mat); }
-    const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = true; b.add(mesh);
-  }
-  // selection ring
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.18, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
+function buildFlyMesh(color, sex) {
+  const appearance = visual.instantiate(sex);
+  // Fine ground marker leaves the legs and contact shadow readable at macro scale.
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.175, 0.177, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false }));
   scene.add(ring);
-  return { group, bodies, ring };
+  return { ...appearance, ring };
 }
 
-// beating wings: at 218 Hz a wing sweeps its whole stroke every 4.6 ms, far faster than any frame, so a flying
-// fly is drawn with faint copies of each wing across the stroke cycle (poses from the worker), like motion blur
+// One instanced draw per wing film across the sampled beat cycle. Poses are thorax-local and immutable.
+const blurMaterial = new THREE.MeshStandardMaterial({ color: '#c0c7ce', transparent: true, opacity: 0.035, depthWrite: false, side: THREE.DoubleSide, roughness: 0.35 });
+blurMaterial.forceSinglePass = true;
 function buildWingBlur(f, poses) {
   if (!poses) return;
+  const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(1, 1, 1);
   f.wingBlur = ['left', 'right'].map(sd => {
     const src = f.bodies[`wing_${sd}`]; if (!src) return null;
-    const ghosts = poses[sd].map(() => { const g = new THREE.Group();
-      src.traverse(o => { if (o.isMesh) g.add(new THREE.Mesh(o.geometry, new THREE.MeshStandardMaterial({ color: '#dfe6ee', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide, roughness: 0.4 }))); });
-      g.visible = false; f.group.add(g); return g; });
-    return { src, ghosts, poses: poses[sd] };
+    const film = f.meshes.find(m => m.name === `wing_${sd}_membrane`);
+    const blur = new THREE.InstancedMesh(film.userData.low, blurMaterial, poses[sd].length);
+    poses[sd].forEach((p, k) => { position.set(p[0], p[1], p[2]); rotation.set(p[4], p[5], p[6], p[3]); blur.setMatrixAt(k, matrix.compose(position, rotation, scale)); });
+    blur.computeBoundingSphere(); blur.visible = false; blur.renderOrder = 2; f.bodies.thorax.add(blur);
+    return { src, blur };
   });
 }
-const _tq = new THREE.Quaternion(), _rq = new THREE.Quaternion(), _v = new THREE.Vector3();
 function updateWingBlur(f, s) {
   if (!f.wingBlur) return;
-  const th = f.bodyNames.indexOf('thorax'), on = !!s.flying;
-  _tq.set(s.xquat[th * 4 + 1], s.xquat[th * 4 + 2], s.xquat[th * 4 + 3], s.xquat[th * 4]);
-  for (const w of f.wingBlur) { if (!w) continue; w.src.visible = !on;
-    w.ghosts.forEach((g, k) => { g.visible = on; if (!on) return; const p = w.poses[k];
-      _v.set(p[0], p[1], p[2]).applyQuaternion(_tq); g.position.set(s.xpos[th * 3] + _v.x, s.xpos[th * 3 + 1] + _v.y, s.xpos[th * 3 + 2] + _v.z);
-      _rq.set(p[4], p[5], p[6], p[3]); g.quaternion.copy(_tq).multiply(_rq); }); }
+  for (const w of f.wingBlur) if (w) { w.src.visible = !s.flying; w.blur.visible = !!s.flying; }
 }
 
 // ---------------- flies ----------------
 let nextId = 0;
 async function addFly(pos, yaw, sex = 'm') {
+  if (nextId >= MAX_FLIES) { alert(`At most ${MAX_FLIES} flies`); return; }
   const id = nextId++; const color = FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
-  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color) };
+  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
   scene.add(f.group); flies.push(f);
   worker.onmessage = e => onWorker(f, e.data);
-  if (id >= MAX_FLIES) { alert(`At most ${MAX_FLIES} flies`); return; }
   worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: 7, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: true, sex,
     brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap });
   await new Promise(res => { f.onReady = res; });
@@ -177,12 +207,14 @@ async function addFly(pos, yaw, sex = 'm') {
 function onWorker(f, m) {
   if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
-    f.prev = f.last; f.last = m; f.recvAt = performance.now();
+    f.prev = f.last; f.last = m; shadowDirty = true; f.recvAt = performance.now();
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
     broadcastOthers();
-  } else if (m.type === 'activity') { if (f.id === selected) { brainAct.set(m.trace); onActivity(f, m); } }
+  } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
+    f.activityTime = m.t; brainAct.set(m.trace); brainDirty = true; onActivity(f, m);
+  }
 }
-let foodDirty = false, lastEnvSync = 0, lastOthers = 0;
+let foodDirty = false, lastOthers = 0;
 function broadcastOthers() {
   const now = performance.now(); if (now - lastOthers < 20) return; lastOthers = now;
   for (const f of flies) { if (!f.ready) continue; f.worker.postMessage({ type: 'others', others: flies.filter(o => o !== f && o.last && o.last.alive !== false).map(o => ({ x: o.last.pos[0], y: o.last.pos[1], z: o.last.pos[2], yaw: o.last.yaw, sex: o.sex })) }); }
@@ -200,7 +232,7 @@ function buildUI() {
   $('#mode').onchange = e => { for (const f of flies) f.worker.postMessage({ type: 'mode', mode: e.target.value }); };
   document.querySelectorAll('.tools button').forEach(b => b.onclick = () => { tool = b.dataset.tool; document.querySelectorAll('.tools button').forEach(x => x.classList.toggle('on', x === b)); });
   setupFolds();
-  setInterval(() => { const f = flies.find(x => x.id === selected); if (f?.ready && !$('#brainpanel').classList.contains('folded')) f.worker.postMessage({ type: 'activity' }); }, 120);
+  setInterval(() => { const f = flies.find(x => x.id === selected); if (!document.hidden && f?.ready && !$('#brainpanel').classList.contains('folded')) f.worker.postMessage({ type: 'activity' }); }, 120);
   $('#wind').oninput = e => { const v = +e.target.value; $('#windv').textContent = v; env.wind = [v, 0]; syncEnv(); };
   $('#light').oninput = e => { env.light.sky = +e.target.value; scene.background = new THREE.Color().setHSL(0.6, 0.3, 0.02 + 0.05 * env.light.sky); syncEnv(); };
   $('#threat').onclick = () => launchThreat();
@@ -210,7 +242,7 @@ function buildUI() {
 function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
   // select a fly?
-  for (const f of flies) { const hit = raycaster.intersectObject(f.group, true); if (hit.length) { selected = f.id; renderFlyList(); return; } }
+  for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); return; } }
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
   if (tool === 'food') { env.food.push({ x: p.x, y: p.y, r: 0.25, sugar: 1, bitter: 0, water: 0.2, amount: 5 }); env.odors.push({ x: p.x, y: p.y, odor: 'vinegar', strength: 0.8, sigma: 0.7 }); }
@@ -300,36 +332,85 @@ function updateThreat() {
   if (!threatAnim) return;
   const u = Math.min(1, (performance.now() - threatAnim.t0) / threatAnim.dur), k = u * u;   // accelerating approach
   const pos = threatAnim.start.map((s, i) => s + (threatAnim.end[i] - s) * k);
-  if (u >= 1 && performance.now() - threatAnim.t0 > threatAnim.dur + 600) { threatAnim = null; env.threat = null; threatMesh.visible = false; syncEnv(); return; }
+  if (u >= 1 && performance.now() - threatAnim.t0 > threatAnim.dur + 600) { threatAnim = null; env.threat = null; threatMesh.visible = false; shadowDirty = true; syncEnv(); return; }
   threatMesh.visible = true; threatMesh.position.set(...pos); env.threat = { x: pos[0], y: pos[1], z: pos[2] };
   for (const fl of flies) if (fl.ready) fl.worker.postMessage({ type: 'env', env: { threat: env.threat } });
 }
 // ---------------- render loop ----------------
 let lastFrame = performance.now(), fpsN = 0, fpsT = 0, lastSim = 0, lastSimReal = performance.now();
-const q = new THREE.Quaternion();
+const q = new THREE.Quaternion(), followDelta = new THREE.Vector3(), brainBase = new THREE.Color();
+function updateShadows(now) {
+  const extent = Math.min(env.arena.radius + 0.5, Math.max(0.35, camera.position.distanceTo(controls.target) * 0.75));
+  const center = controls.target;
+  // Quantise camera following to avoid constantly shifting the shadow texels.
+  if (Math.abs(extent - shadowExtent) > Math.max(0.04, extent * 0.1) || center.distanceToSquared(shadowCenter) > (extent * 0.06) ** 2) {
+    shadowExtent = extent; shadowCenter.copy(center);
+    sun.target.position.copy(center); sun.position.copy(center).add(shadowOffset);
+    Object.assign(sun.shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent });
+    sun.shadow.camera.updateProjectionMatrix(); shadowDirty = true;
+  }
+  if (shadowDirty && now - lastShadow >= 1000 / 30) {
+    renderer.shadowMap.needsUpdate = true; shadowDirty = false; lastShadow = now; metrics.shadowUpdates++;
+  }
+}
+const shadowOffset = new THREE.Vector3(3, 2, 8);
 function animate() {
   requestAnimationFrame(animate);
+  if (document.hidden) return;
   const now = performance.now(); fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
   for (const f of flies) {
     const s = f.last; if (!s || !f.bodyGroups) continue;
-    for (let b = 1; b < f.bodyGroups.length; b++) { const g = f.bodyGroups[b]; if (!g) continue;
-      g.position.set(s.xpos[b * 3], s.xpos[b * 3 + 1], s.xpos[b * 3 + 2]); q.set(s.xquat[b * 4 + 1], s.xquat[b * 4 + 2], s.xquat[b * 4 + 3], s.xquat[b * 4]); g.quaternion.copy(q); }
-    f.ring.position.set(s.pos[0], s.pos[1], 0.003); f.ring.visible = f.id === selected;
-    updateWingBlur(f, s);
+    if (f.drawnPose !== s) {
+      shadowDirty = true;
+      for (let b = 1; b < f.bodyGroups.length; b++) { const g = f.bodyGroups[b]; if (!g) continue;
+        g.position.set(s.xpos[b * 3], s.xpos[b * 3 + 1], s.xpos[b * 3 + 2]);
+        q.set(s.xquat[b * 4 + 1], s.xquat[b * 4 + 2], s.xquat[b * 4 + 3], s.xquat[b * 4]); g.quaternion.copy(q); g.updateMatrix();
+      }
+      f.ring.position.set(s.pos[0], s.pos[1], 0.003);
+      updateWingBlur(f, s); f.drawnPose = s;
+    }
+    f.ring.visible = f.id === selected;
   }
   const sf = flies.find(x => x.id === selected);
-  if (sf?.last && $('#follow').checked) { const p = sf.last.pos; const tgt = new THREE.Vector3(p[0], p[1], 0.08); const d = tgt.clone().sub(controls.target); controls.target.add(d.multiplyScalar(0.1)); camera.position.add(d); }
+  if (sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   if (sf?.last) { const t = sf.last.t / 1000; $('#simt').textContent = t.toFixed(2); if (now - lastSimReal > 1000) { $('#rt').textContent = ((t - lastSim) / ((now - lastSimReal) / 1000)).toFixed(2); lastSim = t; lastSimReal = now; } }
-  updateThreat(); controls.update(); renderer.render(scene, camera);
-  // brain inset (skipped while the brain panel is folded)
-  if ($('#brainpanel').classList.contains('folded')) return;
-  const col = brainPts.geometry.attributes.color; const a = col.array; const base = new THREE.Color(sf?.color || '#888');
-  const dim = hover >= 0 ? 0.08 : 1;   // fade the rest of the brain while a group is highlighted
-  for (let i = 0; i < brainAct.length; i++) { const v = Math.min(1, brainAct[i] * 1.6); a[i * 3] = dim * (0.1 + v * (base.r - 0.1)); a[i * 3 + 1] = dim * (0.11 + v * (base.g - 0.11)); a[i * 3 + 2] = dim * (0.14 + v * (base.b - 0.14)); }
+  updateThreat(); controls.update();
+  camera.updateMatrixWorld();
+  viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  let largest = 0;
+  const projection = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  for (const f of flies) {
+    if (!f.last) continue;
+    flyBounds.center.fromArray(f.last.pos);
+    viewPoint.fromArray(f.last.pos).applyMatrix4(camera.matrixWorldInverse);
+    const pixels = viewPoint.z < 0 && viewFrustum.intersectsSphere(flyBounds) ? 0.3 * projection / Math.max(0.05, -viewPoint.z) : 0;
+    largest = Math.max(largest, pixels);
+    if (f.setDetail(pixels)) shadowDirty = true;
+  }
+  gtao.enabled = largest > (gtao.enabled ? 290 : 330);
+  resolution.update(now, gtao.enabled);
+  if (threatAnim) shadowDirty = true;
+  updateShadows(now);
+  renderer.info.reset(); const renderStart = performance.now(); composer.render();
+  metrics.renderMs = performance.now() - renderStart; metrics.calls = renderer.info.render.calls; metrics.triangles = renderer.info.render.triangles;
+  // The trace arrives at ~8 Hz. Upload colours only when the trace, selection or highlight changes.
+  // Rotate/draw the inset at 30 Hz independently from the main camera.
+  if ($('#brainpanel').classList.contains('folded') || now - lastBrainDraw < 1000 / 30) return;
+  const elapsed = Math.min(0.1, (now - lastBrainDraw) / 1000); lastBrainDraw = now;
+  if (brainDirty || brainColorFly !== selected || brainColorHover !== hover) {
+    const col = brainPts.geometry.attributes.color, a = col.array;
+    brainBase.set(sf?.color || '#888'); const dim = hover >= 0 ? 0.08 : 1;
+    for (let i = 0; i < brainAct.length; i++) {
+      const v = Math.min(1, brainAct[i] * 1.6);
+      a[i * 3] = dim * (0.1 + v * (brainBase.r - 0.1)); a[i * 3 + 1] = dim * (0.11 + v * (brainBase.g - 0.11)); a[i * 3 + 2] = dim * (0.14 + v * (brainBase.b - 0.14));
+    }
+    col.needsUpdate = true; brainDirty = false; brainColorFly = selected; brainColorHover = hover; metrics.brainUploads++;
+  }
   if (hover !== hlShown) showGroupInInset(hover);
-  col.needsUpdate = true; brainPts.rotation.y += 0.002; hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam);
+  brainPts.rotation.y += elapsed * 0.12; hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
+
 }
-main().catch(e => { status('error: ' + e.message); console.error(e); });
+main().catch(e => { if ($('#status')) status('error: ' + e.message); console.error(e); });
 
 // side panels fold to their title bar (chevron button, or the [ and ] keys); the choice persists
 function setupFolds() {

@@ -15,9 +15,11 @@ It acts only as synaptic input to identified descending neurons ([docs/23-behavi
 - `structures.html` – the algorithmic structures of the connectome: ring attractor, expansion coding, convolution kernels, motif census ([docs/28-algorithmic-structures.md](docs/28-algorithmic-structures.md)).
 - `arena.html` – the embodied arena: add flies (male or female), place sugar, odour, bitter patches, heat,
   blocks; launch a looming threat or activate a fly's takeoff neurons; change wind and light; follow a fly
-  and watch its brain in the inset. `[` and `]` fold the side panels.
-- `fly.html` – the anatomy viewer: the flybody scan at full resolution with added setae, sex comb, tergite
-  pigmentation, wing thin-film colours and the eye's pseudopupil; male or female, wings folded, spread or flying.
+  and watch its brain in the inset. Zoom in for the full scan, setae, eye facets and wing interference;
+  detail scales down with distance. `[` and `]` fold the side panels.
+- `fly.html` – an interactive 3D fly with Blender-subdivided geometry, baked Cycles lighting and live
+  eye reflections, setae, sex comb, abdominal bands and wing interference; male or female,
+  wings folded, spread or flying. [Blender scenes and rendering workflow](art/fly/README.md).
 
 ## Run
 ```sh
