@@ -1,155 +1,79 @@
-# Introduction: What Does a Wiring Diagram Actually Compute?
+# What Does a Wiring Diagram Actually Compute?
 
-## The question
+Imagine being handed a map of every road in a country. The map is extraordinarily detailed. It includes the narrow lane behind a house, the motorway connecting two cities, and the junction where several routes meet. You can answer questions that were previously impossible to ask. You can find bottlenecks, identify isolated regions, and work out where a new bridge would make the largest difference. But the map does not tell you where people will drive tomorrow morning. For that you need to know something about the people, their destinations, the traffic rules, and the conditions on the road.
 
-A few years ago, "the complete connectome of a fly" was an aspiration. Today it is a
-file. The male *Drosophila* central nervous system, as reconstructed by Janelia FlyEM and
-Google Research, is 165,122 neurons and 104 million synapses, and the whole graph loads
-into memory on a laptop in a few seconds. So the obvious next question is: now that we
-have it, what does it *compute*?
+A connectome creates a similar opportunity in neuroscience. It is a reconstruction of neurons and their connections, detailed enough to let us follow pathways through a nervous system. The male fruit-fly dataset used in this project contains 165,122 neurons in its packed representation. After the project's connection threshold is applied, the graph contains about 10.5 million connections accounting for 104 million reconstructed synaptic contacts. These are measurements of a particular representation of a particular animal, rather than a universal specification of a fly.
 
-I want to be precise about what I mean by this, because there is a weak version of the
-question and a strong version, and most of the interesting content is in the difference.
+The immediate temptation is to load the graph into a simulator and press play. That is a reasonable experiment. We will do it. But there is a question to settle before deciding what its output means: how much of the resulting behaviour came from the wiring, and how much came from the choices required to make the wiring executable?
 
-The weak version is: given recordings of neurons, what do they correlate with? This is a
-good question and neuroscience has excellent tools for it. But it is not the question a
-wiring diagram lets you ask for the first time.
+A synapse count has to become an electrical effect. A neuron has to acquire a threshold, a resting potential, and a rule for integrating its inputs. Some neurons communicate through spikes; others carry graded signals. A body has to turn neural activity into forces, and sensors have to turn light, contact, and chemical concentration back into neural activity. Each choice supplies information. Some of that information comes from experiments. Some comes from mathematical convenience. Some remains an educated guess.
 
-The strong version is: given *only* the wiring, with no recordings at all, can you recover
-the algorithm? Can you say which cell populations form a continuous attractor, which ones
-rotate a vector, which ones implement an associative memory? And can you say it in the
-only form that can actually be tested, namely as a prediction of what happens when you
-silence a specific named cell type?
+This book follows an attempt to make those choices visible. Its central object is the space of candidate computations that survives after we account for what the wiring actually constrains.
 
-This book is about a project that tries to answer the strong version, and about what it
-found. The short summary of what it found is: the wiring gets you surprisingly far, it
-gets you less far than the wiring itself seems to promise, and the size of that gap is
-one of the most useful numbers you can compute.
+## From a map to a hypothesis
 
-## Thinking of it as a compiler
+Consider a group of neurons arranged around a circle. Nearby neurons excite one another, while a second population suppresses activity on the opposite side. It is natural to suspect that the circuit can maintain a localised patch of activity. The position of that patch could represent an angle: which direction the animal faces, for example.
 
-The mental model the project uses is that of a compiler, and I think the analogy is worth
-taking seriously rather than treating as a slogan.
+Already we have crossed several boundaries. The arrangement around a circle is an anatomical observation. The excitation and inhibition depend partly on transmitter assignments and receptor assumptions. The stable patch is a dynamical hypothesis. The interpretation of its position as heading is a hypothesis about representation. These statements support one another, but they are different statements.
 
-A compiler does not understand a program by reading it once. It lowers the source into an
-intermediate representation, runs a series of analysis passes over that representation,
-and emits artifacts that can be executed and checked. Each stage is narrow and testable
-on its own. The pipeline here does the same thing to a nervous system:
+To see why the distinction matters, keep the connections fixed and lower the excitatory gain. The patch may disappear as soon as the input stops. Raise the gain too far and activity may spread around the whole circle. Change the resting excitability and the same graph may alternate between silence and a persistent patch. None of these outcomes changes which neurons are connected.
 
-```
-biology
-  -> canonical neural IR
-  -> motifs and structural signatures
-  -> candidate operators
-  -> ensembles of executable models
-  -> ranked discriminating experiments
-  -> validated models and reduced algorithms
-  -> engineering benchmarks
-```
+The wiring has narrowed the possibilities. It has made a heading memory plausible and supplied a geometric explanation for it. It has not selected an operating point. A useful analysis should therefore return more than an attractive simulation. It should describe where the candidate computation appears, which assumptions it needs, and what could distinguish it from a different computation using the same connections.
 
-The connectome is lowered to a species-agnostic intermediate representation (the same
-loader also reads the worm). Analysis passes detect candidate *operators*: the
-computational primitives the wiring appears to implement. Each operator becomes not a
-model but a *family* of executable models, one per setting of the parameters the wiring
-does not fix. And the disagreements inside that family become the product: a ranked list
-of experiments that would tell the family members apart.
+That is the motivation for treating connectomics as a problem of constrained inference. We start with anatomy, propose a family of dynamical models, and ask what remains true as the unmeasured quantities vary. When the models disagree, we ask which intervention would make that disagreement observable.
 
-The reason the analogy matters is that it tells you where to be suspicious. A compiler
-pass that silently assumes something about the source is a bug. Likewise, a dynamics stage
-that silently re-imports an assumption about the structure is a bug, and a lot of the
-discipline in this book is about catching that.
+## Why the compiler analogy helps
 
-## Two very different ways to run the same graph
+A compiler turns a program written in one language into something that can run in another. It usually does this through intermediate representations: simplified descriptions that make particular properties easier to analyse. A compiler can check types before allocating registers because the two tasks need different views of the same program.
 
-The project actually runs the connectome in two ways, and they fail in different places,
-which is the point.
+The project uses a related organisation. It first turns the connectome into a common graph representation. It measures recurrence, inhibition, convergence, and spatial organisation. It interprets combinations of those measurements as candidate computational operators. Each supported operator can then be connected to a specification of model parameters, stimuli, observables, and perturbations. An execution stage runs the resulting ensemble and records how its members differ.
 
-The first way is the compiler proper. You analyse the graph structurally, you build small
-circuit-level model ensembles (tens of models, each with a few hundred to a few thousand
-cells), and for one circuit you also build a continuous field model. This is Parts I to
-III. It produces sharp claims about specific circuits and specific experiments.
+There is a limit to the analogy. An ordinary compiler begins with a program whose semantics are already defined. A connectome does not arrive with such a definition. No language specification tells us that a particular reciprocal loop must store a memory or compare two choices. The inferred computation is part of what we are trying to learn.
 
-The second way is to run the whole thing. All 165,122 neurons as conductance-based
-integrate-and-fire units, inside a physics-simulated body with a compound eye, taste,
-touch, smell and heat, in a web browser. This is Chapter 14. It produces a different kind
-of evidence: which behaviours the raw wiring supports once it is embodied, and which
-behaviours had to be supplied by code that lives outside the graph.
+It is therefore helpful to think of the system as a decompiler that produces hypotheses. It tries to recover candidate computations from the physical organisation of a machine, while retaining the uncertainty that ordinary decompilation often hides. The product is a set of executable possibilities and a way to investigate them.
 
-If you only did the first, you could fool yourself into thinking that a circuit-level
-success generalises. If you only did the second, you could not tell *why* anything works
-or fails. Doing both is more work but it is the only way to get an honest picture.
+This organisation also makes errors easier to locate. If an analysis reports a circular structure, we should be able to inspect the positional mapping that produced the circle. If a model uses inhibitory connections, we should be able to recover the sign convention. If an experiment is ranked highly, we should be able to see the particular members and outcome categories responsible for its score. The chain of reasoning should survive inspection at every stage.
 
-## Why start with the heading circuit
+## What counts as agreement
 
-The first circuit worked end-to-end is the fly's heading system in the central complex:
-the ring attractor formed by the EPG, Delta7, PEG and PEN neurons. The reason is simple.
-It is the best-understood circuit in any complete connectome. Physiologists already know
-it holds a bump of activity that encodes heading, they have imaged it, they have perturbed
-it, and they have written down what happened.
+Suppose two models follow the same moving landmark. Their decoded heading traces overlap almost perfectly. It would be easy to treat them as equivalent explanations of the circuit.
 
-That makes it a calibration instrument. The test is:
+Now suppose one maintains its estimate through strong local recurrence, while the other is continuously refreshed by external input. Remove the landmark and the models separate. Or suppose both remember heading in darkness, but one depends on an inhibitory population that the other can lose without difficulty. Silencing that population separates them even when the original task does not.
 
-> Can the machinery recover a known computation from structure plus limited functional
-> evidence, without the answer being written into the detection rules?
+Agreement on behaviour is therefore only one kind of agreement. Neural activity can reveal differences that a behavioural score hides, and perturbations can reveal differences that ordinary activity hides. A convincing explanation should make contact with all of them, at the level of detail relevant to its claim.
 
-If it fails here, nothing else it says can be trusted. If it succeeds *and* can say where
-it is uncertain, then the same machinery can be pointed at circuits nobody understands
-yet, and its uncertainty statements there mean something.
+This does not mean every model must reproduce every spike. A model of heading estimation may reasonably compress thousands of spikes into one angle. But the compression should preserve the distinctions we care about. If two mechanisms make different predictions about bump width after inhibition is reduced, a single heading-error score cannot settle the dispute.
 
-## What a good answer looks like
+The ensemble approach uses these differences constructively. Rather than asking which parameter setting makes the most appealing demonstration, it asks which candidate experiment divides the sampled models into different outcomes. The first implementation uses a simple, unweighted pair-separation score. That is a starting point for experimental design, with important limitations that we will examine. It is not yet a calculation of the best experiment an animal laboratory should perform.
 
-Let me be explicit about what the pipeline is designed to output, because it is
-not a simulation and it is not a single model. It is a statement like this one:
+## The three circuits
 
-> Across the parameterizations the wiring permits, this circuit supports a
-> low-dimensional heading state, but only in a narrow gain regime. Three mechanisms
-> remain compatible with baseline activity. Silencing this cell type distinguishes them.
+The investigation begins with the heading circuit in the central complex. This is a useful starting point because anatomy and physiology have already given it a substantial interpretation. A localised activity bump tracks heading, and several named populations participate in stabilising and updating it. The project can ask whether its structural analysis recovers the relevant organisation and whether its models reproduce particular responses.
 
-To get there, the project tracks three different kinds of agreement between models and
-refuses to conflate them:
+A known circuit is an unusually demanding test if we resist putting the answer into the detector. It lets us separate rediscovering an anatomical pattern from predicting a physiological outcome. It also exposes the temptation to use familiar biology as background knowledge and then quietly count agreement with that same biology as validation.
 
-1. **Task-performance agreement.** The models solve the same problem.
-2. **Neural-response agreement.** The models' population activity matches.
-3. **Perturbation-prediction agreement.** The models break the same way.
+The second circuit connects PFN neurons to hΔB neurons in the fan-shaped body. Here the candidate computation is a transformation between spatial representations. The wiring contains systematic column offsets, which suggest a shifted output. The experiment asks whether the dynamical response behaves like a fixed shift and whether recurrent pathways are required to produce it.
 
-Models very often agree on (1) while disagreeing completely on (3). That asymmetry is not
-a nuisance, it is the resource the whole method runs on: find the perturbation where the
-surviving hypotheses diverge the most, rank it, and go check it against real data.
+The third circuit is the mushroom body. Its expansion into Kenyon cells, extensive inhibitory feedback, and compartmental output suggest a family of memory-related computations. The implemented experiment is narrower: it probes response separation and gain under direct Kenyon-cell stimulation. It does not exercise the full sensory expansion, and it does not train and retrieve an association. Recognising that boundary turns out to be essential to interpreting its negative result.
 
-## How the book is organised
+Together these cases test different kinds of observable. Heading lives on a circle. The PFN experiment uses a column coordinate. The mushroom-body probe compares patterns of activity without requiring a spatial axis. This variety makes it harder for the machinery to succeed merely because every question has been made to resemble the first one.
 
-Part I is about the data and what you can learn from the graph before running any
-dynamics. Chapter 2 covers the connectome as a data structure and the intermediate
-representation. Chapter 3 covers the generic structural passes: flow, sign, motifs,
-spectrum, and a cross-species comparison against the worm. Chapter 4 walks through the
-circuits region by region.
+## The body as an integration test
 
-Part II is the method. Chapter 5 presents the operator catalogue, twelve detected
-computational primitives with their evidence and their counterevidence. Chapter 6 explains
-why a connectome constrains a family of models rather than a model, and how a family gets
-turned into a ranked experiment list.
+A second branch of the project connects the neural simulation to a fly body with physical joints, muscles, and senses. This branch is visually compelling, but its scientific role is easiest to understand as an integration test.
 
-Part III works three circuits in detail. Chapters 7 to 9 cover the heading circuit as a
-spiking ensemble, as a continuous field, and then the argument between the two, which
-published data settled. Chapter 10 covers the PFN to hΔB vector shift, where the wiring
-overstates. Chapter 11 covers the mushroom body, where the method returns a negative.
+A circuit can behave sensibly under an isolated stimulus and become unstable when its output changes its own input. A moving foot produces touch. A turn produces optic flow. A grooming leg can enter the visual field. Once those loops close, a model must distinguish an external event from a consequence of its own action, or tolerate the consequences of failing to distinguish them.
 
-Part IV assesses. Chapter 12 benchmarks the decompiled heading estimator against standard
-filters, with the baselines given fair parameters. Chapter 13 describes the compiler
-machinery that turns an operator into an executed ensemble by writing a spec instead of a
-script. Chapter 14 reports what happened when the whole connectome was run in a body.
-Chapter 15 pulls the results together and lists what the connectome provably cannot tell
-you.
+The embodied model also makes supplied behaviour unusually visible. If a stepping generator sits between descending neurons and the legs, walking in the animation is evidence about a combined system. If a separate process schedules bouts of activity, spontaneous movement does not show that the neural graph generated the bout statistics. Those additions may be useful and well grounded. Their location in the causal chain determines what the demonstration establishes.
 
-## Three rules I would ask you to hold the book to
+We will therefore follow the signal far enough to ask where a decision, a rhythm, or a correction entered. The relevant boundary is between a component's observed contribution and the larger behaviour that depends on several components together.
 
-1. **Negative results are recorded, not tuned away.** When a mechanism fails under
-   noise, or a circuit does not do what the wiring suggests, that is reported as a
-   finding and left in the artifact.
-2. **Baselines are matched.** A biological estimator is never declared better than a
-   Kalman filter that was handicapped. Chapter 12 goes out of its way on this.
-3. **Disagreement between formalisms is data.** When the spiking model and the field
-   model disagree, the disagreement is written into the output file with a flag, and then
-   resolved against biology, not smoothed over.
+## Reading the investigation
 
-If you find a place where the book breaks one of these, that is a bug in the book.
+The foundations chapters introduce the dataset, its intermediate representation, and the structural patterns that motivate the candidate operators. The method chapters explain how an operator becomes a sampled model family and how perturbations expose differences within it. The circuit chapters then work through the consequences, including cases where the first interpretation has to change.
+
+The assessment chapters ask whether a reduced heading estimator is useful as an engineering algorithm, how much of the pipeline is actually generic, and what happens when the model is embodied. The appendices explain how to trace results to their computational and scientific sources without interrupting the main argument with implementation instructions.
+
+A recurring observation will be that a compelling structural signature does not guarantee the proposed computation in the models tested. The earlier draft described this as structure overstating what dynamics delivers. That phrase captures the experience of the investigation, but it needs a careful reading. The dynamics are hypotheses too. Failure can reveal an unmeasured parameter, an unsuitable neuron model, a missing input, or a poorly chosen probe. It does not by itself reveal which explanation is correct.
+
+The useful outcome is a more specific question. Why did the bump disappear? Which recurrent pathway supported the shift? Would the inhibitory neuron behave differently if its activity were graded and local? What observation would separate these explanations? A connectome becomes scientifically more valuable when it helps us ask such questions precisely, even when it cannot yet answer them.

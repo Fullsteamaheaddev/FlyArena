@@ -1,115 +1,79 @@
-# The Compiler: Turning a Detected Operator into an Executed Ensemble
+# Making the Investigation Reusable
 
-## The problem with three hand-written labs
+Three successful analyses can still amount to three separate pieces of software. Each may contain its own population selectors, stimuli, classification rules, and result formatting. Adding a fourth circuit then requires reconstructing the same machinery again, with another opportunity for assumptions to drift.
 
-The first version of the pipeline had a weakness that the circuits themselves exposed.
-The ring lab, the phasor lab and the memory lab were three separate scripts, each with
-its circuit's populations, observables and perturbations written into the code. That is
-"we ran three analyses." It is not "the compiler compiles." If adding a fourth circuit
-means writing a fourth script, then the operator catalogue of Chapter 5 is a list of
-ideas rather than an input to anything.
+The compiler claim becomes meaningful when circuit-specific reasoning is expressed separately from the common execution process. A detected operator should lead to a specification that states what is being varied and measured. The runner should then execute that specification without containing a new special-case experiment loop for every circuit.
 
-The fix is a middle layer: a declarative spec per operator, and one generic runner that
-executes any spec.
+This is an engineering boundary with scientific consequences. It makes repeated operations consistent and makes the circuit-specific choices easier to inspect. It does not automate the discovery of every relevant parameter or the interpretation of every result.
 
-## Declarative specs
+## What belongs in a specification
 
-A spec generator reads the operator catalogue and emits, per detected operator, the
-circuit-specific content as data. The mushroom-body spec, abbreviated:
+Consider the mushroom-body probe. A specification identifies Kenyon cells as the stimulated population, mushroom-body output neurons as the readout, and APL as an inhibitory control population. It records the two-hundred-cell input patterns and their overlap. It identifies which connection classes receive variable gains and which output cells receive tonic bias.
 
-```python
-{
-  "geometry": "memory",
-  "operator": "sparse_associative_memory",
-  "populations": {"kc": "KC*", "apl": "APL*", "mbon": "MBON*", "dan": ["PPL*", "PAM*"]},
-  "roles": {"input": "kc", "output": "mbon", "control": "apl"},
-  "odor_size": 200, "odor_overlap": 0.5,
-  "edge_params": [
-    {"pre": "KC*",   "post": "MBON*", "param": "kc2mb",   "why": "KC->MBON readout gain (44k edges; plastic in vivo)"},
-    {"pre": "APL*",  "post": "KC*",   "param": "aplGain", "why": "APL feedback inhibition sets KC sparsity"},
-    {"pre": "MBON*", "post": "MBON*", "param": "mbRecur", "why": "MBON->MBON recurrence (936 edges)"}],
-  "tonics": [{"pop": "mbon", "param": "mbonTonic"}],
-  "grid": {"kc2mb": [0.5, 1, 2], "aplGain": [0.5, 1, 2], "mbonTonic": [0, 4], "mbRecur": [1]},
-  "perturbations": [
-    {"name": "apl_silence",  "silence": "apl", "why": "does separation survive without feedback inhibition?"},
-    {"name": "mb_recur_off", "param": "mbRecur", "set": 0}],
-  "hypotheses": ["gain_controlled", "linear_passthrough", "collapsed", "silent"],
-  "provenance": {"signature": "...", "evidence": [...]}
-}
-```
+It also explains why those quantities are free. Kenyon-to-output weights can change through learning in the biological system. APL efficacy is not measured by contact count alone. Output recurrence exists, but its functional contribution is uncertain. Giving each axis a reason prevents the parameter list from becoming an arbitrary collection of convenient knobs.
 
-Populations resolve by type prefix, so `KC*` is every Kenyon-cell subtype. Roles name
-the functional slots. Each free axis carries a `why`: the reason the wiring does not fix
-it. Each perturbation carries a `why` too. And the provenance block copies over the
-evidence items that justified the detection in the first place, so the artifact can be
-traced from wiring to claim without opening another file.
+The specification then describes interventions: suppress APL, remove output recurrence, or alter input strength. Finally, it names the observables and the rules used to group responses. The runner can enumerate the grid and execute the interventions, while the specification states the scientific question.
 
-The ring spec's axes, for comparison, are EPG→EPG recurrence ("not fixed by synapse
-counts"), Delta7→EPG gain ("glutamatergic via GluClα, effective strength uncertain"),
-PEN→EPG gain, and EPG tonic bias ("resting excitability unknown"). Its `d7_silence`
-perturbation is annotated "top-ranked discriminator in the LIF ensemble." The spec is
-where the reasoning lives, in a form a program can consume.
+No source-code listing is needed to understand this separation. The essential idea is that the experiment is represented as data with a meaning. The same generic engine can interpret a different set of populations and gains without changing the logic of building, probing, perturbing, and reporting.
 
-## The generic runner
+## What the runner actually shares
 
-One script executes any spec against the connectome. It handles everything that is
-circuit-independent:
+The common execution machinery resolves populations from anatomical type labels, instantiates the chosen network, modifies selected edge classes, and applies tonic biases. It iterates over parameter combinations, resets state between probes, and records baseline and perturbed responses.
 
-- population resolution, exact and by prefix.
-- the ensemble grid over the free axes.
-- the probe, perturb, classify and rank loop.
-- mechanism attribution by ablating each dynamical element in each member.
-- the JSON artifact.
+It also computes the unweighted separation score and assembles a common result structure. Every member remains associated with its parameters, observations, and labels. This matters because the summary should be recoverable from the underlying runs rather than being an independent narrative written after the fact.
 
-What is *not* generic is the observable geometry: how you measure whether the
-computation happened. That lives in a plugin per geometry class:
+The common builder retains the full loaded network. A specification selects the populations to manipulate and measure, rather than automatically extracting an isolated subgraph. That is a real design choice: background pathways can contribute to a response, and the computational cost remains that of the larger model. A future isolated-circuit mode would need an explicit boundary rule for omitted inputs and outputs.
 
-| geometry | operator | observable |
-|---|---|---|
-| `ring` | `ring_attractor` | bump phase, width and angular velocity on the circle |
-| `linear` | `phasor_vector_shift` | centroid offsets on a column axis, arm by arm |
-| `memory` | `sparse_associative_memory` | pattern separation and gain compression |
+The shared machinery also inherits a base neuronal configuration. As Chapter 6 established, it differs from the embodied calibration. Reuse is therefore not enough to guarantee that every stage uses the same physical assumptions. The effective parameter configuration needs to be recorded with each run, including defaults that are easy to overlook.
 
-A fourth operator will need a fourth plugin if its geometry is new. `motion_correlator`,
-for instance, needs synaptic delays and direction-selective pairing, which none of the
-three plugins expresses. I actually think that is a feature: "what geometry class is
-this operator" is itself a meaningful classification, and being forced to answer it is
-better than pretending a ring observable applies to a filter bank.
+## What cannot be shared without interpretation
 
-## Does the compiled version reproduce the hand-written one?
+The meaning of a response depends on the represented quantity. A heading probe needs circular statistics. A column-shift probe needs a coordinate mapping and a way to distinguish displacement from response loss. A memory-related probe needs pattern similarity, recruitment, and gain measurements.
 
-Yes, to the precision one should expect:
+These differences are handled by geometry-specific measurement components. The ring component estimates phase, concentration, width, and directional movement. The column component measures offsets and arm-specific responses. The pattern component compares activity vectors and drive-response relations.
 
-| circuit | hand-written lab | spec through the runner |
-|---|---|---|
-| ring, seed 42 | 30 silent / 12 attractor / 6 filter, best `tonic_sweep` 0.414 | 30 / 11 / 7, best `tonic_sweep` 0.393, same top-three set |
-| phasor, seed 42 | 13 shifted / 55 passthrough / 4 silent, best `amp_scaling` 0.424 | 11 / 56 / 5, best `amp_scaling` 0.461, plus the arm-coupling mechanism the lab did not test |
-| memory | (first run through the runner) | 9 silent / 9 collapsed, 0 gain-controlled |
+A new operator can reuse the execution loop while still requiring a new measurement model. A motion correlator, for example, needs stimuli with controlled direction and speed, along with timing-sensitive responses. It would be misleading to declare support merely because the runner can stimulate its neurons and count spikes.
 
-The differences are one or two members crossing a class boundary, which is the size of
-discrepancy you get from two code paths sharing a graph but not a random-number stream
-or an integration order. If the two had matched exactly I would have suspected shared
-code rather than independent confirmation.
+This boundary is scientifically healthy. It forces the question of what observation would establish the proposed computation. Automation should remove repeated bookkeeping, not remove the need to define the observable correctly.
 
-## What "compiled" means now
+The column-centroid issue from Chapter 10 illustrates the risk. A generic function can be perfectly reusable while computing the wrong coordinate average for a particular anatomy. The geometry component needs its own checks, including examples whose expected result can be reasoned through independently of the implementation.
 
-Adding the mushroom-body operator required one spec entry, about 30 lines of data, and
-one geometry plugin, about 60 lines. The runner did the rest. So the compiler claim is
-real, narrowly:
+## Comparing the two routes
 
-> detected operator + measured structure → declarative spec → executed ensemble →
-> ranked experiment table, with no circuit-specific code in the loop.
+The hand-written heading lab produced thirty silent, twelve tonic-supported attractor, and six filter members. The generic execution produced thirty, eleven, and seven. Both gave prominence to tonic excitation and the PEG and Delta7 interventions, while their precise scores differed.
 
-The one remaining hand-authored step is the spec itself. A human still chooses the free
-axes, using knowledge of which parameters the wiring leaves open. Automating that is
-mechanical, and it is the first item in Chapter 15's list: every unmeasured edge class
-becomes an axis, every substrate population becomes a perturbation.
+The PFN lab produced thirteen shifted, fifty-five passthrough, and four silent members. The runner produced eleven, fifty-six, and five, and included an additional arm-coupling dependency in its attribution. The mushroom-body experiment was first executed through the generic pattern component and produced nine silent and nine collapsed members.
 
-## The artifact schema
+These comparisons support approximate consistency of the broad outcomes. They do not establish numerical equivalence. A difference of one or two members can be scientifically minor if it reflects a threshold boundary, but that explanation should be demonstrated from the member-level observations rather than assumed.
 
-Every run writes the same shape: `seed`, `summary` (ensemble size, class counts, best
-experiment and its separation), `members` (parameters, baseline observables,
-perturbation outcomes and mechanism label per member), `ranked_experiments`, and where
-a field model exists, a `cross_formalism` block. The web viewer and the report
-generator consume that one schema, so a new circuit's results are browsable the moment
-they exist.
+Shared code also limits independence. Agreement can show that the specification expresses the intended experiment, but it cannot independently verify the neuron kernel both routes use. A deterministic reference calculation or a separate implementation of a small case would test a different part of the system.
+
+Exact agreement would not be suspicious by itself. It could be the expected result of identical inputs and operations. Likewise, small disagreement does not provide evidence of desirable independence. The cause of agreement or disagreement depends on what is shared and what differs.
+
+## Preserving the argument with the result
+
+A useful computational record contains more than the final winning experiment. It includes the seed, parameter grid, effective neuronal settings, selected population counts, coordinate convention, stimulus timing, continuous observables, classification thresholds, and perturbation outcomes.
+
+The present artifacts retain many of these elements, including parameter combinations, classifications, ranked experiments, and selected cross-formalism comparisons. They do not yet eliminate every need to inspect the source for effective defaults or measurement details. The discrepancy between the prose and the ensemble builder shows why those omissions matter.
+
+A generated report can reduce such drift. Population counts and class totals should be read from the same run being discussed. Mechanism summaries should state which subset they cover. If an analysis attributes mechanisms only for one arm, the denominator should remain visible when a broader hypothesis count is displayed elsewhere.
+
+This is a place where software discipline directly improves scientific communication. A repeated number should have one computational origin. A report can then translate it into prose without manually maintaining conflicting copies. The reader should encounter an explanation, while the supporting record carries the exact accounting.
+
+## How much has been compiled?
+
+The system now has a real lowering boundary from candidate operator to an executable specification and then to an ensemble report. Common execution supports several distinct geometries. Adding an experiment within an existing geometry can largely become a matter of specifying populations, gains, and perturbations.
+
+The choices of free axes and plausible ranges are still human-authored. So are the operator definitions and much of the interpretation of their outcomes. Automatically turning every edge class into a parameter would be easy to express and often impractical to execute. It would also assign complexity according to annotation granularity rather than biological uncertainty.
+
+A better automatic proposal system would group parameters using physiological evidence, identify sensitivities, and refine the sample where predictions change. It would distinguish uncertainty in a measured quantity from uncertainty about the model class. These are substantive modelling problems, not the final few lines of routine automation.
+
+The current compiler is therefore a reusable system for executing specified connectome-constrained hypotheses. It is not an autonomous discovery engine that recovers the complete programme of a nervous system. Its value is that a hypothesis can move through a common, inspectable process and return with its assumptions and failures attached.
+
+## The next boundary to improve
+
+Before adding many new operators, it would be useful to strengthen the contract of the existing ones. The same input should produce a traceable set of effective parameters. The same intervention should have a clearly defined mapping to an observable. Numerical differences between execution routes should be explained at the level where they arise.
+
+That work may be less visible than detecting a fourth circuit, but it increases the value of every future result. A system that can execute many hypotheses quickly is useful only if the claims remain connected to what was actually executed.
+
+The embodied model raises the same issue on a larger scale. There, several neural, sensory, physical, and behavioural components cooperate to produce movement. The next chapter follows those boundaries through the whole system, treating the moving fly as a demanding integration experiment rather than a substitute for circuit-level explanation.

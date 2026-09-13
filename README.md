@@ -38,11 +38,12 @@ outside the graph? The second list turned out to be as interesting as the first.
 
 - [Full documentation index](docs/README.md). Thirty documents covering every subsystem,
   the calibration, the limitations and the roadmap.
-- [Compiling the Fly Brain](docs/textbook/) is the book-length write-up. It covers the
-  other half of the project: reading algorithms out of the wiring, testing them with model
-  ensembles, and finding where the connectome runs out of answers.
+- [Compiling the Fly Brain](docs/textbook/) is a research monograph on candidate
+  computations, connectome-constrained model families, and experiments that distinguish
+  them. It separates established biology, recorded model results, and open predictions.
   [Read online](https://lulzx.com/fly-brain/textbook/) or
-  [download the PDF](public/fly-brain-textbook.pdf).
+  [download the PDF](public/fly-brain-textbook.pdf). Executable instructions live in the
+  [technical reproduction companion](docs/textbook-reproduction.md).
 - [Sources and credits](docs/guide/sources.md). The connectome, the body, the eye, the
   walking data, and the licences.
 

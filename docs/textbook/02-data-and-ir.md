@@ -1,166 +1,79 @@
-# The Data, and the Intermediate Representation
+# Reading the Connectome
 
-## What the object actually is
+The first modelling decision happens before a neuron receives a time constant. It happens when we decide what counts as a neuron, a connection, and an observation worth retaining. A graph can look like raw data while already incorporating thresholds, aggregation, and interpretation. Understanding that representation is the beginning of understanding every later result.
 
-Before talking about what the connectome computes let me be very concrete about
-what it *is*, because a lot of the later conclusions come down to properties of the data
-structure.
+The project uses the male central nervous system reconstruction known as MaleCNS, version 1.0. Its packed graph contains 165,122 neurons assigned to 11,752 cell types. Connections with fewer than three reconstructed synapses have been omitted. The retained graph has 10,511,038 directed connections, representing 104,213,652 synaptic contacts. A connection can contain as few as three contacts or as many as 2,591.
 
-The analysis runs on the male *Drosophila* CNS connectome, version 1.0. As a graph it is:
+These quantities describe different objects. If one neuron makes twenty contacts onto another, that contributes twenty synapses but one directed connection. If the second neuron also contacts the first, there are two directed connections. If both neurons belong to the same named type, a type-level graph may fold all of this into a single population relation. Confusing these levels can change a ratio by orders of magnitude while leaving the sentence around it apparently plausible.
 
-| quantity | value |
-|---|---|
-| neurons | 165,122 |
-| connections (3 or more synapses) | 10,511,038 |
-| synapses | 104,213,652 |
-| cell types | 11,752 |
-| per-connection synapse count range | 3 to 2,591 |
+The graph in this book is a thresholded derivative of the reconstruction. Its counts should not be read as totals for every synaptic contact in the original release. Later analyses sometimes impose stricter thresholds of five or six contacts, so even within the project there is no single graph size that describes every calculation. The threshold belongs with the result.
 
-Each neuron carries a type label, a hemisphere, a superclass, a predicted
-neurotransmitter, and a volume. Each connection carries a synapse count. That is it. Notice
-how little annotation this is relative to the raw data: the
-neurotransmitter predictions come from a 2.7 GB table of per-synapse probabilities, and
-the neuron volumes come from a 4.3 GB neuron table that is otherwise unused. Only a
-handful of scalars per neuron turned out to be load-bearing.
+## Counting is not measuring strength
 
-Three properties of the data drive everything downstream.
+Imagine two connections with twenty contacts each. One lands near a region of membrane that strongly influences spike generation. The other lands on a distant branch. The postsynaptic cells may differ in size, resistance, receptor expression, and recent activity. Even if the contacts look equally convincing in the reconstruction, their electrical effects need not be equal.
 
-**Edges carry synapse counts, not strengths.** A weight of 25 means "25 synaptic contacts
-were reconstructed between these two cells." It does not mean "this connection moves the
-postsynaptic potential by 25 of anything." The mapping from count to conductance is an
-assumption, and it turns out to be the single most consequential assumption in the whole
-pipeline. Chapter 11 is essentially a case study of it failing informatively. There is
-also a nice information-theoretic hint about this: when the graph is compressed for the
-browser, the synapse counts cost 4.04 bits each on their own and 3.95 bits with the best
-context model found. In other words, knowing everything else about the graph tells you
-almost nothing about a connection's count. Counts carry information the rest of the
-structure does not predict.
+The count is still valuable. Twenty observed contacts generally provides different anatomical evidence from one uncertain contact. Across a population, contact counts constrain where a model should place its interactions. But turning a count into conductance requires an additional rule. A global multiplier is one such rule. A multiplier adjusted for cell size is another. Neither becomes an observed physical quantity merely because it is applied consistently.
 
-**Signs are predictions, and some are graded.** Each synapse's effect sign comes from the
-presynaptic cell's predicted transmitter: acetylcholine excitatory, GABA and glutamate
-inhibitory, histamine inhibitory, monoamines treated as modulatory. For 3,602 neurons
-there is no consensus call, and rather than guess, their sign is taken as a graded value,
-P(ACh plus monoamines) minus P(GABA plus glutamate plus histamine), from the per-synapse
-predictions. Only 0.5% of synaptic weight ends up unsigned. A cell whose transmitter is
-unknown contributes nothing in the dynamical models. This sounds like a small technical
-choice and it is not: an early version that treated unknown as excitatory spread odour
-activity to every glomerulus in the antennal lobe.
+This distinction is especially important when a model fails. If a feedback loop is too weak, increasing its conductance may repair the result. That shows that the model can operate at a different gain. It does not establish that conductance was the only missing ingredient. The representation of the inhibitory cell itself may have discarded local dynamics, and the test stimulus may have driven the circuit outside the range in which the loop normally operates.
 
-**Types are fine-grained and structured.** Labels like `KCg-m`, `MBON01` to `MBON35`,
-`PPL103`, `PEN_a`, `EPG` let you select populations by pattern. Instance names go
-further: `EPG(PB08)_L4` encodes a protocerebral-bridge glomerulus and a side,
-`hDeltaB_08_C7` encodes a fan-shaped-body column, `ORN_DA1` encodes a glomerulus. The
-central-complex analysis in Chapters 7 to 10 is only possible because these positional
-labels exist. Keep this in mind when thinking about other datasets: the compiler
-needs geometry, and here the geometry arrives through the naming scheme.
+The project also measured how well connection counts compress. Encoding counts alone required about 4.04 bits per count; the best tested contextual encoding required about 3.95. The small difference says that those particular context models found little additional predictive information. It does not prove that counts are statistically independent of the rest of the graph. A better model might exploit a relation that these compressors missed.
 
-## What the graph leaves out
+There is a broader distinction here between a successful prediction and the absence of one. Finding a pattern is evidence that the pattern exists in the tested data. Failing to compress a variable further is evidence about the predictor as well as the variable. We will encounter the same logical asymmetry when a simulator fails to produce a computation.
 
-Just as important is what is *not* in the file:
+## Labels carry assumptions and geometry
 
-- **Gap junctions.** Electrical synapses are invisible in this EM reconstruction. The
-  one that turned out to matter for behaviour, giant fibre to the jump motor neuron
-  TTMn, had to be added by hand in the whole-brain model (Chapter 14).
-- **Connections under 3 synapses.** They were dropped when the graph was packed. The
-  motif census uses 3 per target neuron. The whole-brain model, after calibration, uses
-  connections of 6 or more.
-- **Anything about strength, time constants, adaptation, or neuromodulatory state.**
-  Chapter 6 enumerates these because they become the axes of the ensembles.
-- **Locality is real, though.** When the neurons were renumbered by cell type and then
-  by the 3D position of their skeleton centroid, the entropy of "which neuron does this
-  one connect to" fell from 11.8 bits to 8.2 bits per connection, and 28% of a neuron's
-  targets also appeared in the target list of the neuron numbered just before it. Type
-  and position predict roughly 3.6 bits of each connection. That is the stereotypy that
-  makes the type-level analyses in Chapter 3 meaningful.
+Each neuron is accompanied by annotations such as type, hemisphere, superclass, transmitter prediction, and volume. These labels make the graph tractable. They let us select all Kenyon cells, distinguish descending neurons from local interneurons, and compare homologous populations across the two sides of the animal.
 
-## The intermediate representation
+Some labels contain spatial information. Instance names in the protocerebral bridge encode side and glomerular position. Names in the fan-shaped body can encode a column. Olfactory receptor-neuron names identify glomerular channels. A graph that appears to have no coordinates can therefore contain an implicit coordinate system in its annotations.
 
-Everything that follows runs on a species-agnostic IR rather than on the fly's native
-tables. The IR is deliberately small:
+This is useful, but it changes what a discovery means. Recovering a ring from anatomically assigned column labels is a finding about connectivity organised by known position. It is not the same as discovering a circular latent space from an unlabelled adjacency matrix. Both are worthwhile tasks. Their inputs differ, and the claim should acknowledge the difference.
 
-| field | meaning |
-|---|---|
-| `names`, `types`, `scn`, `cln` | cell name, cell type (bilateral homologues share one), superclass, class |
-| `side` | 1 left, 2 right, 3 midline, 0 unknown |
-| `sign` | +1 excitatory, −1 inhibitory, 0 unknown or modulatory |
-| `sensory`, `motor` | pins for the flow-depth computation (sensors 0, outputs 1) |
-| `indptr`, `indices`, `weights` | the chemical graph in CSR form, weight = synapse count |
-| `gap_indptr`, `gap_indices`, `gap_weights` | the electrical graph, symmetric, empty where absent |
-| `meta` | provenance, sign convention, per-dataset thresholds |
+The same caution applies to type definitions. A fine type can preserve a distinction that disappears when several populations are merged. Conversely, an analysis at individual-neuron resolution can be dominated by repeated copies of a common cell type. There is no universally correct level of aggregation. The appropriate representation depends on whether the question concerns individual connections, repeated local circuits, or interactions between populations.
 
-Two loaders exist. `load_fly()` reads the packed male-CNS tables and was checked to
-reproduce every generic number in the fly's own structural report exactly. `load_worm()`
-reads the Cook et al. 2019 adult hermaphrodite *C. elegans* connectome from the
-Netzschleuder CSV dumps, assigns signs from the OpenWorm cell table (acetylcholine +1,
-GABA and glutamate −1, monoamines 0, covering 179 of 302 neurons, with the unassigned
-remainder almost entirely pharyngeal), and folds bilateral pairs and serial numbers into
-classes: `AVAL/AVAR` become `AVA`, `DA01` to `DA09` become `DA`, giving 169 types over
-454 cells. The worm's gap junctions are kept as a second, symmetric graph, which is a
-real edge type the fly IR lacks.
+Positional labels also require a convention. Eight analysis bins around a full circle correspond to 45 degrees per bin. Sixteen anatomical wedges correspond to 22.5 degrees per wedge. A bridge coordinate is not automatically either one. The hemisphere mapping and the folding operation must be specified before converting an offset into an angle. In this book, measured offsets remain in their stated analysis coordinates unless an explicit conversion is justified.
 
-Why bother with an IR at all? Because the analysis passes in Chapter 3 (flow depth,
-motifs, sign structure, spectral properties) should not know which species produced the
-graph. If they did, a cross-species comparison would be rhetoric. With the IR it is a
-measurement.
+## What a sign means in this project
 
-## What the worm tells you about the fly
+A structural analysis often needs to distinguish excitatory from inhibitory connections. The project uses transmitter predictions to construct a sign proxy, but the proxy is not identical across all stages.
 
-Running both animals through the same passes gives this table:
+The stored fly sign representation treats acetylcholine as positive and GABA, glutamate, and histamine as negative. It also inherits positive contributions for monoamines in the convention used by the packed fly analysis. For neurons without a consensus transmitter assignment, the graded proxy combines the predicted probabilities: acetylcholine and monoamines contribute positively, while GABA, glutamate, and histamine contribute negatively. There are 3,602 neurons for which this graded treatment matters.
 
-| measure | worm (Cook 2019) | fly (male CNS) |
-|---|---|---|
-| cells / connections / synapses | 454 / 4,879 / 28,113 | 165,122 / 10.5 M / 104 M |
-| forward / feedback / lateral weight | 12% / 72% / 16% | 37% / 12% / 50% |
-| giant strongly connected component | 61% of cells | 97% of cells |
-| reciprocal weight | 29% | 27% |
-| dominant neuron-level two-cycle | I↔I (371 pairs) | E↔I (616,156 pairs) |
-| midline-crossing weight | 37% | 22% |
-| feedforward-inhibition share of strong E edges | 17% (z 3.7) | 80% (z 297) |
-| spectral radius of the signed weight matrix | 136 | 3,771 |
-| dominant-eigenvector participation | 10.8 cells | 49.9 cells |
-| where the dominant mode lives | RMD, RIA, SMD (head steering) | lLN1/lLN2 antennal-lobe local neurons |
-| hub tail exponent, in / out | 2.6 / 1.9 | 1.0 / 1.15 |
-| unsigned weight | 62% | 0.5% |
+This explains why some dopamine-associated pathways appear among positive-positive motifs in the structural report. Such a motif is positive under the report's proxy. It is not proof that both pathways act as fast excitatory synapses in the animal. Transmitter identity alone does not determine receptor-specific effects or timescale.
 
-Some of what this says:
+The worm loader uses a different convention: acetylcholine is positive, GABA and glutamate are negative, and monoamines are zero. The embodied fly model introduces another distinction by treating octopamine as a slow modulatory influence rather than retaining its ordinary fast contribution. The circuit ensemble builder, meanwhile, uses the neuron model's transmitter table unless explicitly overridden. It does not automatically inherit every sign or parameter choice used by the embodied model.
 
-1. **The worm is a feedback machine and the fly is a layered one.** 72% of the worm's
-   synaptic weight runs backward in the depth ordering, against 12% in the fly. Half the
-   fly's weight is lateral, meaning between neurons at the same depth. These are
-   genuinely different graph regimes, not the same regime at different scale.
-2. **The characteristic loop is different in kind.** The fly's dominant two-cycle is
-   feedback inhibition, a cell that excites another and is inhibited back. The worm's is
-   mutual inhibition, which is the command-interneuron rivalry that worm locomotion is
-   known for. At type level the worm's mutual-inhibition enrichment washes out (z about
-   −0.4) because worm motor classes are single cells, so the motif only exists at neuron
-   resolution. That is itself a lesson: the right resolution for a motif census depends
-   on the animal.
-3. **The dominant dynamical mode identifies itself.** On the worm, the leading
-   eigenvector of the signed weight matrix lands on RMD, RMDV, RIA and SMD, the
-   head-steering circuit that oscillates during foraging. Nobody told the analysis that.
-   The same measurement on the fly lands on the lateral antennal-lobe local neurons. I
-   find this the most encouraging single result of the cross-species pass, because it is
-   a "found, not annotated" outcome.
-4. **The worm's sign structure is mostly unknown.** 62% of its weight is unsigned
-   against 0.5% for the fly, so any sign-conditioned conclusion about the worm is weaker
-   by construction. The null model in Chapter 3 swaps about 100 edges per rewire on a
-   330-edge type graph, so the worm's z-scores should be read as directional.
+These differences are part of the current method. A shared graph interface makes them visible; it does not make them disappear. Sign-conditioned comparisons must carry their conventions, and a future comparison should rerun both datasets under harmonised alternatives. In particular, glutamate's effect is a modelling assumption that can depend on receptors, rather than a universal inhibitory label.
 
-The comparison does double duty. Scientifically it is interesting. Methodologically it is
-the check that the passes are actually species-agnostic rather than fly-shaped code that
-happens to run on a worm.
+Unknown and zero also need care. A neuron without a consensus call may receive a nonzero graded sign in one representation. A truly zero-sign connection contributes no fast effect in a particular simulation. Omitting an effect avoids inventing a direction, but it still changes the circuit. Silence caused by omitted inputs is not evidence that the biological inputs do nothing.
 
-## Where the IR stops
+## A common representation
 
-The IR answers "what is wired to what, how strongly, with what sign." It cannot answer
-"what does it do." That needs dynamics, which is Chapter 6 onward. The boundary is
-deliberate and it is the book's core methodological commitment: structure first, then
-dynamics, and never let the dynamics stage quietly re-import a structural assumption.
+The intermediate representation keeps the information needed by generic analyses in a small number of conceptual groups. It records each cell's identity and classification, its side, its sign proxy, and whether it is treated as a sensory or motor boundary. It stores chemical connections as directed adjacency lists with contact counts. When electrical connections are available, it stores them separately as symmetric relations. Provenance accompanies these structures so that thresholds and conventions remain recoverable.
 
-A small example of what that discipline looks like in practice. The transmitter table
-maps each synapse's sign from the presynaptic cell, and unknown yields zero effect rather
-than a guessed sign. When an early diagnostic found the mushroom-body interneuron APL
-reading `undefined` for its transmitter, the right response, and the one taken (Chapter
-11), was to trace the sign path and find out, not to patch APL to inhibitory because
-"everyone knows APL is GABAergic." It is GABAergic. But the check had to be made, because
-a sign bug would have produced the same null result invisibly.
+The chemical graph is represented sparsely. For each source neuron, the representation gives a contiguous list of target neurons and corresponding counts. It also records where each source's list begins and ends. This avoids allocating a square matrix with an entry for every possible pair of cells. Most possible pairs are absent, so a dense matrix would spend almost all its space recording zeros.
+
+The significance of this choice goes beyond memory use. A shared representation means the flow calculation does not need to know which institution released the dataset or how its tables were arranged. The motif calculation sees a graph and an explicit sign convention. The loader is responsible for translating the source, and the analysis is responsible for interpreting the translated object.
+
+That separation creates a useful check. The fly loaded through the common representation should reproduce the earlier fly-specific structural calculations when the thresholds and conventions match. If it does not, the disagreement is first a data-translation problem. There is little value in interpreting a cross-species difference until the same-species translation has been checked.
+
+## Looking at another nervous system
+
+The second loader reads the adult hermaphrodite worm connectome from Cook and colleagues' 2019 reconstruction as distributed through Netzschleuder. The resulting graph includes 454 cells, rather than only the 302 neurons conventionally associated with the animal, because the represented network also includes other cellular endpoints. It contains 4,879 chemical connections and 28,113 contacts under the project's processing choices. Bilateral homologues and serially repeated neurons are grouped into 169 classes.
+
+Unlike the fly representation, the worm data supplies an electrical graph. Gap junctions can therefore remain a distinct edge type instead of being guessed from chemical wiring. That matters because a chemical synapse and an electrical connection do not have interchangeable dynamics. Combining them into an undifferentiated weight would simplify the interface by erasing a real biological distinction.
+
+The common analyses produce striking contrasts. Under the chosen harmonic ordering, about 72 percent of worm chemical weight is classified as feedback, compared with about 12 percent in the fly. The fly instead has about half its weight classified as lateral. About 61 percent of worm cells belong to its largest strongly connected component, compared with about 97 percent of fly neurons. Reciprocal weight is closer: approximately 29 percent and 27 percent respectively.
+
+These are descriptions of the processed graphs under a particular ordering. It would be premature to call one animal a feedback machine and the other a feedforward machine. Sensory and motor boundary annotations, cell inclusion, thresholds, and unknown transmitter assignments differ. The comparison shows that the same measurement can expose different organisation. Explaining how much of the contrast belongs to biology requires controlling the representation choices.
+
+Transmitter coverage is a particularly large limitation. About 62 percent of worm weight is unsigned under the selected table, compared with roughly half a percent of the fly's stored weight. A sign-conditioned worm motif census therefore observes a much less complete effective graph. Missing signs are not a small correction that can be ignored after quoting the counts.
+
+## What survives compression
+
+A different kind of compression reveals useful regularity in the fly. Renumbering neurons by type and then by the spatial position of their skeleton centroids reduced the estimated cost of target identities from about 11.8 to 8.2 bits per connection. Around 28 percent of a neuron's targets also appeared among the preceding neuron's targets in this ordering.
+
+Here the positive result is direct: type and position help predict connectivity in the tested encoding. Neighbouring, similarly classified cells have overlapping target repertoires. That regularity motivates population-level analyses and repeated-kernel interpretations, while leaving room for individual exceptions.
+
+The representation still omits important physical information. It does not supply a full receptor map, cell-specific membrane dynamics, or all electrical coupling. It drops weak connections at packing time. A skeleton centroid also compresses an extended, branching cell into one location. These choices make the system analysable, and each one limits a different class of inference.
+
+By the end of this stage we have a graph whose meaning can be stated precisely. We know what its weights count, how its signs were assigned, which coordinates came from annotations, and which source distinctions survived translation. That is enough to ask substantial structural questions. It is also enough to recognise why a structural answer cannot silently become a complete dynamical explanation.

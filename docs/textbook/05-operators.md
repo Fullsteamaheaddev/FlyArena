@@ -1,107 +1,71 @@
-# The Operator Layer: An Instruction Set for a Brain
+# From Wiring Patterns to Candidate Computations
 
-## From signatures to a catalogue
+Recognising a familiar shape in a circuit is a powerful source of hypotheses. It is also a powerful source of mistakes. Once a diagram resembles a ring attractor or a random-projection memory, we begin to interpret ambiguous details in the language of that algorithm. The operator layer exists to make this transition explicit enough to inspect.
 
-Chapters 3 and 4 produced a long list of structural facts. The operator layer compresses
-that list into something you can actually reason about: a catalogue of candidate
-**computational operators**, which the project calls a BioISA, by analogy with an
-instruction set architecture. The idea is that a nervous system, like a processor, has a
-small vocabulary of primitives that it composes, and the vocabulary is what you want to
-extract.
+An operator is a proposed computation attached to a particular anatomical substrate. It names an input, a possible internal state, and an output. It also records the wiring measurements that motivated the proposal and the observations that would count against it. Its purpose is to connect structural analysis to an executable question.
 
-Each catalogue entry has the same shape:
+For example, a ring operator takes directional sensory information and angular-velocity-related input, maintains a position on a circle, and exposes that position to a readout. The structural signature includes local recurrence, an inhibitory surround, and oppositely shifted pathways. The proposed semantics include persistence and directional updating. The signature and the semantics belong in the same entry, but they remain different kinds of evidence.
 
-- a **substrate**: which cell types, and how many cells.
-- a **signature**: the wiring pattern that triggered the detection.
-- **semantics**: what it takes in, what state it holds, what it puts out.
-- a **conventional equivalent**: the nearest thing in an engineering textbook.
-- a **reduced model**: a few lines of pseudocode.
-- **evidence** items with weights, **counterevidence**, and **predictions**.
-- a **confidence** score.
+## A vocabulary with provisional meanings
 
-The scanner reads the structural report and emits twelve entries. Nine are distinct:
+The project uses an instruction-set analogy for its catalogue. In a processor, an instruction has an agreed meaning: adding two registers produces a specified result. A biological operator has a weaker status. Its meaning is proposed from anatomy and must be checked against dynamics and experiments.
 
-| operator | region | confidence | substrate and signature |
-|---|---|---|---|
-| `ring_attractor` | central complex | 0.70 | EPG, Delta7, PEG, PEN (88 cells); columnar ring, two-hop inhibitory kernel ∝ 1 − cos θ, mirror-symmetric shifter |
-| `winner_take_all` | motif, many regions | 0.60 | 6,375 I↔I reciprocal type pairs, z = 416 against the null |
-| `phasor_vector_shift` | central complex | 0.55 | PFN→hΔB with −3 / +2 column offsets; hΔB fans out at +4/+5 columns to 13 target types |
-| `motion_correlator` | optic lobe | 0.55 | T4/T5 subtypes with identical input composition (cosine 0.94) and spatial offsets; ON/OFF split |
-| `convolution_front_end` | optic lobe | 0.55 | 47 columnar types, fixed partner counts, weight CV 0.19 to 0.47 |
-| `sparse_associative_memory` | mushroom body | 0.55 | 5.9× expansion, near-random sampling, APL feedback covering 100%, DAN→KC ≫ DAN→MBON |
-| `feedforward_inhibition` | motif | 0.55 | 80% of strong E edges have a parallel I path, z = 297 |
-| `divisive_normalization` | antennal lobe, mushroom body | 0.50 | 30 candidate cells whose main input population equals their main output population |
-| `command_funnel` | descending | 0.30 | 1,314 DNs carrying 3.7% of brain output; AN→DN loop as heavy as DN output |
+The catalogue contains twelve detections, representing nine broad candidate operations plus lower-confidence detections under alternative criteria. The strongest ring candidate is accompanied by candidates for reciprocal competition, spatial shifts, motion correlation, repeated visual filtering, sparse memory-related processing, feedforward inhibition, population normalisation, and descending convergence.
 
-The remaining three entries are low-confidence re-detections of the same motifs at
-other thresholds (0.25, 0.25, and a 0.0 ring-attractor candidate that fails its own
-checks). They are kept because the catalogue should show what the detector *almost*
-fired on, not just what it accepted.
+Keeping weaker detections is useful when their failure is visible. A candidate that nearly satisfies a ring signature can show whether the detector depends on a specific spatial relation or merely on generic recurrence. If the catalogue displayed only accepted examples, it would be harder to see how selective its definitions really are.
 
-## What a detection means, and what it does not
+The vocabulary is intentionally smaller than the list of anatomical cell types. Thousands of types may participate in variations of a few computational arrangements. Conversely, one type can participate in more than one operation, depending on state and pathway. There is no requirement that the brain partition neatly into one population per instruction.
 
-I want to be careful here, because "the connectome contains a ring attractor" is the kind
-of sentence that gets repeated without its qualifier.
+This is one reason to avoid treating the catalogue as a literal program recovered from tissue. Biological circuits share components and interact continuously. The operator view is useful when it preserves a relationship that can be tested, rather than when it forces every connection into an engineering analogy.
 
-A detection is a *signature match*. It is not a claim that the circuit computes anything.
-`ring_attractor` scores 0.70 because its signature is unusually specific: a columnar
-population whose two-hop inhibitory kernel fits a cosine at R² 0.99 (weight 0.35), with
-contrast 0.878 (weight 0.15), a mirror-symmetric shifter at L +1.47 and R −1.45 columns
-(weight 0.2), plus two dynamical checks from the whole-brain model that the kernel and
-the push field are realised (0.15 each). There are not many things a circuit with that
-wiring could be other than a continuous attractor with velocity input.
+## What the confidence scores do
 
-`command_funnel` scores 0.30 because "a lot of fan-in onto a small population" is
-consistent with many computations, and the catalogue says so in its counterevidence
-field: the funnel count mixes cell types with very different functions, so it may be a
-bottleneck of bandwidth rather than of decisions.
+The ring candidate receives a score of 0.70 in the existing catalogue. Reciprocal competition receives 0.60. Several visual, spatial-shift, and memory-related candidates receive 0.55, while the descending funnel receives 0.30. These numbers are hand-weighted combinations of evidence items.
 
-The scores are hand-weighted sums of evidence items, and the weights are judgment calls.
-I would not defend 0.55 versus 0.60 as meaningful. I would defend the ordering, and I
-would defend the requirement that every entry lists what would prove it wrong.
+They are not calibrated probabilities. A score of 0.70 does not mean that seventy percent of similarly scored anatomical patterns have been shown to be ring attractors. No such validation set has been established. Small differences between scores should therefore not determine a scientific conclusion.
 
-## Every entry has to say what would falsify it
+The scores are better understood as a compact record of the detector's preferences. A highly specific spatial signature receives more support than generic convergence onto a small population. A realised inhibitory profile contributes differently from a raw contact-count pattern. The value lies in being able to inspect those contributions and disagree with them.
 
-This is the part of the catalogue I think is most valuable, so here are the predictions
-as written:
+Even the phrase structural detection needs qualification here. Some catalogue entries incorporate dynamical checks from another stage, such as a realised Delta7 profile or a PEN push measurement. These entries combine anatomical and simulated evidence. Their subsequent agreement with those same checks cannot be counted as an independent success.
 
-- **feedforward_inhibition**: blocking the inhibitory arm should broaden the temporal
-  tuning of the target. Reduced model: `y = x[t] − g·x[t−1]`.
-- **winner_take_all**: strong simultaneous drive to both sides should produce
-  bistability or oscillation rather than a compromise. Reduced model: `a −= g·b; b −= g·a`.
-- **convolution_front_end**: a feature learned at one eccentricity should transfer to
-  every eccentricity. Counterevidence already recorded: some pairs have CV near 0.36, so
-  it is not a perfect convolution.
-- **sparse_associative_memory**: Kenyon cells should be sparse and decorrelated, and APL
-  should implement gain control. Conventional equivalent: locality-sensitive hashing plus
-  a linear readout, trained by a three-factor Hebbian rule rather than backpropagation.
-  Chapter 11 is what happened when the gain-control half of that prediction was tested.
-- **command_funnel**: silencing a single DN type should remove a specific motor program.
-  Chapter 14 does this for several.
-- **ring_attractor**: silencing Delta7 should change bump width, and unilateral PEN
-  silencing should abolish integration in one direction only. Chapters 7 to 9.
+A future catalogue could make confidence more meaningful by evaluating detectors on a collection of circuits whose functions were independently established. It could then ask how often a signature generalises and how sensitive it is to thresholds. Until that exists, the evidence record is more informative than the decimal score.
 
-## Signature versus semantics
+## Making a prediction concrete
 
-The catalogue keeps two things apart on purpose:
+Take feedforward inhibition. The structural pattern says that a source reaches a target directly and through an inhibitory intermediary. A proposed temporal interpretation is that the target responds initially and is then suppressed. To test that interpretation, the model needs a stimulus with timing, an observable that measures temporal width, and an intervention that removes or weakens the inhibitory arm.
 
-- The **signature** is what the wiring looks like: a cosine kernel, a column offset, an
-  expansion ratio. It is structural, measurable, and reproducible from the graph.
-- The **semantics** is what the circuit computes: a heading phase, a rotated vector, an
-  odour identity. It is a hypothesis, to be established dynamically.
+If the response broadens after that intervention, the outcome supports the proposed role under the tested conditions. If the response barely changes, several explanations remain: the arm may be weak, its timing may be wrong for this stimulus, another pathway may compensate, or the interpretation may be mistaken. An operator entry should make such alternatives easier to formulate rather than compress them into a binary success flag.
 
-There is also a `topology_folded` flag for cases where the graph-theoretic form hides a
-geometric one. The ring attractor is *not* folded: the ring is a real ring in the wiring.
-The convolution front end and the phasor shift *are* folded: the graph alone does not
-show a lattice or a column axis, and you need the positional labels from the instance
-names to see them.
+Reciprocal inhibition poses a related problem. A candidate competition circuit should be challenged with simultaneous drive to both populations, varying their relative strengths and initial conditions. A persistent winner, alternating activity, and a graded compromise are different outcomes. All can arise from superficially similar wiring. The experiment must measure the distinction that the operator claims to explain.
 
-## From an operator to an experiment
+For a repeated visual kernel, a relevant question is whether a feature presented at different positions produces correspondingly translated responses. Similar input counts across columns motivate the question, but are not its answer. Weight variation, receptive-field boundaries, and nonlinearities can break transfer even when the average wiring looks repeated.
 
-Each catalogue entry is the input to the executable stage, and the mapping is mechanical
-enough to describe in one paragraph. The substrate names the populations to instantiate.
-The free quantities, the gains that the wiring does not fix, become the axes of an
-ensemble. The predictions and counterevidence become the perturbations. Chapters 7 to 11
-follow three operators through that process by hand, and Chapter 13 describes the
-machinery that makes a fourth operator a matter of writing a spec entry rather than a new
-script.
+For mushroom-body processing, the prediction must be decomposed further. Sparse sensory expansion, activity regulation, associative learning, and downstream readout are separate capabilities. A direct Kenyon-cell probe of fixed output weights can examine only some of them. The broad memory label should never obscure that experimental scope.
+
+## Geometry is part of the hypothesis
+
+A computation often becomes recognisable only after choosing the space in which its signals live. A heading angle wraps around: north just clockwise of a reference and north just counterclockwise of it are nearby. A linear centroid calculation can place their average on the opposite side of the circle if it ignores that geometry.
+
+The PFN experiment uses a different coordinate: an ordered set of columns. This makes centroid offsets easy to compute, but introduces questions about boundaries, missing columns, and the relation of that linear coordinate to the underlying anatomy. A position-dependent shift can reflect real circuit organisation, the stimulation protocol, or the measurement convention.
+
+The mushroom-body probe has no comparable positional axis. It treats activity as a vector across cells and asks whether two vectors become more or less similar. Choosing cosine similarity makes the observable relatively insensitive to overall amplitude, which is useful for pattern comparison but means gain must be measured separately.
+
+Thus geometry is not just a plotting decision. It determines what counts as agreement, what information the readout discards, and which failures remain visible. An operator specification should carry its geometry as explicitly as its population names.
+
+## A worked transition to an ensemble
+
+Suppose the detector finds a candidate ring. The obvious free quantities include local recurrent gain, inhibitory gain, shifted-pathway gain, and baseline excitability. The graph constrains where these quantities act, while the model family explores selected values.
+
+The candidate's semantics suggest the probe. Initialise a localised activity pattern, remove the localising stimulus, and measure whether a coherent pattern remains. Then drive each directional arm and measure displacement. The counterfactuals suggest perturbations: weaken inhibition, remove the copy pathway, or reduce baseline excitation.
+
+At this point the catalogue has become an executable investigation. The original detection did not establish that the circuit stores heading. It supplied a structured reason to ask a series of narrower questions. A persistent bump in some parameter settings would support compatibility. A failure in all sampled settings would motivate checking both the parameters and the model class. Neither outcome would enumerate every possible implementation of the anatomy.
+
+The final result should therefore retain the route from substrate to test. Which spatial measurement motivated the ring? Which parameters were allowed to vary? Which background assumptions were held fixed? Which observation produced the outcome label? These are the details that turn a computational analogy into a scientific proposal.
+
+## What the catalogue leaves open
+
+There are many operations a detector built around familiar motifs will miss. Some computations may be distributed across several regions. Others may depend primarily on timing, intracellular dynamics, or learning rather than a distinctive cell-level pattern. An undetected operator is not necessarily absent from the brain.
+
+There is also a selection effect in choosing attractive examples. A ring with an excellent cosine fit is easier to describe than a heterogeneous circuit whose role is uncertain. The catalogue should be read as the set of candidates the current detectors know how to propose, not an inventory of everything the connectome computes.
+
+Within that boundary, the approach is useful. It reduces a large anatomical graph to a collection of questions with named substrates and explicit measurements. The ensemble method then asks how those questions behave when the unmeasured quantities vary. That is where a diagram begins to encounter the consequences of being made executable.

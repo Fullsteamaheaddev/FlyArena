@@ -1,4 +1,13 @@
 % Glyphs the text fonts lack are set in math mode instead.
+\pagestyle{plain}
+\let\cleardoublepage\clearpage
+\raggedbottom
+\setlength{\emergencystretch}{2em}
+\clubpenalty=10000
+\widowpenalty=10000
+\displaywidowpenalty=10000
+\setcounter{tocdepth}{1}
+\setcounter{secnumdepth}{0}
 \usepackage{newunicodechar}
 \newunicodechar{→}{\ensuremath{\rightarrow}}
 \newunicodechar{←}{\ensuremath{\leftarrow}}

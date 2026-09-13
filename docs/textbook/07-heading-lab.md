@@ -1,123 +1,69 @@
-# The Heading Circuit as a Spiking Ensemble
+# A Heading State in a Spiking Network
 
-The first operator to go end-to-end is `ring_attractor`. It is the best-understood
-computation in any connectome, which is why it goes first: if the method cannot
-recover a known answer, its answers elsewhere are worthless.
+A heading representation has an unusual memory requirement. It must retain an angle while the animal is stationary and update that angle when the animal turns. It should also be able to use a visual cue without becoming merely a copy of that cue. These requirements make the heading circuit a useful place to distinguish persistent state, sensory filtering, and controlled movement of a population pattern.
 
-## The circuit
+The anatomical substrate highlighted here contains 148 cells across five named populations: forty-six EPG neurons, forty-two Delta7 neurons, eighteen PEG neurons, twenty PEN_a neurons, and twenty-two PEN_b neurons. The number eighty-eight refers only to EPG plus Delta7. The simulations themselves retain the full loaded network, as described in Chapter 6, while manipulating and reading these populations.
 
-88 cells in five populations:
+EPG activity is grouped by an eight-bin positional mapping. Delta7 supplies a strongly structured inhibitory path in the anatomical report. PEG participates in local recurrent copying, while the two PEN populations provide directionally offset feedback. This organisation motivates a ring-attractor hypothesis without fixing the gains or resting state needed to realise it.
 
-- **EPG** (46 cells): the ring population. Bump position encodes heading.
-- **Delta7** (42): the inhibitory surround. Each reads a median 32 EPGs and writes onto
-  8, and the two-hop EPG→Delta7→EPG kernel is the cosine from Chapter 4.
-- **PEG** (18): a copy population, reciprocally wired with EPG in the same column.
-- **PEN_a and PEN_b** (20 and 22): the shifter. EPG→PEN goes one column ahead, PEN→EPG
-  returns one to two columns behind, and the net push resolves to about +1.5 columns for
-  left-hemisphere PENs and −1.5 for right. They carry the angular-velocity signal.
+## What would count as a memory?
 
-Structurally this is the Amari ring recipe almost verbatim: local excitation, a cosine
-surround, and a mirror-symmetric shifter. The kernel fits a − b·cos at R² 0.99 with
-contrast 0.878. The question is whether the dynamics deliver what the structure
-advertises.
+Imagine briefly illuminating a spot at one bearing. While the cue is present, a localised neural response could mean little more than that the sensory pathway has spatial tuning. A memory test begins after the localising input is removed.
 
-## The ensemble
+The probe seeds activity near one position, releases the stimulus, and measures whether activity remains concentrated. It records the total response, circular concentration, and an estimate of width. It also drives the two PEN arms separately to measure directional effects. These observables are more informative together than a phase alone, because a phase can be decoded even from a weak or unreliable population pattern.
 
-Four free axes, 48 members:
+A completely silent population has no meaningful remembered direction. A uniformly active ring also has no preferred direction. A concentrated but almost inactive pattern can be difficult to distinguish from residual numerical or transient activity. The classification combines measures to separate these cases, though the exact boundaries remain choices of the probe.
 
-| axis | what it scales | why it is free | grid |
-|---|---|---|---|
-| `epgRecur` | EPG→EPG | recurrence gain is not fixed by synapse counts | 1, 3, 4, 6 |
-| `d7Gain` | Delta7→EPG | Delta7 inhibition is glutamatergic via GluClα; effective strength uncertain | 0.5, 1.0, 1.3 |
-| `epgTonic` | tonic EPG bias (mV) | resting excitability is unknown | 0, 3, 5, 7 |
-| `penGain` | PEN→EPG | shifted-feedback gain | 1 |
+Persistence over the observation window is a finite-time result. It is not a proof of asymptotic stability, nor a guarantee that the state will survive prolonged noise or arbitrary inputs. Those stronger claims require longer observations, additional initial conditions, and perturbations of the state itself.
 
-Each member is given a seeded bump, released, and measured for persistence
-(concentration and full width at half maximum), for the realised Delta7 kernel, and for
-bump rotation under unilateral PEN drive. Perturbations: silence Delta7, lesion PEG,
-sweep EPG tonic excitability, drive one PEN arm.
+## Searching the operating regime
 
-## Finding one: the attractor exists, but only in a corner of the grid
+The forty-eight-member grid varies EPG recurrence by factors of one, three, four, and six. It varies the Delta7-to-EPG multiplier over one half, one, and 1.3. Tonic EPG bias takes values of zero, three, five, and seven millivolts. The PEN multiplier remains one.
 
-| class | members | meaning |
-|---|---|---|
-| `silent` | 30 | no sustained bump at any drive |
-| `attractor_tonic` | 12 | bump persists, but only with tonic EPG bias of 3 to 7 mV |
-| `filter` | 6 | activity follows the input, no self-sustained bump |
-| `attractor_free` | 0 | bump persists with no tonic drive |
+At the recorded seed, thirty members are classified as silent, six as filters, and twelve as tonic-supported attractors. None is classified as an attractor without tonic bias. The successful settings occur with stronger recurrence and positive baseline excitation.
 
-That last row is the one to look at. A free-running bump, the thing the textbook picture
-of a ring attractor promises, was not observed at *any* grid point. Every bump-sustaining
-member needs a depolarising bias to cross into the bistable regime, and the viable region
-is recurrence 3 to 6× count-calibrated strength with 3 to 7 mV of tonic bias, roughly 15
-to 25% of the grid.
+The twelve survivors represent one quarter of this grid. That fraction should not be read as an estimate of how often real flies have an attractor or how likely this mechanism is. The sample weights low and high gains according to the chosen grid, and the family holds many potentially relevant quantities fixed.
 
-So the wiring supports the attractor's geometry, but the dynamics need an excitability
-floor the wiring does not provide. The fly's heading system, on this evidence, is
-something that must be switched on rather than something that is always on. That is
-consistent with the whole-brain model, where the calibrated LIF also fails to sustain a
-free bump without external drive (Chapter 4).
+The result does establish a useful dependence in the tested model. Anatomically organised recurrence can support a persistent heading-like pattern, but the default operating point is insufficient under this protocol. Increasing excitability changes which computation the same network can express.
 
-## Finding two: Delta7's role splits the survivors
+It does not establish that the animal must switch its compass on through tonic drive. A missing background input, a different membrane model, a more appropriate weight calibration, or an untested parameter combination could change the requirement. The experiment identifies tonic bias as an effective control in this family. Physiology would have to establish what supplies the corresponding support in the fly.
 
-Among the 12 attractors, silencing Delta7 gives three different outcomes:
+## Removing inhibition changes the explanation
 
-| mechanism class | members | what silencing Delta7 does |
-|---|---|---|
-| `d7_sculpts_sharp` | 8 | bump survives and stays sharp; Delta7 sharpens but is not required |
-| `d7_essential` | 3 | activity extinguishes |
-| `d7_confines` | 1 | bump survives but widens |
+The surviving models can look similar before perturbation while relying on different interactions. Delta7 silencing exposes this. Eight of the twelve retain a relatively sharp concentrated pattern under the classifier. Three lose the sustained response and are labelled as requiring Delta7 for the tested state. One loses confinement under the recorded outcome classification.
 
-All twelve look the same at baseline. You cannot tell them apart by imaging a fly that
-is walking normally. You can tell them apart by one perturbation. This is the
-discriminating-experiment logic doing what it was built for.
+The last category needs particular care. The saved report calls it a confinement failure, while the current classification distinguishes that state from a surviving, widened bump. The original prose treated the one member as a broadened-bump success. That is not supported by the recorded class counts. No member in that report carries the separate widened-bump label.
 
-One caveat that the artifact carries and I want to repeat: the `d7_essential` outcome,
-where released excitation drives an adaptation shutdown, is flagged as a possible LIF
-artifact rather than a biological prediction. The literature also argues against it.
-Real Delta7→EPG inhibition is glutamate acting on GluClα and suppresses EPGs *far from*
-the bump, which is the antipodal kernel we measured, so the sculpting and confining
-outcomes are the plausible ones. That makes `d7_essential` the class real data should
-rule out, which is what a discriminating experiment is for.
+This distinction matters because a later field model does produce a surviving broadened bump. It cannot be described as reproducing a one-member minority in the spiking report simply because both involve some loss of confinement. A broad coherent bump and broad or uniform activity with low concentration are different outcomes.
 
-## The ranked experiments
+The three extinguished responses also need restrained interpretation. The circuit model contains active adaptation and depression, so disinhibition can interact with subsequent fatigue and recurrent feedback. But the label alone does not identify which process caused the shutdown. Removing adaptation while holding the rest fixed would test that explanation more directly. The present result is that the state was lost after the perturbation, not a demonstrated adaptation mechanism.
 
-Separation scores at seed 42:
+The value of the ensemble is visible despite these limitations. A baseline bump does not uniquely identify the interactions maintaining it. The perturbation produces several outcomes, and their continuous measurements can guide the next comparison. Majority vote is not a biological verdict; it reflects how the sampled settings are distributed among those outcomes.
 
-| experiment | score | what it discriminates |
-|---|---|---|
-| `tonic_sweep` | 0.414 | attractor versus filter versus silent: the regime boundary |
-| `peg_lesion` | 0.370 | whether the PEG copy pathway is load-bearing |
-| `d7_silence` | 0.351 | the three Delta7 mechanism classes |
-| `unilateral_pen_R` | 0.284 | PEN arm gating, velocity direction |
-| `unilateral_pen_L` | 0.120 | the two PEN arms are not equivalent |
+## Which perturbations split the grid?
 
-The top three are stable across seeds, though their order shuffles. Each maps to a real
-experiment: depolarise EPGs while imaging the ring, kill the PEG copy, silence Delta7
-and watch bump width. The asymmetry between the two PEN arms in the last two rows is
-real in the wiring (the left-through-PEN loop weight ratio is 1.7:1 and the right 1.3:1)
-and the ensemble picks it up.
+On the recorded forty-eight-member grid, varying tonic excitation produces an unweighted separation score of 0.414. Lesioning the PEG copy pathway scores 0.370, and silencing Delta7 scores 0.351. Driving the right and left PEN arms gives lower and unequal scores, about 0.284 and 0.120.
 
-## The generic runner reproduces this
+The high tonic score is understandable. Baseline excitability is one of the dimensions that separates silence, stimulus following, and persistence in this family. A sweep across that dimension naturally divides the grid. It is useful for locating the operating regime, but its value after conditioning on a known persistent state could be lower.
 
-When the same circuit was later run through the declarative spec machinery of Chapter
-13 instead of the hand-written lab, seed 42 gave 30 silent, 11 attractor-tonic and 7
-filter members against the lab's 30, 12 and 6, with the same best experiment
-(`tonic_sweep`, separation 0.393 versus 0.414) and the same top-three set. One member
-moved across a class boundary. I mention the discrepancy because it is the size
-of discrepancy you should expect when two implementations share a graph but not a code
-path, and because "the compiler reproduces the lab" should mean this and not something
-vaguer.
+PEG removal asks a more targeted causal question. Does the copy pathway provide necessary support, or can local EPG recurrence compensate? Delta7 silencing asks whether a particular inhibitory source is necessary for persistence or confinement. These questions can remain informative even when the animal's baseline activity has already excluded silent models.
 
-## What the ensemble could not say
+The PEN asymmetry is also worth retaining. Oppositely oriented pathways need not have identical strengths or neuronal populations. A pooled directional score could hide a real difference between arms. Yet a one-sided model response can arise from the coordinate convention or stimulus as well as from anatomy, so both sign conventions and input conditions should accompany the result.
 
-Here is the honest limit. The LIF members classified Delta7 as either essential or
-sculpting. Eight of twelve said the bump survives silencing *sharp*. Only one said it
-survives *widened*, and Chapter 9 will show that the widened outcome is the one the
-published data supports.
+Earlier runs reported a recurring top-three set across seeds, with changes in order. That is evidence about those runs, rather than a general guarantee of ranking stability. A systematic sensitivity analysis would vary seeds, classification thresholds, and parameter sampling together, preferably after restricting to baseline-compatible models.
 
-The ensemble did not fail, exactly. It reported a split rather than a false consensus,
-and its minority class was right. But its majority was wrong, and the reason is the
-limit stated in Chapter 6: the family only contained one inhibitory channel. The missing
-mechanism, a second inhibitory source that is not Delta7, was found by the field model
-and by the literature, not by more grid points.
+## A second execution path
+
+The same experiment was later expressed through the generic runner. At the same nominal seed it produced thirty silent members, eleven tonic-supported attractors, and seven filters. The best-ranked tonic experiment scored 0.393, and the leading set of experiments remained similar.
+
+One member therefore crossed a class boundary. This is a useful compatibility result, but it is not exact reproduction. Nor does a small discrepancy prove independent confirmation. The implementations share major components, and random-number consumption, probe details, or classification can account for a difference. Establishing the cause would require matched streams and member-level comparison.
+
+The scientific interpretation should survive this distinction. Both executions find a limited sampled regime of tonic-supported persistence and give prominence to excitation, PEG, and Delta7 manipulations. Claims about an exact fraction of viable models or an exact ordering of experiments are less stable.
+
+## What remains to be explained
+
+The spiking network has recovered a family of heading-like responses attached to identifiable anatomy. That is a meaningful compatibility result. It has also revealed that the proposed computation depends on excitability and that different settings respond differently to inhibition loss.
+
+The next questions are quantitative. How does width change as inhibition is gradually reduced? How does the velocity pathway move the state, and what gain relates drive to angular displacement? Which features of the response are consequences of the discrete wiring, and which belong to the chosen point-neuron dynamics?
+
+A continuous field provides another way to ask these questions. It smooths away individual cells and exposes a mathematical description of bump shape and phase. That simplification will make some mechanisms easier to analyse, while creating new assumptions that must be stated just as explicitly as the assumptions of the spiking ensemble.

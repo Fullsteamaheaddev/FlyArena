@@ -120,6 +120,8 @@ a { transition: color 0.15s; }
 #content td { border-bottom: 1px solid var(--rule); padding: 0.5rem 0.6rem; vertical-align: top; }
 #content hr { border: none; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
 #content a { color: var(--accent); }
+#content .math.display { display: block; overflow-x: auto; padding: 0.4rem 0; margin: 1.5rem 0; }
+#content math { font-size: 1.05em; }
 
 /* footer nav */
 #prevnext { margin-top: 3.5rem; padding-top: 1.6rem; border-top: 1px solid var(--rule);

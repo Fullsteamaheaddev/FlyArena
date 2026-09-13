@@ -1,135 +1,83 @@
-# The Ensemble Method: Why the Wiring Gives You a Family, Not a Model
+# Exploring a Family of Models
 
-## The underdetermination is specific and enumerable
+Suppose we know exactly which cells connect in a candidate heading circuit, but do not know how strongly its recurrent synapses act. A single simulation forces us to choose a strength. An ensemble lets us keep several choices alive and observe what each implies.
 
-Here is the basic problem. A connectome tells you the graph: which cells connect, with
-how many synapses, and what sign the presynaptic transmitter implies. It does not tell
-you:
+This changes the object of the investigation. We no longer ask only whether one model produces a bump. We ask how bump formation depends on recurrent gain, whether a second inhibitory pathway changes the result, and which intervention separates models that otherwise look alike. The aim is to map part of the uncertainty left by anatomy.
 
-1. the conductance each synapse produces, meaning the count-to-PSP calibration.
-2. the strength or even the existence of gap junctions.
-3. the neuromodulatory state, which changes thresholds over seconds.
-4. thresholds, adaptation, and resting-potential heterogeneity across cells.
-5. synaptic delays and time constants beyond a single global value.
+The word part matters. A finite parameter grid is a sample from a chosen model class. It is not the complete set of programs permitted by the connectome. A family of point neurons excludes graded, compartmental, and many biochemical mechanisms before its first parameter is varied. Expanding the grid explores the chosen assumptions more thoroughly; it does not remove them.
 
-The naive approach is to pick values for all of these, tune them until the model does
-something reasonable, and publish the model. The problem with the naive approach is that
-the tuning is where the answer gets smuggled in. If you tune the heading circuit until it
-holds a bump, you have not learned that the wiring supports a bump. You have learned that
-you can make it hold one.
+## Parameters and mechanisms
 
-The alternative, which is what the project does, is to construct **the set of models
-consistent with the wiring**: an ensemble that spans the free parameters on a grid, with
-every member sharing the exact same graph. Then ask which conclusions hold across the
-whole family, and where the family splits. This inverts the usual logic. Instead of
-fitting one model to data, structure defines the family and you measure agreement.
+Some unknowns can be represented reasonably as numerical axes. The efficacy of a selected connection class can be multiplied by several gains. Baseline excitability can be raised or lowered. A synaptic delay can be varied over a range. These are parameter changes within a specified model.
 
-The disagreement is the product. If two members agree at baseline but disagree about
-what happens when population X is silenced, then "silence X" is a *discriminating
-experiment*, and you can rank it against every other candidate experiment by how much of
-the family it splits.
+Other unknowns change the model's structure. A cell may require several interacting compartments instead of one voltage variable. An inhibitory influence may arrive through a population omitted from the model. A modulatory pathway may change release probability rather than threshold. No amount of gain adjustment necessarily substitutes for those mechanisms.
 
-## The neuron model, and where its numbers come from
+The distinction is not absolute. Adding a second inhibitory pathway introduces new parameters, and setting its gain to zero can recover the simpler model. But it remains useful to ask whether a proposed explanation was represented at all. A model can be flexible in the wrong dimensions.
 
-Every ensemble member is a network of leaky integrate-and-fire (LIF) neurons over
-exactly the circuit's cells. The model follows Shiu et al. 2024: rest −52 mV, threshold
-−45 mV, membrane time constant 20 ms, synaptic time constant 5 ms, 0.5 ms steps, 1.8 ms
-synaptic delay. Synapses are conductance-based, with excitatory reversal at 0 mV and
-inhibitory reversal fitted near −76 mV, because current-based synapses let any neuron
-with 150 synapses fire any target and that is not how membranes work.
+One way to see the danger is to imagine fitting a straight line to a curved relation. Testing many slopes and intercepts will find the best line. It will not establish that the underlying relation is linear. In neural modelling, the analogue of curvature may be local dendritic integration, receptor-specific modulation, or state-dependent input. A dense grid can give an impression of completeness while leaving the relevant possibility outside the family.
 
-The global parameters that the whole-brain model of Chapter 14 fitted against published
-behaviour are inherited here:
+## The actual neuron model
 
-| parameter | searched range | fitted |
-|---|---|---|
-| synaptic strength per synapse | 0.2 to 1.2 mV | 0.55 mV |
-| neuron-size exponent (PSP ∝ (volume / regional median)^−α) | 0 to 1 | 0.61 |
-| Kenyon-cell threshold offset | 0 to 30 mV | 10.9 mV |
-| inhibitory gain | 0.5 to 5 | 0.61 |
-| inhibitory reversal | −85 to −55 mV | −76.4 mV |
-| minimum synapses per connection | 3 to 10 | 6 |
-| adaptation | 0 to 3 mV | 0 |
-| refractory period | 2 to 6 ms | 3.8 ms |
+The circuit experiments use leaky integrate-and-fire neurons. Each cell has a voltage that relaxes toward rest while incoming activity changes its state. Crossing threshold produces a spike, followed by a reset and refractory interval. The model also includes adaptation and synaptic depression, so recent activity influences subsequent responsiveness.
 
-Sign comes from the presynaptic transmitter, and unknown contributes nothing. The
-ensemble then scales named *edge classes* (EPG→EPG, Delta7→EPG, and so on) by its free
-parameters on top of this base. So a member with `epgRecur = 4` has EPG recurrence at
-four times the count-calibrated strength. The base calibration fixes the units. The
-ensemble explores the multipliers the wiring leaves open.
+The default circuit configuration uses a resting potential of negative 52 millivolts, a threshold of negative 45 millivolts, a membrane time constant of twenty milliseconds, and a synaptic time constant of five milliseconds. Integration proceeds in half-millisecond steps with a nominal synaptic delay of 1.8 milliseconds. These choices follow the project's LIF modelling lineage, rather than measurements of each cell in the male reconstruction.
 
-## The machinery
+The source path is important here. The ensemble builder loads the full packed network, applies cell-size scaling, and modifies selected edge classes and population biases. It does not extract only the named circuit cells. The circuit names identify the manipulated and measured substrate inside that full network.
 
-Three generic pieces are shared by every circuit lab:
+The builder also does not automatically import the fitted parameters of the embodied model. Its default synaptic scale is 0.275, its size exponent is one, and conductance-based operation is disabled by default. Adaptation increases threshold by two millivolts per spike and relaxes over one hundred milliseconds; synaptic depression is also active. The embodied configuration described later uses different settings, including conductance-based synapses and zero spike-frequency adaptation.
 
-- **A builder.** Given the circuit's cells, its edges, and a set of named parameter
-  axes, the builder returns a factory from parameter values to a LIF network. Edge
-  classes are specified as `{pre: type or set, post: type or set, param: name}`, and
-  tonic bias populations as `{pop, param}`.
-- **A seeded random number generator** (mulberry32). Every probe, whether an odour
-  pattern, a noise trace, or an initial bump, is reproducible from the seed. Ensemble
-  comparisons are only meaningful at fixed randomness, and conclusions are only trusted
-  when the *ranking* of experiments survives reseeding, not just the scores.
-- **Perturbation helpers**: silencing a population by clamping its threshold, zeroing an
-  edge class, scaling a drive.
+This distinction resolves an apparent contradiction in the earlier description. An adaptation-related shutdown is possible in the circuit ensemble even though adaptation is zero in the embodied fit. The two experiments use different configurations. It also means that their agreement or disagreement cannot be interpreted as a pure effect of stimulation while assuming every other parameter is shared.
 
-## The protocol
+The base configuration gives the ensemble its units and background dynamics. A recurrent gain of four multiplies the selected EPG-to-EPG weights by four relative to that base. It does not mean four times an experimentally measured synaptic conductance. The multiplier is explicit; the physical calibration remains a model assumption.
 
-Every lab follows the same six steps.
+## Constructing a useful sample
 
-1. **Grid.** Sweep the free axes. The ring lab uses
-   `epgRecur ∈ {1,3,4,6} × d7Gain ∈ {0.5,1,1.3} × epgTonic ∈ {0,3,5,7} × penGain = 1`,
-   which is 48 members. The memory lab uses
-   `kc2mb ∈ {0.5,1,2} × aplGain ∈ {0.5,1,2} × mbonTonic ∈ {0,4} × mbRecur = 1`, 18 members.
-2. **Probe.** Drive every member with the same stimulus and measure observables that fit
-   the circuit's geometry. On a ring that is bump phase, width and persistence. On a
-   column map it is centroid offset. On a memory it is pattern separation and gain
-   compression.
-3. **Classify.** Label each member with a hypothesis class. For the ring: `silent`,
-   `attractor_tonic`, `attractor_free`, `filter`, `frozen`. For the shift: `wired_shift`,
-   `passthrough`, `silent`. For the memory: `gain_controlled`, `linear_passthrough`,
-   `collapsed`, `silent`.
-4. **Perturb.** Repeat the probe under each perturbation: silence a population, remove an
-   edge class, sweep a drive.
-5. **Split.** For each experiment, compute the *separation score*: the fraction of
-   member pairs the experiment places in different outcome classes.
-6. **Rank.** Order experiments by separation. The top one is where the surviving
-   hypotheses disagree most, so it is the measurement most worth making.
+The heading ensemble varies recurrent excitation over four values, inhibitory gain over three, and tonic EPG bias over four, while holding the PEN-pathway multiplier fixed. That gives forty-eight members. The memory-related probe varies readout gain, APL gain, and output-cell bias to create eighteen members. The PFN experiment uses seventy-two combinations of pathway gains, recurrence, and bias.
 
-The output is a JSON artifact with the seed, the grid, every member's parameters and
-outcomes, the class counts, the mechanism counts, the ranked experiment table, and a
-one-paragraph claim. The claim for the ring lab reads:
+A regular grid has practical advantages. It is easy to describe, rerun, and inspect. Nearby failures can reveal a regime boundary, and a reader can see which range was explored. But a grid also assigns weight to regions by construction. A parameter sampled at twice as many points contributes twice as many members to an unweighted comparison.
 
-> Wiring supports a low-dimensional heading bump in a narrow gain regime (EPG
-> recurrence ~3 to 6×, tonic EPG bias ~3 to 7 mV). Free-running bump without tonic
-> drive was not observed at any grid point. Among bump-sustaining models, Delta7
-> silencing separates mechanisms that are indistinguishable at baseline.
+There is no reason to assume that biological plausibility is uniform in the chosen coordinates. Equal steps in conductance and equal steps in its logarithm describe different sampling distributions. A narrow region of stable operation may be biologically plausible if development regulates the relevant quantity tightly. Its small fraction of a broad grid is not a probability that the animal uses it.
 
-Notice the grammar. It is a claim about the *ensemble*, not about a model. It reports a
-regime, a non-observation, and the experiment that discriminates. That sentence shape is
-the deliverable of the whole pipeline.
+The appropriate first claim is therefore descriptive: twelve of these forty-eight settings sustained a localised state under this probe. To turn that into a statement about likely biological mechanisms would require further constraints or an explicit prior over parameters and model classes.
 
-## What a separation score is
+## Following one experiment through
 
-The score is simple to compute and better understood than treated as a black box. For an experiment that sorts 48 members into outcome classes, count the pairs of
-members that land in different classes and divide by the total number of pairs. If every
-member responds the same way the score is 0. If the members split evenly between two
-classes it is 0.5. With three or more balanced classes it can go higher.
+Consider two ensemble members that retain a coherent bump after a localised stimulus ends. At baseline their decoded phases and widths are similar. In one, strong excitation is balanced mainly by Delta7 inhibition. In the other, a different background interaction supplies enough restraint that Delta7 contributes little under the probe.
 
-The consequence is that a score near 0.5 on a small ensemble is close to the maximum,
-and a score near 0.53 in the mushroom-body lab with only two occupied classes
-(Chapter 11) is a near-even split, not evidence of a rich mechanism landscape. The
-scores are only comparable within one ensemble. `tonic_sweep` scored 0.414 in the ring
-lab because members in different mechanism classes answer a tonic-drive sweep with
-categorically different bump behaviour. That is what "best discriminator" means: not
-the biggest effect, but the most informative outcome about which member you are looking
-at.
+Silencing Delta7 can expose this difference. The first member may spread into broad activity or lose its stable operating regime. The second may retain a concentrated bump. The perturbation is informative because the baseline observable left the alternatives unresolved.
 
-## What the method cannot do
+The execution loop applies the same general sequence to all members. It builds a network with the chosen parameters, presents a defined stimulus, measures continuous observables, and assigns an outcome category. It then repeats the procedure under each perturbation. The report retains the parameter values, observations, and labels so that a coarse category can be traced back to its measurement.
 
-An ensemble is only as good as the mechanisms it contains. If the family of models
-lacks a mechanism the real circuit has, no amount of grid points will find it. The
-family will split into classes that are all wrong in the same way, and the ranked
-experiment will discriminate between wrong answers. Chapter 9 is a worked example of
-this, and of how the missing mechanism was found: not by more members, but by a
-second formalism and by published data.
+The classification thresholds are part of the method. A circular concentration just above one half and one just below it may produce different labels despite very similar activity. Such boundaries are useful for summarising many runs, but a change of category should not automatically be called a change of mechanism. The continuous measurements need to remain available.
+
+Randomness also requires discipline. A fixed seed makes a particular execution reproducible. It does not necessarily give two different models identical random inputs if their execution paths consume random values in a different order. The current implementation seeds a shared generator; stronger comparisons would provide matched stimulus streams explicitly for each member and perturbation. Reseeding and examining ranking sensitivity are useful, but they answer a different question from exact replay.
+
+## Understanding the separation score
+
+The initial ranking uses unweighted ensemble separation. For an experiment, count how many pairs of different members receive different outcome labels, then divide by the total number of member pairs.
+
+If there are eighteen members split into two equal groups of nine, eighty-one pairs cross between groups. There are 153 distinct pairs in total, so the score is eighty-one divided by 153, or about 0.529. The value is slightly above one half because a member is never paired with itself. With forty-eight members split equally, the corresponding maximum for two groups is about 0.511.
+
+If every member receives the same label, separation is zero. If several balanced categories are occupied, it can be higher. A high score means that this particular sample of models produces diverse classified outcomes under the specified observation. It does not mean that the experiment has a large effect, nor that it is feasible or precise in an animal.
+
+The denominator exposes a limitation. Suppose baseline recordings have already ruled out all silent models. A stimulus that separates silent models from active models may rank highly on the original grid but tell us little about the remaining biological possibilities. Experimental value should be assessed after conditioning on baseline-compatible members.
+
+The ranking is also sensitive to duplication. If we add many nearly identical models in one region, the score changes even though we have introduced little new mechanistic diversity. Weighting mechanism classes or sampling from an explicit parameter distribution could reduce this problem, but each approach brings its own assumptions.
+
+## From separation to experimental value
+
+A laboratory must care about more than the partition of a model grid. It must be possible to target the population, measure the predicted change, and distinguish the outcomes in the presence of biological variability and measurement noise. A model may predict two bump widths that are different numerically but indistinguishable with the available imaging method.
+
+Interventions can also have effects outside the selected pathway. Silencing a cell type may alter several circuits simultaneously. The model's operation of setting a threshold extremely high is a clear computational manipulation, but its relationship to a biological manipulation has to be established rather than assumed.
+
+A more mature ranking would predict distributions over measurable outcomes, incorporate intervention uncertainty, and evaluate information gain among models still compatible with prior observations. It could then account for cost and feasibility. The present score is a transparent first step toward that calculation.
+
+Transparency is an advantage even when the score is simple. If a highly ranked experiment merely separates silent and active members, we can see that. If its ranking collapses when a classification threshold changes, we can see that too. An opaque confidence measure would make these weaknesses harder to diagnose.
+
+## Learning from an incomplete family
+
+The ensemble method is most useful when it resists two temptations. One is to publish only the parameter setting that works. The other is to treat failure throughout the sampled grid as proof that the anatomy cannot support the computation.
+
+Between those extremes lies a productive result: a map of which assumptions produced which behaviours, together with the interventions that expose their differences. A model family can identify a narrow operating regime, reveal that baseline agreement hides causal differences, or show that an expected capability never appeared under the chosen protocol.
+
+When the entire family fails similarly, the next step may be a new model class rather than a larger grid. The heading field and the APL discussion will make that possibility concrete. The ensemble has not exhausted the connectome's implications. It has organised a portion of them well enough that a disagreement can guide the next experiment.

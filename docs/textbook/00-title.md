@@ -1,10 +1,6 @@
 ---
 title: "Compiling the Fly Brain"
-subtitle: "What a Complete Wiring Diagram Does and Does Not Determine"
+subtitle: "What a Wiring Diagram Constrains, and What Experiments Must Decide"
 author: "The fly-brain project"
-date: "Working draft, September 2026"
+date: "Revised research edition, September 2026"
 ---
-
-\newpage
-\tableofcontents
-\newpage
