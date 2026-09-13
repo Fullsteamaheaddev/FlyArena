@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Compiling the Fly Brain — a working textbook</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="../src/textbook.css" />
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div id="book-head">
+      <div class="book-title">Compiling the<br/>Fly Brain</div>
+      <div class="book-sub">From connectome to computation</div>
+      <div class="book-links"><a href="../">brain viewer</a> · <a href="../structures.html">structures</a> · <a href="../data/textbook.json">json</a></div>
+    </div>
+    <nav id="toc"></nav>
+  </aside>
+  <main id="reader">
+    <div id="content"><p class="loading">loading…</p></div>
+    <nav id="prevnext">
+      <a id="prev" class="pn"></a>
+      <a id="next" class="pn"></a>
+    </nav>
+  </main>
+  <button id="toc-toggle" aria-label="table of contents">☰</button>
+</div>
+<script type="module" src="../src/textbook.js"></script>
+</body>
+</html>
