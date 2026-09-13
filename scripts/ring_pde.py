@@ -64,13 +64,16 @@ class RingField:
     def f(self, u):
         return np.clip((u - self.thr) / (1.0 - self.thr), 0.0, 1.0)  # saturating rate
 
-    def step(self, om=0.0, landmark=None, lm_gain=0.0, dt=0.005, noise=0.0, rng=None):
+    def step(self, om=0.0, landmark=None, lm_gain=0.0, dt=0.005, noise=0.0,
+             rng=None, pen_mask=(1, 1)):
         fu = self.f(self.u)
         F = np.fft.fft(fu)
         rec = np.fft.ifft(np.fft.fft(self.W) * F).real
         pen = 0.0
         if om:
+            # pen_mask gates the two PEN arms: +om engages arm 0, -om arm 1.
             if self.pen_mode == 'advect':
+                om = om * (pen_mask[0] if om > 0 else pen_mask[1])
                 m = np.fft.fftfreq(self.n) * self.n
                 delta = om * dt * self.vel_gain * self.n / (2 * np.pi)
                 self.u = np.fft.ifft(np.fft.fft(self.u) * np.exp(-2j * np.pi * m * delta / self.n)).real
@@ -82,7 +85,7 @@ class RingField:
                 # PEN firing saturates (real neurons can't encode |om| >> 2 rad/s).
                 self.om_sm += (om - self.om_sm) * dt / self.tau_pen
                 om_s = 2.0 * np.tanh(self.om_sm / 2.0)
-                vp, vm = max(om_s, 0.0), max(-om_s, 0.0)
+                vp, vm = pen_mask[0] * max(om_s, 0.0), pen_mask[1] * max(-om_s, 0.0)
                 pen = self.pen_gain * (vp * np.fft.ifft(np.fft.fft(self.Wp) * F).real
                                      + vm * np.fft.ifft(np.fft.fft(self.Wm) * F).real)
         lm = 0.0

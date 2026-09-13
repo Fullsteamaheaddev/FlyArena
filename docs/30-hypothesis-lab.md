@@ -105,6 +105,30 @@ that is provably the first-order equivalent of the shifted feedback. **The resid
 between 'shifted' and 'advect' is itself a hypothesis-lab output** — it says the single-field
 reduction drops something the real two-population circuit needs.
 
+### Cross-formalism perturbation check (`scripts/perturb_pde.py`)
+
+The same manipulations the LIF lab ranked were run on the field model, so outcomes can be
+compared across formalisms. Agreement across model classes is stronger evidence than
+agreement across parameters within one class.
+
+**Delta7 suppression, graded (the LIF lab's #1 discriminator).** The field predicts a
+monotonic FWHM curve — 99° → 104° → 116° → 138° → 165° as d7_gain goes 1.0 → 0.3 — followed
+by dissolution into uniform saturated firing below ~0.2 (R→0, peak rate stays high: the
+`confines` endpoint, not silence). This disagrees with the LIF majority class
+(`d7_sculpts_sharp`, survives sharp) and refines the minority `confines` class with a
+quantitative intermediate curve. The published fly result — Delta7 silencing widens and
+destabilizes the bump — sits inside the field model's graded regime. A FWHM measurement
+under graded Delta7 suppression now discriminates all three claims at once.
+
+**PEN arm gating.** With only the om>0 arm intact the field integrates +om at ~unity gain
+and is indifferent to -om; the converse for the other arm. Arm selectivity is exact —
+unilateral PEN silencing should abolish integration in one direction only, matching the
+fly result (PEN block → heading no longer follows turns).
+
+**Local excitation sweep.** The bump is bistable above epg_recur ≈ 1.5 and absent below —
+the one free gain of the field model has a measured viability threshold, and the observed
+bump width (~100° FWHM) is stable across the viable range (94°–107°).
+
 Two honest points:
 
 1. **At the scalar level there is no magic** — a weakly-corrected complementary filter matches

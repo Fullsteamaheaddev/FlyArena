@@ -1,0 +1,102 @@
+{
+ "d7_sweep": [
+  {
+   "R": 0.584,
+   "width_deg": 99.0,
+   "peak": 89.16,
+   "d7_gain": 1.0
+  },
+  {
+   "R": 0.585,
+   "width_deg": 104.3,
+   "peak": 89.3,
+   "d7_gain": 0.8
+  },
+  {
+   "R": 0.574,
+   "width_deg": 115.6,
+   "peak": 88.03,
+   "d7_gain": 0.6
+  },
+  {
+   "R": 0.523,
+   "width_deg": 138.1,
+   "peak": 85.66,
+   "d7_gain": 0.4
+  },
+  {
+   "R": 0.434,
+   "width_deg": 165.4,
+   "peak": 81.86,
+   "d7_gain": 0.3
+  },
+  {
+   "R": 0.002,
+   "width_deg": 0.0,
+   "peak": 60.03,
+   "d7_gain": 0.2
+  },
+  {
+   "R": 0.0,
+   "width_deg": 0.0,
+   "peak": 82.82,
+   "d7_gain": 0.1
+  },
+  {
+   "R": 0.0,
+   "width_deg": 0.0,
+   "peak": 105.6,
+   "d7_gain": 0.0
+  }
+ ],
+ "pen_both": {
+  "R": 0.584,
+  "width_deg": 98.8,
+  "peak": 89.23,
+  "drift": 0.96
+ },
+ "pen_left": {
+  "R": 0.584,
+  "width_deg": 98.8,
+  "peak": 89.23,
+  "drift": 0.96
+ },
+ "pen_right": {
+  "R": 0.584,
+  "width_deg": 99.0,
+  "peak": 89.16,
+  "drift": 0.0
+ },
+ "exc_sweep": [
+  {
+   "R": 0.0,
+   "width_deg": 0.0,
+   "peak": -0.0,
+   "epg_recur": 1.4
+  },
+  {
+   "R": 0.58,
+   "width_deg": 94.4,
+   "peak": 72.97,
+   "epg_recur": 1.8
+  },
+  {
+   "R": 0.584,
+   "width_deg": 99.0,
+   "peak": 89.16,
+   "epg_recur": 2.2
+  },
+  {
+   "R": 0.585,
+   "width_deg": 102.9,
+   "peak": 105.5,
+   "epg_recur": 2.6
+  },
+  {
+   "R": 0.583,
+   "width_deg": 107.4,
+   "peak": 121.34,
+   "epg_recur": 3.0
+  }
+ ]
+}
