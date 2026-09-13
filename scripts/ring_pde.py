@@ -23,13 +23,18 @@ class RingField:
     inhibition. The Delta7 part alone is (a - b cos) ~ 0 at the bump, strong at the
     antipode — it is the surround, not the center; the narrow excitatory component
     is the EPG recurrence whose gain the wiring does not fix (epgRecur axis)."""
-    def __init__(self, n=256, tau=0.05, epg_recur=2.2, d7_gain=1.0,
-                 shift_cols=1.47, n_cols=8, thr=0.2):
+    def __init__(self, n=256, tau=0.05, epg_recur=3.0, d7_gain=1.0,
+                 shift_cols=1.47, n_cols=8, thr=0.2, rn_gain=0.5, rn_depth=0.5):
         self.n, self.tau = n, tau
         k = np.arange(n)
         c = np.cos(2 * np.pi * k / n)
         exc = epg_recur * np.maximum(0.0, c) ** 4          # narrow same-wedge excitation
         inh = d7_gain * 0.89 * (1.0 - c)                   # Delta7: a-b*cos, a~=b=~880/1000
+        # second inhibitory channel: GABAergic ring neurons (Gall-EB / R neurons),
+        # a shallow surround NOT gated by d7_gain. Withheld-data correction: real
+        # Delta7 block leaves a formed-but-widened bump because ring neurons still
+        # confine it (Turner-Evans et al. 2020: "other sources of inhibition must act").
+        inh += rn_gain * (1.0 - rn_depth * c)
         self.W = exc - inh
         self.s = shift_cols * n / n_cols                   # PEN offset in field cells
         self.thr = thr

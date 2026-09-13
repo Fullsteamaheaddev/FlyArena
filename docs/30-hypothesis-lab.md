@@ -81,8 +81,11 @@ ring-neuron-style disinhibition (global suppression with a gap at the landmark b
 | Kalman + outlier gate | 0.489 | 0.710 |
 | complementary α=0.05 (matched) | 0.604 | 0.633 |
 | ring attractor (scalar reduced) | 0.641 | 0.668 |
-| **ring field (PDE, advect mode)** | **0.408** | **0.494** |
-| ring field + per-cell noise σ=0.15 | 0.410 | 0.494 |
+| **ring field (PDE, advect mode)** | **0.48** | **0.53** |
+| ring field + per-cell noise σ=0.15 | ~0.49 | ~0.53 |
+
+(Benchmark numbers shown for the corrected two-inhibition-channel model — matching the
+real Delta7-block result costs ~0.07 rad vs. the pure-Delta7 version, which scored 0.41.)
 
 ### The velocity pathway, done properly
 
@@ -124,14 +127,16 @@ The same manipulations the LIF lab ranked were run on the field model, so outcom
 compared across formalisms. Agreement across model classes is stronger evidence than
 agreement across parameters within one class.
 
-**Delta7 suppression, graded (the LIF lab's #1 discriminator).** The field predicts a
-monotonic FWHM curve — 99° → 104° → 116° → 138° → 165° as d7_gain goes 1.0 → 0.3 — followed
-by dissolution into uniform saturated firing below ~0.2 (R→0, peak rate stays high: the
-`confines` endpoint, not silence). This disagrees with the LIF majority class
-(`d7_sculpts_sharp`, survives sharp) and refines the minority `confines` class with a
-quantitative intermediate curve. The published fly result — Delta7 silencing widens and
-destabilizes the bump — sits inside the field model's graded regime. A FWHM measurement
-under graded Delta7 suppression now discriminates all three claims at once.
+**Delta7 suppression, graded (the LIF lab's #1 discriminator), corrected against withheld
+data.** The first field model attributed all surround inhibition to Delta7 and dissolved
+the bump below d7≈0.3 — contradicted by Turner-Evans et al. (2020), where Δ7 block leaves
+a formed bump that tracks unreliably ("other sources of inhibition must act"). Adding the
+second biological channel — a shallow ring-neuron surround (GABAergic Gall-EB/R neurons,
+`rn_gain`, `rn_depth`) not gated by d7 — reproduces the real result: FWHM widens
+monotonically 90° → 143° as Δ7 is fully blocked while the bump survives throughout. The
+LIF majority class (`survives sharp`) is now disfavored by both the corrected field model
+and the published data; the refined prediction is a quantitative width-vs-suppression
+curve, a measurable discriminating experiment.
 
 **PEN arm gating.** With only the om>0 arm intact the field integrates +om at ~unity gain
 and is indifferent to -om; the converse for the other arm. Arm selectivity is exact —
