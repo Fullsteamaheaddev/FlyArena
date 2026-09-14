@@ -28,9 +28,9 @@ export async function loadBlenderFly(base, progress = () => {}) {
   } finally { worker.terminate(); }
 }
 
-export function createBlenderFly(asset, detailTexture) {
+function makeGeometries(parts) {
   const geometries = {};
-  for (const part of asset.parts) {
+  for (const part of parts) {
     const geometry = new THREE.BufferGeometry();
     for (const [name, array] of Object.entries(part.attributes))
       geometry.setAttribute(name, new THREE.BufferAttribute(array, name === 'uv' ? 2 : 3, name === 'normal'));
@@ -40,7 +40,26 @@ export function createBlenderFly(asset, detailTexture) {
     geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3().fromArray(b.center), b.radius);
     geometries[part.geom] = geometry;
   }
-  const appearance = createFlyAppearance(asset.meta, null, null, detailTexture, { geometries, hairs: asset.hairs });
+  return geometries;
+}
+
+export async function loadArenaDetail(base) {
+  const [meta, response] = await Promise.all([
+    fetch(`${base}body/blender/arena.json`).then(r => { if (!r.ok) throw new Error('Arena detail metadata unavailable'); return r.json(); }),
+    fetch(`${base}body/blender/arena.mesh`),
+  ]);
+  if (!response.ok || meta.version !== 1) throw new Error('Arena detail unavailable');
+  const binary = await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  const types = { Float32Array, Int16Array, Uint32Array };
+  const read = d => new types[d.type](binary,d.offset,d.length);
+  return Object.fromEntries(Object.entries(meta.levels).map(([level, parts]) => [level, makeGeometries(parts.map(p => ({
+    ...p, index:read(p.index), attributes:Object.fromEntries(Object.entries(p.attributes).map(([name,d])=>[name,read(d)])),
+  })))]));
+}
+
+export function createBlenderFly(asset, detailTexture, levels = null) {
+  const geometries = makeGeometries(asset.parts);
+  const appearance = createFlyAppearance(asset.meta, null, null, detailTexture, { geometries, hairs: asset.hairs, levels });
   applyBlenderFly(appearance, asset);
   return appearance;
 }
@@ -66,6 +85,8 @@ function applyBlenderFly(appearance, { meta, hairs }) {
         mesh.material = materialVariants.get(key);
       }
       materialParts.set(mesh.material, part);
+      const female = appearance.femaleMats.get(mesh.material);
+      if (female) materialParts.set(female, part);
     }
   }
   for (const [material, part] of materialParts) {

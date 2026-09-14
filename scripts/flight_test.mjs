@@ -14,8 +14,9 @@ const th = M.body('thorax').id; let seed = 5; const rand = () => ((seed = (seed 
 const fl = new Flight({ mj, model: M, data: d, thorax: th, jointAdr, act, range, rand });
 fl.start(0); fl.dur = ms - 600;
 const per = Math.round(0.001 / M.opt.timestep);
+const touch = Array.from({length:M.nsensor},(_,i)=>i).filter(i=>M.sensor(i).name.startsWith('touch_claw_')).map(i=>M.sensor_adr[i]);
 for (let t = 0; t < ms; t++) {
-  const legTouch = false;
+  const legTouch = touch.some(i=>d.sensordata[i]>0);
   const r = fl.update(t, 1, { turn, env, others: [], legTouch });
   for (let s = 0; s < per; s++) { if (fl.active) fl.substep(M.opt.timestep * 1000); mj.mj_step(M, d); }
   if (t % 100 === 0 || r === 'landed') { const R = d.xmat.slice(th * 9, th * 9 + 9);

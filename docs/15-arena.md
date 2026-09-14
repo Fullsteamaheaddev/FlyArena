@@ -4,79 +4,58 @@ Files: `arena.html`, `src/arena.js`, `src/sim/fly.worker.js`, `src/sim/fly.js`.
 
 ## Architecture
 - The main thread loads data, writes the connectome and flyvis model into shared memory, and renders.
-- Each fly runs in its own Web Worker with its own MuJoCo world and brain slot.
-- Workers post poses every 16 ms of simulated time. The main thread shares other flies' positions and sexes
-  so each world moves its proxies, which collide, are seen, and carry pheromone.
-- The brain runs on a WebGPU kernel when `navigator.gpu` is available (see [WebGPU](27-webgpu.md));
-  `?gpu=0` on the arena URL forces the WebAssembly kernel. Either way the wasm module is also instantiated,
-  because the flyvis eyes run on it.
-- Food consumption is summed across workers and broadcast back.
+- Each fly runs in its own Web Worker with its own MuJoCo world and brain slot (maximum 12 flies).
+- Workers transfer pose buffers at most 30 times per wall-clock second. The renderer interpolates
+  positions and quaternions between snapshots, without extrapolating the simulation.
+- Other-fly positions and sexes are shared at most 30 Hz. Every world has 11 cached collision proxies;
+  unused proxies are parked outside the arena. The old seven-proxy allocation generated invalid-body
+  lookups once the population exceeded eight flies.
+- WebGPU brains use bounded bursts (at most eight simulated milliseconds / eight CPU milliseconds),
+  flush, and await their submitted GPU work before scheduling more. This prevents an accumulating
+  compute queue from starving WebGL or making motor readback increasingly stale. WASM uses the same
+  CPU burst limit without a GPU fence. Neither backend skips neural/physics steps.
+- `?gpu=0` forces the WebAssembly brain; flyvis eyes always use WASM.
+- Food consumption is accumulated between pose messages and broadcast back to the workers.
 
 ## Rendering
-Three.js with flybody meshes per body part, shadows, a checkered floor and striped wall matching what the
-eyes see, odour plumes as soft discs, and a brain inset showing the selected fly's activity at each soma.
+The arena now loads the same Blender-prepared articulated body as `fly.html`: 1,169,030 surface
+triangles, 35,060 baked hair instances, Cycles vertex illumination and the Blender AgX look. These are
+interactive meshes, not rendered fly photographs. Live specular lighting and the dynamic floor shadow
+remain. Cycles already supplies body/hair occlusion, so the arena skips redundant screen-space AO.
 
-`src/fly-appearance.js` supplies both `fly.html` and the arena. At macro scale it uses the 272,550-triangle
-scan with approximately 35,000 procedural setae, glossy eye facets and camera-dependent pseudopupils,
-sex-specific tergite bands/sex combs, and thin-film wing interference. Membranes receive reflections but
-do not cast opaque shadows. Restrained room reflections, warm key and rim lights, and close-range
-ambient occlusion bring out the cuticle, bristles and joints. The body uses spatially varying roughness,
-Blender-baked cellular relief, low sheen and no clear coat. A small amber light-wrap term
-approximates shallow scattering; it is not a measured subsurface model. Eye lenses keep smaller facet
-highlights and a soft red pseudopupil, while the wing film has weaker reflections and grazing-angle
-opacity. One shared 512² data texture stores relief, roughness and pigment in RGB (480 KiB PNG,
-approximately 1.3 MiB GPU memory with mipmaps). Triplanar sampling follows each articulated part;
-mipmaps suppress subpixel texture shimmer. The face has denser, shorter microtrichia instead of
-coarse added hairs. This adds about 3,100 small hairs only in the macro tier, with no extra draw calls.
-See [Blender workflow](../art/fly/README.md) for the editable Cycles scene, reference render and bake.
+The arena retains MuJoCo's body poses and proportions. The anatomy viewer's female size adjustment and
+idle animation are not applied over physics poses. Both sexes receive the Blender material treatment;
+female banding and hidden sex combs remain distinct. The single cuticle detail texture and all immutable
+surface/hair buffers are shared. Baked illumination assumes the studio/rest pose, so moving self-shadows,
+female recoloring and large flight poses remain approximations.
 
-The arena keeps the simulated body poses and proportions. The anatomy viewer's female size adjustment
-and idle animation are not applied over MuJoCo's world-space poses. Added hairs, pigment, sex combs and
-thin-film thickness remain procedural approximations, not specimen measurements.
-
-Performance is controlled by projected body size, with hysteresis at detail boundaries:
+Distance detail uses projected body size with hysteresis:
 
 | View | Geometry and hairs |
 |---|---|
-| Distant (below approximately 100 px) | Existing 69,124-triangle reduced mesh; material sheen represents fine fuzz |
-| Nearby (approximately 100–330 px) | Reduced body, full-resolution eyes and long bristles with simpler hair geometry |
-| Macro (above approximately 330 px) | Full scan and the entire curved-hair population; half-resolution AO |
+| Distant (enter below ~85 px, leave above 110 px) | 21,332-triangle Blender derivative; no separate hairs |
+| Nearby (~110–330 px) | 105,589-triangle Blender derivative; simpler long bristles |
+| Macro (enter above 330 px, leave below 270 px) | Full Blender mesh and all curved hairs |
 
-Geometry, materials and immutable hair instance buffers are shared across flies. Flight blur uses two
-instanced draws per fly with thorax-local poses sampled by its worker. Articulated body matrices update
-when a pose arrives. Shadows follow the camera's target with a tighter frustum, refresh at most 30 Hz,
-and stop refreshing once poses and camera settle. Subpixel hairs cast no arena shadows.
+The reduced meshes preserve normals, eye curvature attributes, wing UVs and baked illumination.
+`node scripts/pack_fly_arena.mjs` generates the two compact tiers offline from `fly.mesh`; the additional
+asset is 2.44 MB compressed. `check_arena_asset.mjs` verifies the source hash, topology and attributes.
+The full macro mesh is unchanged. Hair detail changes preserve each batch's baked light attribute.
 
-The main framebuffer has a 2.4-megapixel ceiling (maximum DPR 2), with four-sample MSAA. In expensive
-close views, sustained frame times above 19 ms reduce render density in 15% steps, down to DPR 0.9
-(or the ceiling if lower); eight seconds of fast frames allows a gentle recovery. The scan and hair
-geometry stay intact. Wide views do not lower density in response to busy simulation workers.
-`src/render-resolution.js` shares this policy between both pages. The brain inset
-draws at most 30 Hz and uploads colours only for new activity, selection or highlighting. Repeated
-placement frees the previous environment meshes, materials and textures. Hidden tabs skip rendering
-and activity polling; simulation scheduling stays under the Run/Pause control.
+`src/arena-batches.js` groups low/medium articulated surfaces by material using Three.js `BatchedMesh`.
+A material draw can contain many body parts from all twelve flies. Each part retains its own physics
+matrix and frustum culling. Macro surfaces use their original meshes; wing blur uses two instanced
+membrane draws per flying fly. Picking still uses the articulated source surfaces.
 
-The anatomy page is always interactive 3D. It loads Blender's subdivided body and lens geometry
-(1,169,030 triangles), Cycles diffuse irradiance and the scene's AgX display transform. Specular
-reflections are evaluated live from the four macro area lights. The bake includes body/hair
-occlusion and subsurface transport; the viewer skips its redundant screen-space AO pass.
-The full-body and head buttons move the actual orbit camera. Sex, wing, focus and hover controls
-remain available; there is no photograph mode. This is a WebGL renderer using Blender-prepared
-assets, not the Cycles engine running in the browser. Baked lighting assumes the studio/rest pose;
-large wing/flight pose changes and female pigmentation remain approximations.
+Ground shadows refresh at most 30 Hz and stop when poses/camera settle. Brain colors upload only for
+new activity/selection/highlighting, and the brain inset draws at most 30 Hz. Environment placement
+releases the old geometry, materials and textures. Hidden tabs skip rendering and activity polling.
+`src/render-resolution.js` retains the 2.4-megapixel ceiling, DPR cap of 2 and adaptive density for macro
+views, with a 120 Hz target on capable displays. Wide-view simulation load does not lower render density.
 
-`src/macro-focus.js` evaluates defocus at half resolution with a 13-sample disk and composites over
-full-resolution colour. The anatomy viewer uses a cached 1024² filtered shadow map for soft ground
-contact; the arena retains its existing 2048² shadow map, dynamic lighting and distance detail.
-See [the Blender workflow](../art/fly/README.md) for asset generation and compression.
-
-Run `node scripts/check_rendering.mjs` with the dev server running for browser interaction checks,
-screenshots and warm-frame timings. Results default to `/tmp/fly-rendering/`. The harness covers both
-pages, live simulation, five flies, sex differences, flight rendering, distance detail, shared buffers,
-resize and placement resource cleanup. The explicit flight fixture tests rendering only; it is not a
-biological takeoff test. Optional `--baseline=/path/to/sources` serves saved `fly.js` and `arena.js`
-through Vite for comparison. `--gpuTimers=1` is diagnostic only: timer queries can perturb ANGLE frame
-times. Rendering FPS does not measure the simulated-time/wall-time ratio of the neural/physics workers.
+See [current twelve-fly performance and flight checks](arena-performance.md) and the
+[Blender workflow](../art/fly/README.md). The older tables below record previous renderer revisions.
+Rendering FPS and simulated-time/wall-time are separate measurements.
 
 ### Measured rendering (2026-09-13)
 
@@ -146,8 +125,8 @@ remembered. While the brain panel is folded, the page stops polling activity and
 
 ## Flight
 A flying fly's wings are drawn as faint copies across the wing-beat cycle, from poses the worker computes
-at startup. Its shadow on the floor shows its height. "Activate takeoff DNs" excites the selected fly's
-DNp02 and DNp04.
+at startup. Its shadow on the floor shows its height. "Activate takeoff DNs" queues the selected fly's intrinsic takeoff request until startup and contact
+gates permit launch. See [Flight](24-flight.md) for the motor approximation and actual browser checks.
 
 ## World presets
 

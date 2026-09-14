@@ -4,8 +4,9 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { createFlyAppearance, loadCuticleDetail } from './fly-appearance.js';
+import { loadCuticleDetail } from './fly-appearance.js';
+import { loadBlenderFly, createBlenderFly, loadArenaDetail, blenderOutput } from './fly-blender.js';
+import { ArenaBatches } from './arena-batches.js';
 import { RenderResolution } from './render-resolution.js';
 import { loadConnectome } from './data.js';
 import { PRESETS } from './sim/world.js';
@@ -21,7 +22,7 @@ const presetKey = new URLSearchParams(location.search).get('env') || 'foraging';
 const PRESET = PRESETS[presetKey] || PRESETS.foraging;
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
-let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
+let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
@@ -30,16 +31,15 @@ async function main() {
   const data = await loadConnectome(status);
   meta = data.meta;
   status('loading body model');
-  const [bm, xml, g, vj, vb, hj, hb, sz, sg, bp, wasmBytes, fvb, fvj, fvi, fvm, nmc, detail] = await Promise.all([
+  const [bm, xml, g, blender, levels, output, sz, sg, bp, wasmBytes, fvb, fvj, fvi, fvm, nmc, detail] = await Promise.all([
     fetch(`${BASE}data/bodymap.json`).then(r => r.json()), fetch(`${BASE}body/fly_physics.xml`).then(r => r.text()), fetch(`${BASE}body/gait.json`).then(r => r.json()),
-    fetch(`${BASE}body/fly_visual.json`).then(r => r.json()), fetch(`${BASE}body/fly_visual.bin`).then(r => r.arrayBuffer()),
-    fetch(`${BASE}body/fly_hd.json`).then(r => r.json()), fetch(`${BASE}body/fly_hd.bin`).then(r => r.arrayBuffer()),
+    loadBlenderFly(BASE, status), loadArenaDetail(BASE), blenderOutput(BASE),
     fetch(`${BASE}data/neuron_size.bin`).then(r => r.arrayBuffer()), fetch(`${BASE}data/ntsign.bin`).then(r => r.arrayBuffer()),
     fetch(`${BASE}data/brain_params.json`).then(r => r.ok ? r.json() : {}).catch(() => ({})), fetch(`${BASE}lif.wasm`).then(r => r.arrayBuffer()),
     fetch(`${BASE}vision/flyvis.bin`).then(r => r.arrayBuffer()), fetch(`${BASE}vision/flyvis.json`).then(r => r.json()), fetch(`${BASE}vision/flyvis_inputs.json`).then(r => r.json()), fetch(`${BASE}vision/flyvis_map.json`).then(r => r.json()),
     fetch(`${BASE}data/neuromod.json`).then(r => r.ok ? r.json() : null).catch(() => null), loadCuticleDetail(`${BASE}body/cuticle_detail.png`)]);
   const vision = { model: parseFlyVis(fvb, fvj, fvi), map: fvm };
-  bodymap = bm; flyXML = xml; gait = g; visual = createFlyAppearance(hj, hb, { json: vj, bin: vb }, detail);
+  bodymap = bm; flyXML = xml; gait = g; visual = createBlenderFly(blender, detail, levels); outputPass = output;
   shared = { N: data.N, E: data.E, indptr: toShared(data.indptr), indices: toShared(data.indices), weights: toShared(data.weights), nt: toShared(data.nt),
     side: toShared(data.side), superclass: toShared(data.superclass), cls: toShared(data.cls), size: toShared(new Float32Array(sz)), sign: toShared(new Float32Array(sg)) };
   brainParams = { ...bp, neuromod: !!(bp.neuromod && nmc) };
@@ -59,7 +59,7 @@ async function main() {
   else { await addFly([st0[0], st0[1]], st0[2]);
     for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
-  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, addFly, rebuildEnv };
+  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv };
   animate();
 }
 
@@ -75,7 +75,7 @@ function buildScene(data) {
   renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
   resolution = new RenderResolution(() => resize(), { targetFps: 120 });
   renderer.setPixelRatio(resolution.ratio); renderer.setSize(innerWidth, innerHeight);
-  renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.toneMapping = THREE.NoToneMapping;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;
   renderer.info.autoReset = false;
   scene = new THREE.Scene(); scene.background = new THREE.Color('#0b0e14');
@@ -96,7 +96,8 @@ function buildScene(data) {
   composer = new EffectComposer(renderer, rt); composer.addPass(new RenderPass(scene, camera));
   gtao = new GTAOPass(scene, camera, 1, 1);
   gtao.updateGtaoMaterial({ radius: 0.012, distanceExponent: 1.5, thickness: 0.6, scale: 1, samples: 8 });
-  composer.addPass(gtao); composer.addPass(new OutputPass());
+  // Cycles already baked body/hair occlusion. Keep the ground contact shadow; skip redundant AO.
+  gtao.enabled = false; composer.addPass(gtao); composer.addPass(outputPass);
   // Only solid cuticle/environment surfaces belong in AO. Films, plume overlays and subpixel hairs do not.
   const override = gtao._renderOverride, hidden = [];
   gtao._renderOverride = function (...args) {
@@ -112,6 +113,7 @@ function buildScene(data) {
   }
   addEventListener('resize', () => { resolution.reset(); resize(); }); resize();
   envGroup = new THREE.Group(); scene.add(envGroup); rebuildEnv();
+  batches = new ArenaBatches(scene, visual, MAX_FLIES);
   raycaster = new THREE.Raycaster();
   renderer.domElement.addEventListener('pointerdown', e => { pd = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener('pointerup', e => { if (pd && Math.hypot(e.clientX - pd[0], e.clientY - pd[1]) < 4) onClick(e); });
@@ -169,7 +171,7 @@ function buildFlyMesh(color, sex) {
 }
 
 // One instanced draw per wing film across the sampled beat cycle. Poses are thorax-local and immutable.
-const blurMaterial = new THREE.MeshStandardMaterial({ color: '#c0c7ce', transparent: true, opacity: 0.035, depthWrite: false, side: THREE.DoubleSide, roughness: 0.35 });
+const blurMaterial = new THREE.MeshStandardMaterial({ color: '#c0c7ce', transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide, roughness: 0.35 });
 blurMaterial.forceSinglePass = true;
 function buildWingBlur(f, poses) {
   if (!poses) return;
@@ -195,20 +197,23 @@ async function addFly(pos, yaw, sex = 'm') {
   const id = nextId++; const color = FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
   const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
-  scene.add(f.group); flies.push(f);
+  scene.add(f.group); flies.push(f); batches.add(f);
   worker.onmessage = e => onWorker(f, e.data);
-  worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: 7, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: true, sex,
+  worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: MAX_FLIES - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: true, sex,
     brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap });
   await new Promise(res => { f.onReady = res; });
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });
   renderFlyList();
+  return f;
 }
 function onWorker(f, m) {
   if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
-    f.prev = f.last; f.last = m; shadowDirty = true; f.recvAt = performance.now();
+    f.prev = f.last; f.last = m; shadowDirty = true;
+    const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
+    if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
     broadcastOthers();
   } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
     f.activityTime = m.t; brainAct.set(m.trace); brainDirty = true; onActivity(f, m);
@@ -216,8 +221,9 @@ function onWorker(f, m) {
 }
 let foodDirty = false, lastOthers = 0;
 function broadcastOthers() {
-  const now = performance.now(); if (now - lastOthers < 20) return; lastOthers = now;
-  for (const f of flies) { if (!f.ready) continue; f.worker.postMessage({ type: 'others', others: flies.filter(o => o !== f && o.last && o.last.alive !== false).map(o => ({ x: o.last.pos[0], y: o.last.pos[1], z: o.last.pos[2], yaw: o.last.yaw, sex: o.sex })) }); }
+  const now = performance.now(); if (now - lastOthers < 1000 / 30) return; lastOthers = now;
+  const poses = flies.filter(o => o.last && o.last.alive !== false).map(o => ({ id:o.id, x:o.last.pos[0], y:o.last.pos[1], z:o.last.pos[2], yaw:o.last.yaw, sex:o.sex }));
+  for (const f of flies) if (f.ready) f.worker.postMessage({ type:'others', others:poses.filter(o => o.id !== f.id) });
 }
 function syncEnv() { for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'env', env }); }
 
@@ -261,6 +267,8 @@ function renderFlyList() {
       <span style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span></div>`; }).join('');
   $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); });
   const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f;
+  $('#takeoff').textContent = f?.last?.takeoffPending ? (running ? 'Takeoff queued' : 'Takeoff queued · press Run') : 'Activate takeoff DNs';
+  $('#takeoff').disabled = !f?.ready || f.last?.flying || f.last?.alive === false;
   if (f?.last) { const s = f.last, c = s.cmd || {};
     $('#sel').innerHTML = `<div class="kv"><span>behaviour</span><span style="color:var(--acc)">${s.behavior || ''}</span><span>energy</span><span>${(s.energy * 100).toFixed(0)}%</span><span>health</span><span>${(s.health * 100).toFixed(0)}%</span>
       <span>food eaten</span><span>${(s.eaten * 1000).toFixed(1)} mg·eq</span><span>distance travelled</span><span>${(s.dist || 0).toFixed(1)} cm</span><span>takeoffs / flights</span><span>${s.jumps || 0} / ${s.flights || 0}</span><span>endogenous state</span><span>${s.drive || '–'}</span>${s.nm ? `<span>AKH / insulin</span><span>${s.nm.akh.toFixed(2)} / ${s.nm.dilp.toFixed(2)}</span><span>octopamine (AKHR neurons)</span><span>${s.nm.oa.toFixed(1)} Hz, arousal ${(s.nm.arousal * 100).toFixed(0)}%</span>` : ''}<span>walk drive (BDN2/oDN1/P9)</span><span>${(c.drive || 0).toFixed(0)} Hz</span>
@@ -338,7 +346,7 @@ function updateThreat() {
 }
 // ---------------- render loop ----------------
 let lastFrame = performance.now(), fpsN = 0, fpsT = 0, lastSim = 0, lastSimReal = performance.now();
-const q = new THREE.Quaternion(), followDelta = new THREE.Vector3(), brainBase = new THREE.Color();
+const q = new THREE.Quaternion(), previousQ = new THREE.Quaternion(), followDelta = new THREE.Vector3(), brainBase = new THREE.Color();
 function updateShadows(now) {
   const extent = Math.min(env.arena.radius + 0.5, Math.max(0.35, camera.position.distanceTo(controls.target) * 0.75));
   const center = controls.target;
@@ -360,14 +368,24 @@ function animate() {
   const now = performance.now(); fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
   for (const f of flies) {
     const s = f.last; if (!s || !f.bodyGroups) continue;
-    if (f.drawnPose !== s) {
+    const previous = f.prev, blend = running && previous && s.t>previous.t ? Math.min(1,(now-f.recvAt)/f.poseInterval) : 1;
+    f.poseUpdated = f.drawnPose !== s || f.drawnBlend !== blend;
+    if (f.poseUpdated) {
       shadowDirty = true;
       for (let b = 1; b < f.bodyGroups.length; b++) { const g = f.bodyGroups[b]; if (!g) continue;
         g.position.set(s.xpos[b * 3], s.xpos[b * 3 + 1], s.xpos[b * 3 + 2]);
-        q.set(s.xquat[b * 4 + 1], s.xquat[b * 4 + 2], s.xquat[b * 4 + 3], s.xquat[b * 4]); g.quaternion.copy(q); g.updateMatrix();
+        q.set(s.xquat[b * 4 + 1], s.xquat[b * 4 + 2], s.xquat[b * 4 + 3], s.xquat[b * 4]);
+        if (blend<1) {
+          g.position.x=previous.xpos[b*3]+(g.position.x-previous.xpos[b*3])*blend;
+          g.position.y=previous.xpos[b*3+1]+(g.position.y-previous.xpos[b*3+1])*blend;
+          g.position.z=previous.xpos[b*3+2]+(g.position.z-previous.xpos[b*3+2])*blend;
+          previousQ.set(previous.xquat[b*4+1],previous.xquat[b*4+2],previous.xquat[b*4+3],previous.xquat[b*4]);
+          q.slerpQuaternions(previousQ,q,blend);
+        }
+        g.quaternion.copy(q); g.updateMatrix();
       }
       f.ring.position.set(s.pos[0], s.pos[1], 0.003);
-      updateWingBlur(f, s); f.drawnPose = s;
+      updateWingBlur(f, s); f.drawnPose = s; f.drawnBlend = blend;
     }
     f.ring.visible = f.id === selected;
   }
@@ -385,10 +403,12 @@ function animate() {
     viewPoint.fromArray(f.last.pos).applyMatrix4(camera.matrixWorldInverse);
     const pixels = viewPoint.z < 0 && viewFrustum.intersectsSphere(flyBounds) ? 0.3 * projection / Math.max(0.05, -viewPoint.z) : 0;
     largest = Math.max(largest, pixels);
-    if (f.setDetail(pixels)) shadowDirty = true;
+    const changed = f.setDetail(pixels);
+    if (changed) shadowDirty = true;
+    batches.update(f, f.poseUpdated, changed);
   }
-  gtao.enabled = largest > (gtao.enabled ? 290 : 330);
-  resolution.update(now, gtao.enabled);
+  batches.finish();
+  resolution.update(now, largest > 290);
   if (threatAnim) shadowDirty = true;
   updateShadows(now);
   renderer.info.reset(); const renderStart = performance.now(); composer.render();

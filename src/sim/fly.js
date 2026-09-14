@@ -53,7 +53,9 @@ export class FlyAgent {
     this.energy = 0.6; this.health = 1; this.alive = true; this.eaten = 0; this.t = 0; this.foodEaten = env.food.map(() => 0); this.dist = 0; this.jumps = 0; this._lastPos = null; this._wasJumping = false;
     this.others = [];   // [{x,y,yaw}] of other flies (set by the host)
     this.log = [];
+    this.takeoffPending = false;
   }
+  requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
   state() {
     const d = this.mjd, xp = d.xpos, B = this.bid;
     const P = b => [xp[3 * b], xp[3 * b + 1], xp[3 * b + 2]];
@@ -140,6 +142,9 @@ export class FlyAgent {
         }
       }
     }
+    // Hold an explicit request until the startup/contact gates actually permit a launch.
+    // The former 80 ms pulse silently expired if the user clicked just after loading.
+    if (this.takeoffPending && this.intrinsic) this.intrinsic.takeoffUntil = this.intrinsic.t + 80;
     if (this.intrinsic) this.intrinsic.update(1, B, { energy: this.energy, arousal: this.neuromod?.arousal, touch: st.antTouch, rearing: st.pitchUp > 0.45 && this.motor.jumpT < 0 && !this.motor.righting,
       heat: { left: heatAt(st.antenna.left, this.env), right: heatAt(st.antenna.right, this.env) }, sugar: this._sugar || 0, flying: this.flight.active, ahead: st.ahead, court,
       mouthOnFood: this.env.food.some(f => f.amount > 0 && Math.hypot(st.labellum[0] - f.x, st.labellum[1] - f.y) < f.r - 0.02) });
@@ -157,12 +162,12 @@ export class FlyAgent {
     if (this.motor.pivot) this.lastPivot = this.t;
     const gated = this.t - (this.lastTouch ?? -1e9) < 500 || this.t - (this.lastPivot ?? -1e9) < 300;
     this.motor.flying = this.flight.active;
-    this.cmd = this.motor.apply(this.t, 1, { up: this.mjd.xmat[this.bid.thorax * 9 + 8], touching: gated, voluntary: this.intrinsic && this.t < this.intrinsic.takeoffUntil,
+    this.cmd = this.motor.apply(this.t, 1, { up: this.mjd.xmat[this.bid.thorax * 9 + 8], touching: gated, voluntary: this.takeoffPending || (this.intrinsic && this.t < this.intrinsic.takeoffUntil),
       court: this.intrinsic?.state === 'court' ? { sing: !!this.intrinsic.courtSing, side: this.intrinsic.courtSide } : null,
       contact: st.bodyContact.left || st.bodyContact.right || st.antTouch.left || st.antTouch.right });   // no takeoff while pressed against something
     // takeoff: once the jump has pushed off, the wings start (tarsal reflex); an escape banks away from the threat
     if (this.motor.launchT === this.t && !this.flight.active) {
-      const th = this.env.threat; this.flight.start(this.t, { cause: this.motor.jumpCause, awayFrom: th ? [th.x, th.y] : null }); this.flights++;
+      const th = this.env.threat; this.flight.start(this.t, { cause: this.motor.jumpCause, awayFrom: th ? [th.x, th.y] : null }); this.flights++; this.takeoffPending = false;
     }
     if (this.flight.active) {
       const legTouch = Object.values(st.touch).some(x => x > 0);

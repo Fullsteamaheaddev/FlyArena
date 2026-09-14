@@ -87,7 +87,7 @@ The small `agx-look.png` is a color-management lookup table, not a fly image.
 Lighting is baked for the fixed studio and resting male. It remains valid when orbiting the
 camera, but self-shadowing/scattering during large pose changes and female recoloring are
 approximations. This renderer is WebGL with Cycles-prepared assets; it is not live Cycles path
-tracing. The arena continues to use dynamic lighting and its existing distance detail policy.
+tracing. The arena now loads the same Blender body and bake, with shared reduced geometry tiers and dynamic ground shadows. Its detailed workflow and timings are in [arena performance](../../docs/arena-performance.md).
 
 ```sh
 npm run dev
@@ -113,3 +113,16 @@ Both pages now adapt to a 120 Hz frame budget on fast displays. Flying wing-stro
 smooth vertex illumination, and sub-texel motion reuses the studio shadow map.
 See [the browser performance comparison](../../docs/fly-browser-performance.md) for measured
 loading, GPU costs, visual checks, limitations and reproduction commands.
+
+## Arena geometry tiers
+
+After repacking the Blender source, regenerate the arena derivatives:
+
+```sh
+node scripts/pack_fly_arena.mjs
+node scripts/check_arena_asset.mjs
+```
+
+The two derivatives have 21,332 and 105,589 triangles and preserve baked vertex illumination,
+normals, eye curvature and wing UVs. Their combined gzip payload is 2.44 MB. The full macro geometry
+is retained unchanged. The validator rejects tiers generated from an older Blender source hash.

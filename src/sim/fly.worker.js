@@ -5,7 +5,8 @@ import { attachBrain, attachEyes } from '../brainsetup.js';
 import { buildGroups, GroupMeter } from './groups.js';
 
 let fly = null, meter = null, running = false, speed = 1, others = [], env = null, lastReal = 0, simAhead = 0, timer = null;
-const POSE_EVERY = 16; // ms of sim between pose messages (renderer interpolates)
+let proxyIds = [], lastPose = -Infinity, loopActive = false;
+const POSE_EVERY = 1000 / 30; // wall ms: twelve workers must not flood the render thread
 
 onmessage = async (e) => {
   const m = e.data;
@@ -19,6 +20,7 @@ onmessage = async (e) => {
     fly = new FlyAgent({ brain, flyvis, mj, flyXML: m.flyXML, env, data, size: g.size, sign: g.sign, bodymap: m.bodymap, gait: m.gait, id: m.id,
       pos: m.pos, yaw: m.yaw, nProxies: m.nProxies, mode: m.mode, brainOpts: m.brainOpts, vision: m.vision, neuromod: { calib: m.neuromod }, sex: m.sex });
     meter = new GroupMeter(buildGroups(m.bodymap, data.meta.types, data.side), g.N);
+    proxyIds = Array.from({ length:m.nProxies }, (_,k) => fly.model.body_mocapid[fly.model.body(`proxy${k}`).id]);
     postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj) });
     postPose();
     if (running) { lastReal = performance.now(); loop(); }
@@ -29,32 +31,39 @@ onmessage = async (e) => {
   else if (m.type === 'others') { others = m.others; fly.others = others; setProxies(); }
   else if (m.type === 'mode') fly.motor.mode = m.mode;
   else if (m.type === 'stimulate') fly.brain.setDrive(m.indices, m.rate);
-  else if (m.type === 'takeoff') { if (fly.intrinsic) fly.intrinsic.takeoffUntil = fly.intrinsic.t + 80; }   // takeoff DN activation (see Intrinsic)
+  else if (m.type === 'takeoff') { fly.requestTakeoff(); postPose(); }
   else if (m.type === 'activity') {
     const eyes = fly.fv ? fly.fv.lumEye.map(e => e.slice(0)) : null;
     postMessage({ type: 'activity', id: fly.id, trace: fly.brain.trace.slice(0), t: fly.t, groups: meter.read(fly.brain.spikeCount, fly.t), eyes });
   }
 };
 function setProxies() {
-  const d = fly.mjd, M = fly.model;
-  others.forEach((o, k) => { const b = M.body(`proxy${k}`); if (!b) return; const mid = M.body_mocapid[b.id]; if (mid < 0) return;
+  const d = fly.mjd;
+  proxyIds.forEach((mid, k) => {
+    const o = others[k];
+    if (!o) { d.mocap_pos[mid * 3] = 50 + k; d.mocap_pos[mid * 3 + 1] = 50; d.mocap_pos[mid * 3 + 2] = -5; return; }
     d.mocap_pos[mid * 3] = o.x; d.mocap_pos[mid * 3 + 1] = o.y; d.mocap_pos[mid * 3 + 2] = o.z ?? 0.13;
     d.mocap_quat[mid * 4] = Math.cos(o.yaw / 2); d.mocap_quat[mid * 4 + 1] = 0; d.mocap_quat[mid * 4 + 2] = 0; d.mocap_quat[mid * 4 + 3] = Math.sin(o.yaw / 2); });
 }
 function postPose() {
+  lastPose = performance.now();
   const p = fly.pose(); const st = fly.state();
-  postMessage({ type: 'pose', id: fly.id, t: fly.t, xpos: p.xpos, xquat: p.xquat, cmd: fly.cmd, energy: fly.energy, health: fly.health, alive: fly.alive, eaten: fly.eaten,
+  postMessage({ type: 'pose', id: fly.id, t: fly.t, xpos: p.xpos, xquat: p.xquat, cmd: fly.cmd, energy: fly.energy, health: fly.health, alive: fly.alive, eaten: fly.eaten, takeoffPending:fly.takeoffPending,
     mn9: fly.motor.mean(fly.motor.muscles.find(x => x.name.startsWith('MN9'))?.idx || []), feeding: fly.motor.feeding(), heat: st.heat || 0, nSensory: fly.driven.length,
-    foodEaten: fly.foodEaten.splice(0, fly.foodEaten.length, ...fly.foodEaten.map(() => 0)), behavior: fly.behavior(st), drive: fly.intrinsic?.label(), nm: fly.neuromod?.readout(), flying: fly.flight.active, flights: fly.flights, dist: fly.dist, jumps: fly.jumps, pos: st.pos, yaw: Math.atan2(fly.mjd.xmat[fly.bid.thorax * 9 + 3], fly.mjd.xmat[fly.bid.thorax * 9]) });
+    foodEaten: fly.foodEaten.splice(0, fly.foodEaten.length, ...fly.foodEaten.map(() => 0)), behavior: fly.behavior(st), drive: fly.intrinsic?.label(), nm: fly.neuromod?.readout(), flying: fly.flight.active, flights: fly.flights, dist: fly.dist, jumps: fly.jumps, pos: st.pos, yaw: Math.atan2(fly.mjd.xmat[fly.bid.thorax * 9 + 3], fly.mjd.xmat[fly.bid.thorax * 9]) }, [p.xpos.buffer, p.xquat.buffer]);
 }
 async function loop() {
-  if (!running) return;
+  if (!running || loopActive) return;
+  loopActive = true;
   const now = performance.now(); simAhead += Math.min(100, now - lastReal) * speed; lastReal = now;
-  const t0 = performance.now(); let sinceP = 0;
-  // yielding every 8 steps lets the WebGPU brain's readback promises resolve during long bursts
-  while (running && simAhead >= 1 && performance.now() - t0 < 40) { fly.step(); simAhead -= 1; if (++sinceP % 8 === 0) await new Promise(r => setTimeout(r, 0)); if (sinceP >= POSE_EVERY) { postPose(); sinceP = 0; } }
+  const t0 = performance.now(); let steps = 0;
+  // Bound both CPU bursts and GPU work in flight. An unbounded compute queue stalls WebGL
+  // and leaves the motor reading increasingly old brain state when many flies share the GPU.
+  while (running && simAhead >= 1 && steps < 8 && performance.now() - t0 < 8) { fly.step(); simAhead -= 1; steps++; }
   fly.brain.flush?.();
+  if (steps && fly.brain.device) await fly.brain.device.queue.onSubmittedWorkDone();
   if (simAhead > 50) simAhead = 50;   // can't keep up: run as fast as possible
-  if (sinceP) postPose();
-  timer = setTimeout(loop, 0);
+  if (steps && (!running || performance.now() - lastPose >= POSE_EVERY)) postPose();
+  loopActive = false;
+  if (running) timer = setTimeout(loop, 0);
 }

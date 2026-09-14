@@ -80,7 +80,15 @@ function eyeMaterial() {
   const m = new THREE.MeshPhysicalMaterial({ color: '#ae2812', roughness: 0.25, clearcoat: 0.28, clearcoatRoughness: 0.12, sheen: 0, specularIntensity: 0.7, ior: 1.46 });
   m.onBeforeCompile = sh => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aSmooth; varying vec3 vSmooth; varying vec3 vObj;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSmooth = normalize(normalMatrix * aSmooth); vObj = position;');
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec3 smoothNormal = aSmooth;
+        #ifdef USE_BATCHING
+          smoothNormal = mat3(batchingMatrix) * smoothNormal;
+        #endif
+        #ifdef USE_INSTANCING
+          smoothNormal = mat3(instanceMatrix) * smoothNormal;
+        #endif
+        vSmooth = normalize(normalMatrix * smoothNormal); vObj = position;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 vSmooth; varying vec3 vObj;\n${NOISE_GLSL}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float facing = dot(normalize(vSmooth), normalize(vViewPosition));
@@ -147,7 +155,7 @@ function setaMatrix(out, pos, dir, bendTo, len, radius) {
 
 
 // Blender supplies worker-decoded geometry and exact baked hair placements through `prepared`.
-// The arena and offline exporter retain the original scan-based procedural path.
+// The offline exporter retains the original scan-based procedural path.
 export function createFlyAppearance(json, bin, low = null, detailTexture = null, prepared = null) {
 const makeCuticle = options => cuticle({ ...options, detailTexture });
 // body hierarchy from world poses: local = parentWorld⁻¹ · world
@@ -355,7 +363,8 @@ for (const sd of ['left', 'right']) {
 
 
   // Immutable buffers are shared by all arena flies. Only transforms, draw counts and sex differ.
-  const lowGeoms = {};
+  const lowGeoms = prepared?.levels?.low || {};
+  const mediumGeoms = prepared?.levels?.medium || {};
   if (low) for (const p of low.json.parts) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(low.bin, p.vOff, p.vCount * 3), 3));
@@ -377,6 +386,7 @@ for (const sd of ['left', 'right']) {
     const fm = makeCuticle({ color: C.tan, roughness: 0.43, sheen: 0.1, band: { y0: b.x, y1: b.y, frac: n === 'abdomen' ? 0.18 : 0.32 } });
     femaleMats.set(mat, fm);
   }
+  const lowHairs = new Map();
   function instantiate(sex = 'm') {
     const group = new THREE.Group(), instanceBodies = {}, surface = [], hairs = [], combs = [];
     group.matrixAutoUpdate = false;
@@ -391,11 +401,19 @@ for (const sd of ['left', 'right']) {
           m.instanceMatrix = src.instanceMatrix; m.count = src.count;
           m.boundingSphere = src.boundingSphere; m.userData.fullCount = src.count;
           m.userData.longSetae = src.castShadow;
+          m.userData.high = src.geometry;
+          if (!lowHairs.has(src.geometry)) {
+            const lowHair = SETA_LOW.clone();
+            if (src.geometry.hasAttribute('aHairLight')) lowHair.setAttribute('aHairLight', src.geometry.getAttribute('aHairLight'));
+            lowHairs.set(src.geometry, lowHair);
+          }
+          m.userData.low = lowHairs.get(src.geometry);
           if (src.name.startsWith('sexcomb:')) { m.visible = sex === 'm'; combs.push(m); }
           else hairs.push(m);
         } else {
           m = new THREE.Mesh(src.geometry, mat);
           m.userData.high = src.geometry; m.userData.low = lowGeoms[src.name] || src.geometry;
+          m.userData.medium = mediumGeoms[src.name] || (src.name === 'head_red' ? src.geometry : m.userData.low);
           surface.push(m);
         }
         m.name = src.name; m.castShadow = src.castShadow; m.receiveShadow = src.receiveShadow;
@@ -411,10 +429,10 @@ for (const sd of ['left', 'right']) {
       const next = macro ? 2 : nearby ? 1 : 0;
       if (next === tier) return false;
       tier = next;
-      for (const m of surface) m.geometry = next === 2 || next === 1 && m.name === 'head_red' ? m.userData.high : m.userData.low;
+      for (const m of surface) m.geometry = next === 2 ? m.userData.high : next === 1 ? m.userData.medium : m.userData.low;
       for (const m of hairs) {
         m.visible = next === 2 || next === 1 && m.userData.longSetae;
-        m.geometry = next === 2 ? SETA : SETA_LOW;
+        m.geometry = next === 2 ? m.userData.high : m.userData.low;
         m.count = m.userData.fullCount;
         m.castShadow = false;
       }
@@ -424,5 +442,5 @@ for (const sd of ['left', 'right']) {
     setDetail(0);
     return { group, bodies: instanceBodies, meshes: surface, hairs, sexComb: combs, setDetail, getDetail: () => tier };
   }
-  return { root, bodies, localPose, meshes, tergites, hairGroups, sexComb, pigment, instantiate, lowGeoms };
+  return { root, bodies, localPose, meshes, tergites, hairGroups, sexComb, pigment, instantiate, lowGeoms, mediumGeoms, femaleMats };
 }
