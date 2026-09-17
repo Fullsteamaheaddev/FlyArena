@@ -35,6 +35,19 @@ export class ArenaBatches {
     this.stats.instances+=fly.meshes.length;
   }
 
+  remove(fly) {
+    if (!fly.batchEntries) return;
+    for (const e of fly.batchEntries) {
+      e.group.mesh.setVisibleAt(e.id, false);
+      e.group.mesh.deleteInstance(e.id);
+      const i = e.group.sources.indexOf(e);
+      if (i >= 0) e.group.sources.splice(i, 1);
+    }
+    this.stats.instances -= fly.batchEntries.length;
+    fly.batchEntries = [];
+    this.dirty = true;
+  }
+
   update(fly, poseChanged, detailChanged) {
     const batched=fly.getDetail()<2;
     for (const e of fly.batchEntries) {

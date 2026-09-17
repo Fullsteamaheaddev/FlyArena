@@ -16,8 +16,8 @@ bitter patches, heat and blocks. Launch a looming threat or fire a fly's takeoff
 neurons directly. Change wind and light. Follow a fly and watch its brain in the inset:
 per-eye visual columns, and firing rates of the smell, taste, looming, giant-fibre,
 walking, steering, grooming, courtship and feeding neurons. Zoom in for the full scan,
-setae, eye facets and wing interference. `[` and `]` fold the side panels. Six presets
-define the standard assays. Everything about it is in [arena app](../15-arena.md).
+setae, eye facets and wing interference. `[` and `]` fold the side panels. Seven presets
+define the standard assays, plus a game-style odor race (`arena.html?env=race`). Everything about it is in [arena app](../15-arena.md).
 
 **`fly.html`, the 3D fly.** An interactive fly with Blender-subdivided geometry, baked
 Cycles lighting, live eye reflections, setae, sex comb, abdominal bands and wing

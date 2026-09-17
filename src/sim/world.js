@@ -28,6 +28,38 @@ export const PRESETS = {
   social: { label: 'Social: five flies, one food patch', flies: 5, env: () => ({ ...structuredClone(DEFAULT_ENV), obstacles: [], hazards: [] }) },
   courtship: { label: 'Courtship: a male and a female', env: () => ({ ...structuredClone(DEFAULT_ENV), obstacles: [], hazards: [], bitterPatches: [], food: [], odors: [] }),
     flySpots: [{ pos: [-0.6, 0], yaw: 0, sex: 'm' }, { pos: [0.4, 0.3], yaw: 2.4, sex: 'f' }] },
+  race: {
+    label: 'Odor race',
+    flies: 3,
+    maxFlies: 3,
+    flySpots: [0, 1, 2].map(i => {
+      const a = i * 2 * Math.PI / 3;
+      return { pos: [10.5 * Math.cos(a), 10.5 * Math.sin(a)], yaw: a + Math.PI, sex: 'm' };
+    }),
+    env: () => ({
+      ...structuredClone(DEFAULT_ENV),
+      arena: { ...DEFAULT_ENV.arena, radius: 12.5 },
+      hazards: [],
+      bitterPatches: [],
+      food: [{ x: 0, y: 0, r: 0.4, sugar: 1, bitter: 0, water: 0.2, amount: 8 }],
+      odors: [{ x: 0, y: 0, odor: 'vinegar', strength: 1, sigma: 6 }],
+      // Axis-aligned maze: centre kept open, mixed heights (short walls are easy to fly over).
+      obstacles: [
+        { type: 'box', x: 0, y: 2.4, sx: 1.7, sy: 0.1, sz: 0.28 },
+        { type: 'box', x: 0, y: -2.4, sx: 1.7, sy: 0.1, sz: 0.95 },
+        { type: 'box', x: -2.4, y: 0.5, sx: 0.1, sy: 1.5, sz: 0.5 },
+        { type: 'box', x: 2.4, y: -0.5, sx: 0.1, sy: 1.5, sz: 0.35 },
+        { type: 'box', x: -4.2, y: 6.2, sx: 2.2, sy: 0.12, sz: 1.0 },
+        { type: 'box', x: 4.2, y: 6.2, sx: 2.2, sy: 0.12, sz: 0.4 },
+        { type: 'box', x: -4.2, y: -6.2, sx: 2.2, sy: 0.12, sz: 0.55 },
+        { type: 'box', x: 4.2, y: -6.2, sx: 2.2, sy: 0.12, sz: 0.85 },
+        { type: 'box', x: -6.2, y: 2.8, sx: 0.12, sy: 2.4, sz: 0.7 },
+        { type: 'box', x: 6.2, y: -2.8, sx: 0.12, sy: 2.4, sz: 1.0 },
+        { type: 'box', x: 6.2, y: 3.5, sx: 0.12, sy: 1.6, sz: 0.3 },
+        { type: 'box', x: -6.2, y: -3.5, sx: 0.12, sy: 1.6, sz: 0.45 },
+      ],
+    }),
+  },
 };
 export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, nProxies = 0 } = {}) {
   const a = env.arena, parts = [];

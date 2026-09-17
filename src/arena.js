@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -18,11 +19,14 @@ const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pa
 const $ = s => document.querySelector(s);
 const status = s => { $('#status').textContent = s; };
 const FLY_COLORS = ['#ffb347', '#5ac8fa', '#a3e635', '#f472b6', '#c084fc', '#facc15', '#fb7185', '#2dd4bf'];
+const RACE_NAMES = ['Amber', 'Blue', 'Lime'];
 const presetKey = new URLSearchParams(location.search).get('env') || 'foraging';
 const PRESET = PRESETS[presetKey] || PRESETS.foraging;
+const isRace = presetKey === 'race' && PRESET === PRESETS.race;
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
+let raceWinner = null, raceResetTimer = null, raceResetting = false, labelRenderer = null;
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
@@ -54,16 +58,22 @@ async function main() {
   buildScene(data);
   buildUI();
   $('#loading').remove();
-  const st0 = PRESET.start || [0, 0, 0];
-  if (PRESET.flySpots) for (const s of PRESET.flySpots) await addFly(s.pos, s.yaw, s.sex);
-  else { await addFly([st0[0], st0[1]], st0[2]);
-    for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
+  if (isRace) setupRaceChrome();
+  await spawnPresetFlies();
+  if (isRace) showRaceStart();
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
   window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv };
   animate();
 }
 
 // ---------------- scene ----------------
+async function spawnPresetFlies() {
+  const st0 = PRESET.start || [0, 0, 0];
+  if (PRESET.flySpots) for (const s of PRESET.flySpots) await addFly(s.pos, s.yaw, s.sex);
+  else { await addFly([st0[0], st0[1]], st0[2]);
+    for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
+}
+
 let renderer, scene, camera, controls, envGroup, raycaster, floorMesh, sun, composer, gtao, resolution;
 let shadowDirty = true, lastShadow = -Infinity, shadowExtent = 0, lastBrainDraw = 0, brainDirty = true;
 let brainColorFly = -1, brainColorHover = -2;
@@ -83,14 +93,17 @@ function buildScene(data) {
   const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment();
   scene.environment = pmrem.fromScene(room, 0.04).texture; scene.environmentIntensity = 0.24;
   room.dispose(); pmrem.dispose();
-  camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, 100); camera.up.set(0, 0, 1);
-  camera.position.set(-1.2, -1.6, 1.3);
+  camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, Math.max(100, env.arena.radius * 8)); camera.up.set(0, 0, 1);
+  const R = env.arena.radius;
+  if (isRace) camera.position.set(0, -R * 1.3, R * 1.45);
+  else camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5;
   scene.add(new THREE.HemisphereLight('#f4f2ed', '#514432', 0.22));
   sun = new THREE.DirectionalLight('#fff1da', 2.7); sun.position.set(3, 2, 8); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.00002; sun.shadow.normalBias = 0.0003; sun.shadow.radius = 2;
-  Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.1, far: 20 }); scene.add(sun, sun.target);
+  const shadowSpan = Math.max(4, R + 0.5);
+  Object.assign(sun.shadow.camera, { left: -shadowSpan, right: shadowSpan, top: shadowSpan, bottom: -shadowSpan, near: 0.1, far: Math.max(20, R * 3) }); scene.add(sun, sun.target);
   const rim = new THREE.DirectionalLight('#f9e5c4', 0.65); rim.position.set(-3, -2, 3); scene.add(rim);
   const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
   composer = new EffectComposer(renderer, rt); composer.addPass(new RenderPass(scene, camera));
@@ -109,9 +122,16 @@ function buildScene(data) {
     renderer.setPixelRatio(resolution.ratio); renderer.setSize(innerWidth, innerHeight);
     composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
     gtao.setSize(Math.ceil(innerWidth * renderer.getPixelRatio() / 2), Math.ceil(innerHeight * renderer.getPixelRatio() / 2));
+    labelRenderer?.setSize(innerWidth, innerHeight);
     shadowDirty = true;
   }
   addEventListener('resize', () => { resolution.reset(); resize(); }); resize();
+  if (isRace) {
+    labelRenderer = new CSS2DRenderer();
+    labelRenderer.setSize(innerWidth, innerHeight);
+    Object.assign(labelRenderer.domElement.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: '2' });
+    document.body.appendChild(labelRenderer.domElement);
+  }
   envGroup = new THREE.Group(); scene.add(envGroup); rebuildEnv();
   batches = new ArenaBatches(scene, visual, MAX_FLIES);
   raycaster = new THREE.Raycaster();
@@ -193,11 +213,17 @@ function updateWingBlur(f, s) {
 // ---------------- flies ----------------
 let nextId = 0;
 async function addFly(pos, yaw, sex = 'm') {
-  if (nextId >= MAX_FLIES) { alert(`At most ${MAX_FLIES} flies`); return; }
+  const cap = PRESET.maxFlies || MAX_FLIES;
+  if (flies.length >= cap) { alert(`At most ${cap} flies`); return; }
   const id = nextId++; const color = FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
-  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
+  const f = { id, worker, color, sex, name: isRace ? RACE_NAMES[id] || `fly ${id}` : `fly ${id}`, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
   scene.add(f.group); flies.push(f); batches.add(f);
+  if (isRace) {
+    const el = document.createElement('div'); el.className = 'fly-label'; el.textContent = f.name; el.style.color = f.color;
+    el.addEventListener('pointerdown', e => { e.stopPropagation(); selected = f.id; renderFlyList(); });
+    f.label = new CSS2DObject(el); f.label.position.set(pos[0], pos[1], 0.4); scene.add(f.label);
+  }
   worker.onmessage = e => onWorker(f, e.data);
   worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: MAX_FLIES - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: true, sex,
     brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap });
@@ -207,12 +233,21 @@ async function addFly(pos, yaw, sex = 'm') {
   renderFlyList();
   return f;
 }
+function removeFly(f) {
+  f.worker.terminate();
+  batches.remove(f);
+  scene.remove(f.group);
+  scene.remove(f.ring);
+  f.ring.geometry.dispose();
+  if (f.label) { scene.remove(f.label); f.label.element.remove(); }
+}
 function onWorker(f, m) {
   if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
     f.prev = f.last; f.last = m; shadowDirty = true;
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
+    if (isRace) checkRaceFinish(f);
     if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
     broadcastOthers();
   } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
@@ -238,12 +273,60 @@ function buildUI() {
   $('#mode').onchange = e => { for (const f of flies) f.worker.postMessage({ type: 'mode', mode: e.target.value }); };
   document.querySelectorAll('.tools button').forEach(b => b.onclick = () => { tool = b.dataset.tool; document.querySelectorAll('.tools button').forEach(x => x.classList.toggle('on', x === b)); });
   setupFolds();
-  setInterval(() => { const f = flies.find(x => x.id === selected); if (!document.hidden && f?.ready && !$('#brainpanel').classList.contains('folded')) f.worker.postMessage({ type: 'activity' }); }, 120);
+  setInterval(() => { const f = flies.find(x => x.id === selected); if (!document.hidden && !isRace && f?.ready && !$('#brainpanel').classList.contains('folded')) f.worker.postMessage({ type: 'activity' }); }, 120);
   $('#wind').oninput = e => { const v = +e.target.value; $('#windv').textContent = v; env.wind = [v, 0]; syncEnv(); };
   $('#light').oninput = e => { env.light.sky = +e.target.value; scene.background = new THREE.Color().setHSL(0.6, 0.3, 0.02 + 0.05 * env.light.sky); syncEnv(); };
   $('#threat').onclick = () => launchThreat();
   $('#takeoff').onclick = () => flies.find(x => x.id === selected)?.worker.postMessage({ type: 'takeoff' });
   setInterval(() => { if (foodDirty) { foodDirty = false; syncEnv(); envGroup.children.forEach(m => { if (m.userData.food) m.material.opacity = 0.35 + 0.65 * Math.min(1, m.userData.food.amount / 5); }); } renderFlyList(); }, 500);
+}
+function setupRaceChrome() {
+  $('#panel').hidden = true;
+  $('#brainpanel').hidden = true;
+  const board = $('#scoreboard');
+  board.append($('#flies').closest('section'), $('#selsec'));
+  board.hidden = false;
+  document.title = 'Odor race';
+  $('#follow').checked = false;
+}
+function showRaceStart() {
+  const overlay = $('#raceOverlay'), card = $('#raceCard');
+  overlay.hidden = false;
+  card.innerHTML = `<h1>Odor race</h1><p>First to the vinegar in the centre wins.</p><button id="raceStart" class="primary">Start</button>`;
+  $('#raceStart').onclick = startRace;
+}
+function startRace() {
+  $('#raceOverlay').hidden = true;
+  running = true;
+  for (const f of flies) f.worker.postMessage({ type: 'run' });
+}
+function checkRaceFinish(f) {
+  if (!running || raceWinner || raceResetting || !f.last?.pos) return;
+  const food = env.food[0]; if (!food) return;
+  if (Math.hypot(f.last.pos[0] - food.x, f.last.pos[1] - food.y) >= food.r) return;
+  raceWinner = f;
+  const secs = (f.last.t / 1000).toFixed(1);
+  const overlay = $('#raceOverlay'), card = $('#raceCard');
+  overlay.hidden = false;
+  let left = 10;
+  const paint = () => { card.innerHTML = `<h1>${f.name} wins</h1><p class="sub">${secs} s</p><p>Resetting in ${left}…</p>`; };
+  paint();
+  clearInterval(raceResetTimer);
+  raceResetTimer = setInterval(() => { left -= 1; if (left <= 0) { clearInterval(raceResetTimer); raceResetTimer = null; resetRace(); } else paint(); }, 1000);
+}
+async function resetRace() {
+  if (raceResetting) return;
+  raceResetting = true;
+  clearInterval(raceResetTimer); raceResetTimer = null;
+  running = false; raceWinner = null;
+  for (const f of flies) { f.worker.postMessage({ type: 'pause' }); removeFly(f); }
+  flies.length = 0; nextId = 0; selected = 0;
+  if (env.food[0]) env.food[0].amount = 8;
+  env.threat = null;
+  rebuildEnv();
+  await spawnPresetFlies();
+  showRaceStart();
+  raceResetting = false;
 }
 function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
@@ -263,7 +346,7 @@ function renderFlyList() {
   $('#nfly').textContent = flies.length;
   $('#flies').innerHTML = flies.map(f => { const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
     return `<div class="fly ${f.id === selected ? 'sel' : ''}" data-id="${f.id}"><i class="dot" style="background:${f.color}"></i>
-      <div>${f.sex === 'f' ? '♀' : '♂'} fly ${f.id} <span style="color:var(--acc)">${s.behavior || ''}</span><div class="bar"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
+      <div>${f.sex === 'f' ? '♀' : '♂'} ${f.name} <span style="color:var(--acc)">${s.behavior || ''}</span><div class="bar"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
       <span style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span></div>`; }).join('');
   $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); });
   const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f;
@@ -305,10 +388,10 @@ function buildBrainPanel(data) {
     const az = Math.atan2(y, x) * 180 / Math.PI, el = Math.asin(Math.max(-1, Math.min(1, z))) * 180 / Math.PI;
     return [(sd === 'L' ? 165 - az : 10 - az) / 175 * (W - 8) + 4, (69 - el) / 129 * (H - 8) + 4];
   }));
-  $('#brainpanel').hidden = false;
+  $('#brainpanel').hidden = isRace;
 }
 function onActivity(f, m) {
-  if (histFly !== f.id) { histFly = f.id; hist = groups.map(() => [[], []]); $('#bpTitle').innerHTML = `Inside fly ${f.id} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${f.color}"></i>`; }
+  if (histFly !== f.id) { histFly = f.id; hist = groups.map(() => [[], []]); $('#bpTitle').innerHTML = `Inside ${f.name} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${f.color}"></i>`; }
   const rows = $('#groups').children;
   groups.forEach((g, j) => {
     const h = hist[j]; h[0].push(m.groups[j * 2]); h[1].push(m.groups[j * 2 + 1]); if (h[0].length > HIST) { h[0].shift(); h[1].shift(); }
@@ -385,12 +468,13 @@ function animate() {
         g.quaternion.copy(q); g.updateMatrix();
       }
       f.ring.position.set(s.pos[0], s.pos[1], 0.003);
+      if (f.label) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + 0.28);
       updateWingBlur(f, s); f.drawnPose = s; f.drawnBlend = blend;
     }
     f.ring.visible = f.id === selected;
   }
   const sf = flies.find(x => x.id === selected);
-  if (sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
+  if (!isRace && sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   if (sf?.last) { const t = sf.last.t / 1000; $('#simt').textContent = t.toFixed(2); if (now - lastSimReal > 1000) { $('#rt').textContent = ((t - lastSim) / ((now - lastSimReal) / 1000)).toFixed(2); lastSim = t; lastSimReal = now; } }
   updateThreat(); controls.update();
   camera.updateMatrixWorld();
@@ -412,10 +496,11 @@ function animate() {
   if (threatAnim) shadowDirty = true;
   updateShadows(now);
   renderer.info.reset(); const renderStart = performance.now(); composer.render();
+  labelRenderer?.render(scene, camera);
   metrics.renderMs = performance.now() - renderStart; metrics.calls = renderer.info.render.calls; metrics.triangles = renderer.info.render.triangles;
   // The trace arrives at ~8 Hz. Upload colours only when the trace, selection or highlight changes.
   // Rotate/draw the inset at 30 Hz independently from the main camera.
-  if ($('#brainpanel').classList.contains('folded') || now - lastBrainDraw < 1000 / 30) return;
+  if (isRace || $('#brainpanel').hidden || $('#brainpanel').classList.contains('folded') || now - lastBrainDraw < 1000 / 30) return;
   const elapsed = Math.min(0.1, (now - lastBrainDraw) / 1000); lastBrainDraw = now;
   if (brainDirty || brainColorFly !== selected || brainColorHover !== hover) {
     const col = brainPts.geometry.attributes.color, a = col.array;
@@ -434,6 +519,7 @@ main().catch(e => { if ($('#status')) status('error: ' + e.message); console.err
 
 // side panels fold to their title bar (chevron button, or the [ and ] keys); the choice persists
 function setupFolds() {
+  if (isRace) return;
   const folds = [['#panel', '#panelFold', '[', '‹', '›', 'controls'], ['#brainpanel', '#bpFold', ']', '›', '‹', 'brain panel']];
   const apply = ([panel, btn, key, open, shut, what], folded) => {
     $(panel).classList.toggle('folded', folded); const b = $(btn);

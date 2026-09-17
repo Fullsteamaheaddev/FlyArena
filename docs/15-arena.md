@@ -138,6 +138,7 @@ gates permit launch. See [Flight](24-flight.md) for the motor approximation and 
 | Maze | Three walls, food at the far end |
 | Social | Five flies, one food patch |
 | Courtship | A male and a female |
+| Odor race | Game view (`?env=race`): 12.5 cm circle, mixed-height maze, centre vinegar, three named flies. Centre Start; first to the disc wins; 10 s then they return to the rim. No left lab panel; names and a right scoreboard only. |
 
 ## Controls
 Run and pause, speed, add fly, add female, motor mode, follow camera, placement tools, looming threat,
