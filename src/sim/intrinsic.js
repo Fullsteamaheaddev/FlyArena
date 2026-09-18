@@ -30,17 +30,21 @@ export const INTRINSIC = {
   // courtship: the connectome's pIP10 + DNp13 rate (ctx.court.level, see motor.js) tells the male a fly is
   // near; he chases it by steering on its bearing and sings with the wing on its side (Ewing & Bennet-Clark 1968)
   courtEnter: 0.4, courtExit: 0.2, courtRange: 1.8, courtLostMs: 1500, courtSing: 0.45, courtDrive: 9, courtTurn: 12,
+  // food-odour cast-and-surge (van Breugel & Dickinson 2014): supplied around the graph like heat/sugar-underfoot
+  odorTau: 80, odorEnter: 0.05, odorDCsurge: 0.25, odorDCcast: -0.2, odorCastMs: [140, 240], odorCastRefractory: 300, odorUpwind: 6,
 };
 function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 export class Intrinsic {
-  constructor(typeOf, sideOf, seed = 1, feeding = []) {
+  constructor(typeOf, sideOf, seed = 1, feeding = [], opts = {}) {
     const pick = (types, s) => { const o = []; for (let i = 0; i < typeOf.length; i++) if (types.includes(typeOf[i]) && (s === undefined || sideOf[i] === s)) o.push(i); return o; };
     this.ix = { feed: [...new Set([...pick(['MN9']), ...feeding])], takeoff: pick(TYPES.takeoff), brake: pick(TYPES.brake), fwd: pick(TYPES.fwd), turnL: pick(TYPES.turn, 1), turnR: pick(TYPES.turn, 2), groom: pick(TYPES.groom), back: pick(TYPES.back) };
     this.rand = mulberry(seed * 7919 + 17);
-    this.state = 'stop'; this.left = 300 + 700 * this.rand();   // settle briefly before the first decision
+    this.forage = !!opts.forage;
+    this.state = this.forage ? 'walk' : 'stop'; this.left = this.forage ? 1200 + 1800 * this.rand() : 300 + 700 * this.rand();
     this.fwdNoise = 0; this.sacc = null; this.sinceSacc = 0; this.avoid = null; this.t = 0; this.touchL = this.touchR = this.lastGraze = this.lastHeat = this.leftFood = this.lastAvoid = this.lastSugar = -1e9; this.avoidDir = 1; this.searchUntil = 0; this.hot = 0; this.approach = false; this.lastDir = this.rand() < 0.5 ? 1 : -1;
     this.bias = { fwd: 0, turnL: 0, turnR: 0, groom: 0, back: 0, takeoff: 0, feed: 0 }; this.takeoffUntil = -1;
+    this.odorC = 0; this.lastOdorCast = -1e9; this.surge = false;
   }
   gauss() { let u = 0; while (!u) u = this.rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * this.rand()); }
   lognormal([median, sd]) { return 1000 * median * Math.exp(sd * this.gauss()); }
@@ -49,6 +53,7 @@ export class Intrinsic {
     // hunger gates feeding. Starved flies also walk more (Yang et al. 2015): with neuromodulation that comes from
     // the octopamine level of the AKH-sensitive OA neurons (ctx.arousal, see neuromod.js), otherwise from energy
     const P = INTRINSIC, hunger = Math.max(0, Math.min(1, (0.7 - ctx.energy) / 0.6)), arousal = ctx.arousal ?? hunger;
+    const forage = !!(ctx.forage || this.forage); if (forage) this.forage = true;
     // obstacle at the front. Head-on (both antennae within 150 ms, or the body rearing up against it): stop,
     // back off, pivot away, walk on. One antenna grazing: turn away while walking, which is how flies come to
     // follow walls.
@@ -85,6 +90,28 @@ export class Intrinsic {
       if (!(even && hot > 0.9)) { this.sacc = { t: 0, dur: 300 + 300 * this.rand(), dir }; this.lastDir = dir; this.sinceSacc = 0; }
       this.lastHeat = t; this.state = 'walk'; this.left = Math.max(this.left, 1500);
     }
+    // food odour: surge while concentration is rising, cast when it falls (van Breugel & Dickinson 2014).
+    // Yields to avoid, courtship, heat, feeding and grooming. Does not write actuators.
+    const odor = ctx.odor || { left: 0, right: 0 };
+    const rawC = 0.5 * ((odor.left || 0) + (odor.right || 0));
+    const prevC = this.odorC;
+    this.odorC += dtMs / P.odorTau * (rawC - this.odorC);
+    const dC = (this.odorC - prevC) / Math.max(0.001, dtMs / 1000);
+    const inPlume = this.odorC > (forage ? 0.02 : P.odorEnter);
+    this.surge = false;
+    const free = !courting && !this.avoid && this.state !== 'feed' && this.state !== 'groom' && hot < 0.08;
+    if (free && inPlume && this.state === 'walk') this.left = Math.max(this.left, 500);
+    const surgeTh = forage ? 0.08 : P.odorDCsurge, castTh = forage ? -0.35 : P.odorDCcast, castRef = forage ? 500 : P.odorCastRefractory;
+    if (free && inPlume && dC > surgeTh) {
+      this.surge = true;
+      if (this.state !== 'walk') { this.state = 'walk'; this.left = Math.max(this.left, 800); }
+      this.sacc = null;
+    } else if (free && inPlume && dC < castTh && t - this.lastOdorCast > castRef) {
+      const stereo = (odor.left || 0) - (odor.right || 0);
+      const dir = Math.abs(stereo) > 0.02 ? (stereo > 0 ? 1 : -1) : -this.lastDir;
+      this.sacc = { t: 0, dur: P.odorCastMs[0] + (P.odorCastMs[1] - P.odorCastMs[0]) * this.rand(), dir };
+      this.lastDir = dir; this.sinceSacc = 0; this.lastOdorCast = t;
+    }
     // food: a hungry fly that tastes sugar with its legs or labellum stops there to feed; once it leaves (sated,
     // or the bout ends), it searches locally with frequent turns, looping back to the spot (Dethier 1957,
     // Kim & Dickinson 2017)
@@ -110,15 +137,15 @@ export class Intrinsic {
       this.left -= dtMs;
       if (this.left <= 0) {   // action selection at the end of a bout
         if (this.approach && this.state !== 'feed') { this.state = 'walk'; this.left = 600; } else
-        if (this.state !== 'feed' && this.state !== 'groom' && this.rand() < P.pTakeoff * (1 + 2 * arousal)) this.takeoffUntil = t + 80;   // leave by air
+        if (this.state !== 'feed' && this.state !== 'groom' && !forage && this.rand() < P.pTakeoff * (1 + 2 * arousal)) this.takeoffUntil = t + 80;   // leave by air
         if (this.state === 'feed') { this.state = 'walk'; this.left = this.lognormal(P.walkBout); }
-        else if (this.state === 'walk') { this.state = this.rand() < P.pGroom * (1 - arousal) ? 'groom' : 'stop'; this.left = this.lognormal(this.state === 'groom' ? P.groomBout : P.stopBout) * (1 - 0.6 * arousal); }
+        else if (this.state === 'walk') { this.state = !forage && this.rand() < P.pGroom * (1 - arousal) ? 'groom' : 'stop'; this.left = this.lognormal(this.state === 'groom' ? P.groomBout : P.stopBout) * (1 - 0.6 * arousal) * (forage ? 0.15 : 1); }
         else { this.state = 'walk'; this.left = this.lognormal(P.walkBout) * (1 + 1.5 * arousal); }
       }
       // spontaneous saccades; alternate direction more often than not (flies avoid circling)
       this.sinceSacc += dtMs;
       const rate = (this.state === 'walk' ? P.saccadeRate * (searching ? P.searchTurns : 1) : this.state === 'stop' ? P.standSaccadeRate : 0) / 1000;
-      if (!this.sacc && this.sinceSacc > 250 && this.rand() < rate * dtMs) {
+      if (!this.sacc && !this.surge && !(inPlume && this.state === 'walk') && this.sinceSacc > 250 && this.rand() < rate * dtMs) {
         const dir = this.rand() < (searching ? 0.25 : 0.65) ? -this.lastDir : this.lastDir; this.lastDir = dir;   // searching: keep turning one way, looping
         this.sacc = { t: 0, dur: P.saccadeMs[0] + (P.saccadeMs[1] - P.saccadeMs[0]) * this.rand(), dir }; this.sinceSacc = 0;
       }
@@ -131,6 +158,20 @@ export class Intrinsic {
     B.back = this.avoid && this.avoid.t < P.avoidMs ? P.backDrive : 0;
     B.groom = this.state === 'groom' && !this.avoid ? P.groomDrive : 0;
     B.turnL = this.sacc && this.sacc.dir > 0 ? P.turnDrive : 0; B.turnR = this.sacc && this.sacc.dir < 0 ? P.turnDrive : 0;
+    if ((this.surge || (forage && inPlume && walking)) && ctx.upwind && ctx.heading) {
+      const [ux, uy] = ctx.upwind, [hx, hy] = ctx.heading;
+      const us = Math.hypot(ux, uy), hs = Math.hypot(hx, hy);
+      if (us > 0.15 && hs > 0.01) {
+        const cross = (hx * uy - hy * ux) / (hs * us);   // >0 desired heading is to the left
+        if (cross > 0.08) B.turnL = Math.max(B.turnL, (forage ? 10 : P.odorUpwind) * Math.min(1, cross));
+        if (cross < -0.08) B.turnR = Math.max(B.turnR, (forage ? 10 : P.odorUpwind) * Math.min(1, -cross));
+      }
+    }
+    if (forage && inPlume && walking && !this.sacc) {
+      const stereo = (odor.left || 0) - (odor.right || 0);
+      if (stereo > 0.02) B.turnL = Math.max(B.turnL, 4 * Math.min(1, stereo * 8));
+      if (stereo < -0.02) B.turnR = Math.max(B.turnR, 4 * Math.min(1, -stereo * 8));
+    }
     if (this.state === 'court' && court) {
       // chase: steer onto the target's bearing; close to singing distance, then keep station and extend
       // the wing facing her. Males keep walking while singing (Ewing & Bennet-Clark 1968).
@@ -166,5 +207,5 @@ export class Intrinsic {
     const drive = this.sacc ? (this.sacc.strong ? P.avoidDrive : P.turnDrive) : 0;
     if (drive) brain.pulse(this.sacc.dir > 0 ? this.ix.turnL : this.ix.turnR, drive * dtMs);
   }
-  label() { return this.avoid ? 'avoiding' : this.state === 'walk' && this.t < this.searchUntil ? 'search' : this.state; }
+  label() { return this.avoid ? 'avoiding' : this.surge ? 'surge' : this.state === 'walk' && (this.t < this.searchUntil || this.forage) ? 'search' : this.state; }
 }

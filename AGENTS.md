@@ -19,7 +19,7 @@ npm run dev                  # Vite; COOP/COEP headers in vite.config.js
 | `/arena.html` | Embodied arena (`src/arena.js`) |
 | `/arena.html?gpu=0` | Force WASM brain (no WebGPU) |
 | `/arena.html?env=courtship` | Preset (`foraging` default; see `PRESETS` in `src/sim/world.js`) |
-| `/arena.html?env=race` | Odor race game: 12.5 cm maze, 3 named flies, Start overlay, winner = reach centre disc, 10s reset to rim |
+| `/arena.html?env=race` | Odor race game: 12.5 cm maze with three identical radial lanes, tighter vinegar + inward wind, 3 named flies, Start overlay, winner = reach centre disc, 10s reset to rim |
 | `/fly.html` | Anatomy / Blender fly (`src/fly.js`) |
 | `/structures.html` | Algorithmic structures (`src/structures.js`) |
 | `/textbook/` | Textbook reader (`src/textbook.js`) |
@@ -47,7 +47,7 @@ One fly = one worker (`src/sim/fly.worker.js`) + own MuJoCo world + slot in **sh
 7. **Flight** `src/sim/flight.js` — blade-element on 218 Hz stroke after jump.
 8. **Physiology** energy/health/ingestion in `fly.js`.
 
-Worker bursts ≤8 sim-ms / 8 CPU-ms; poses to main ≤30 Hz. Groups for the inset: `src/sim/groups.js`.
+Worker bursts ≤8 sim-ms / 8 CPU-ms (race: 16/16); poses to main ≤30 Hz. Groups for the inset: `src/sim/groups.js`.
 
 ---
 
@@ -84,7 +84,7 @@ Worker bursts ≤8 sim-ms / 8 CPU-ms; poses to main ≤30 Hz. Groups for the ins
 
 **From the connectome:** DN commands (walk/back/steer/groom/escape/takeoff), sensory screen, courtship detection (LC10 + cVA → pIP10/DNp13), KC sparseness, sugar→MN9 / bitter veto.
 
-**Supplied around the graph:** tripod gait CPG; endogenous bouts; reafference / escape gating (walls loom); GF→TTMn **electrical** synapse (`fly.js` `pulse` on TTMn); steering adaptation (L/R wiring imbalance); flyvis for columnar OL; hunger hormones.
+**Supplied around the graph:** tripod gait CPG (3 harmonics in `gait.json`, 150 ms amplitude smoothing); endogenous bouts; food-odour cast/surge; reafference / escape gating (walls loom); GF→TTMn **electrical** synapse (`fly.js` `pulse` on TTMn); steering adaptation (L/R wiring imbalance); flyvis for columnar OL; hunger hormones.
 
 **Weak:** loom escape ~2/10; obstacle/heat turn mostly intrinsic; feeding needs endogenous stop + hunger-gated MN9.
 
@@ -131,8 +131,8 @@ WebGPU when available; flyvis **always** WASM (`fv_step`). `?gpu=0` sets `brainP
 |---|---|
 | Arena UI / presets / URL | `src/arena.js`, `src/sim/world.js` `PRESETS` |
 | Closed-loop behaviour | `src/sim/fly.js` then senses/motor/intrinsic |
-| Walking / jump / DN weights | `src/sim/motor.js` `DN_ROLES` `READOUT`; gait `public/body/gait.json` |
-| Spontaneous bouts | `src/sim/intrinsic.js` (`docs/23-behaviour.md`) |
+| Walking / jump / DN weights | `src/sim/motor.js` `DN_ROLES` `READOUT`; 3-harmonic gait `public/body/gait.json` |
+| Spontaneous bouts / odor cast-surge | `src/sim/intrinsic.js` (`docs/23-behaviour.md`) |
 | Hunger / OA | `src/sim/neuromod.js`, `public/data/neuromod.json` |
 | Flight | `src/sim/flight.js` (`docs/24-flight.md`) |
 | Vision gain / mapping | `src/sim/vision.js`, worker `gain: 150` |
@@ -155,7 +155,7 @@ Roadmap (do not start unless asked): `docs/20-roadmap.md` — loom/feeding pathw
 - MN9 leaks from olfaction → walking with proboscis out is known.
 - Physics XML masses/inertias are exact; visual meshes are decimated separately.
 - Worker `foodEaten` is a delta each pose; main thread must broadcast consumption back.
-- Odor race (`?env=race`) is a game shell: hides `#panel` and `#brainpanel`, Start overlay, winner = thorax inside centre food disc, then 10s in-page respawn at rim spots. Do not treat it as a lab preset.
+- Odor race (`?env=race`) is a game shell: hides `#panel`, left `#scoreboard` (clock/names), right `#brainpanel` (selected fly eyes + traces + inset), dusty-purple plate floor and matching wall (eye checker unchanged), Start overlay, winner = thorax inside centre food disc or last remaining / last to die (wall-clock time, fly-time smaller), last 3 winners in `localStorage` (`odorRaceResults`), then 10s in-page respawn at rim spots. Race flies start hungry (`env.hungryForage`) and forage on vinegar; they do not visually home. Start unlocks race audio (`src/race-audio.js`: music bed; walk ticks and 218 Hz buzz follow the selected fly); `public/yipee.wav` on a finish. Vinegar is a centre plume (σ ≈ 4.5) plus lane blobs; `windRadial` blows toward the origin. Race workers burst 16/16. Do not treat it as a lab preset.
 
 ---
 

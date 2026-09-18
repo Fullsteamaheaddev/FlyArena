@@ -4,7 +4,7 @@ File: `src/sim/senses.js`. Rates are recomputed every millisecond and set as Poi
 
 | Sense | Stimulus | Encoding |
 |---|---|---|
-| Olfaction | Gaussian plumes, optional wind shift, sampled at each antenna | 6 Hz spontaneous plus up to 150 Hz, saturating in concentration |
+| Olfaction | Gaussian plumes, optional wind shift (`env.wind` and `env.windRadial`), sampled at each antenna | 6 Hz spontaneous plus up to 150 Hz, saturating in concentration |
 | Labellar taste | Extended labellum within 0.65 mm of a food or bitter patch | Up to 180 Hz, gain set by hunger |
 | Taste pegs | Labellum on food with proboscis extended | Up to 150 Hz |
 | Leg taste | Claw touching a patch | Up to 150 Hz; pheromone near other flies |
@@ -30,6 +30,10 @@ File: `src/sim/senses.js`. Rates are recomputed every millisecond and set as Poi
   (`AL_NORM`): strong or many-channel odours compress total input instead of swamping the lobe, so the
   glomerular pattern — the odour's identity — survives while the overall level is bounded. Stands in for
   GABA_B presynaptic inhibition of receptor terminals.
+- **Wind.** Uniform `env.wind = [wx, wy]` is the arena slider. Optional `env.windRadial` (cm/s) adds flow
+  **toward the origin**, used by the odor race so every rim start has the same inward cue. `windAt(p, env)`
+  combines both; Johnston's organ uses the local air speed. With radial flow, flies surge *with* the wind
+  toward the source; with only uniform wind they surge classic upwind (against the flow).
 - **Pheromone.** Each other fly carries a short-range cVA-like plume (`FLY_ODOR`, σ = 0.28 cm) into DA1,
   VA1v and VA1d — the courtship circuit's close-range channel (see [Courtship](26-courtship.md)).
 - Tactile bristles are rapidly adapting. Constant contact encoding drove the walking neurons and kept the

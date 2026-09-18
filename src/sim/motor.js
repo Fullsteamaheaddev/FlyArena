@@ -29,6 +29,12 @@ const JUMP = { pre: 30, push: 20, f2: 0.7, t2: 0.5, f3: 0.4, f1: 0.5, fly: 80 };
 const RIGHT = { f: 6, aL: 1.0, aR: 0.3, tib: 0.5, abd: 0.5, wy: 1.0, wr: -1.0, wp: -1.0, wf: 4 };
 const PIVOT = { turn: 0.25, amp: 0.55, inner: -0.7 };   // turning on the spot
 const PHASE = { T1_left: 0, T2_right: 0, T3_left: 0, T1_right: Math.PI, T2_left: Math.PI, T3_right: Math.PI };
+const GAIT_AMP_TAU = 150;   // ms; start/stop smoothing so amplitude steps do not hop (scripts/gait_stress.py)
+function gaitCycle(p, phi) {
+  const off = p[0], a1 = p[1], p1 = p[2], a2 = p[3], p2 = p[4];
+  const a3 = p.length > 5 ? p[5] : 0, p3 = p.length > 6 ? p[6] : 0;
+  return off + a1 * Math.cos(phi + p1) + a2 * Math.cos(2 * phi + p2) + a3 * Math.cos(3 * phi + p3);
+}
 
 export class Motor {
   constructor(mj, model, data, bodymap, typeOf, sideOf, gait, mode = 'descending') {
@@ -91,7 +97,12 @@ export class Motor {
     } else {
       // a standing fly with a strong steering command turns on the spot: the inner legs step backwards
       const pivot = Math.abs(v) < 0.1 && Math.abs(this.cmd.turn) > PIVOT.turn;
-      const g = this.gait, amp = pivot ? PIVOT.amp : Math.min(1, Math.abs(v) * 1.5), freq = g.freq * (0.5 + 0.5 * Math.min(1, pivot ? PIVOT.amp : Math.abs(v)));
+      const g = this.gait, ampT = pivot ? PIVOT.amp : Math.min(1, Math.abs(v) * 1.5);
+      const speedN = pivot ? PIVOT.amp : Math.min(1, Math.abs(v));
+      this.ampF = (this.ampF || 0) + dtMs / GAIT_AMP_TAU * (ampT - (this.ampF || 0));
+      const amp = this.ampF;
+      const freq = g.freq * (0.5 + 0.5 * speedN);
+      const duty = Math.min(0.8, Math.max(0.3, g.duty * (1.08 - 0.16 * speedN)));
       this.stepAmp = amp > 0.05 ? Math.min(1, amp * 2) : 0; this.pivot = pivot;
       if (amp > 0.05) this.phase += (pivot ? 1 : Math.sign(v)) * 2 * Math.PI * freq * dtMs / 1000;
       for (const leg of LEGS) for (const sd of SIDES) {
@@ -99,12 +110,12 @@ export class Motor {
         const inner = (this.cmd.turn > 0) === (sd === 'left');
         const steer = pivot ? (inner ? PIVOT.inner : 1) : 1 + this.cmd.turn * (sd === 'left' ? -1 : 1);   // turn>0 (left DNs) -> shorter left strides -> turn left
         for (const j of g.joints) {
-          const [off, a1, p1, a2, p2] = g.params[leg][j];
-          let q = a1 * Math.cos(phi + p1) + a2 * Math.cos(2 * phi + p2);
-          if (j === 'coxa') q *= steer;
-          set(`${j}_${key}`, amp * (off + q));
+          const p = g.params[leg][j];
+          let q = gaitCycle(p, phi);
+          if (j === 'coxa') q = p[0] + steer * (q - p[0]);
+          set(`${j}_${key}`, amp * q);
         }
-        const stance = ((phi + g.adhPhase) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) < 2 * Math.PI * g.duty;
+        const stance = ((phi + g.adhPhase) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) < 2 * Math.PI * duty;
         set(`adhere_claw_${key}`, amp > 0.05 ? (stance ? 1 : 0) : 0.8);
       }
     }

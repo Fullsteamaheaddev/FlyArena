@@ -5,6 +5,7 @@ import { attachBrain, attachEyes } from '../brainsetup.js';
 import { buildGroups, GroupMeter } from './groups.js';
 
 let fly = null, meter = null, running = false, speed = 1, others = [], env = null, lastReal = 0, simAhead = 0, timer = null;
+let burstSteps = 8, burstMs = 8;
 let proxyIds = [], lastPose = -Infinity, loopActive = false;
 const POSE_EVERY = 1000 / 30; // wall ms: twelve workers must not flood the render thread
 
@@ -15,10 +16,13 @@ onmessage = async (e) => {
     const g = m.graph;
     const data = { N: g.N, E: g.E, meta: m.meta, indptr: g.indptr, indices: g.indices, weights: g.weights, nt: g.nt, side: g.side, superclass: g.superclass, cls: g.cls };
     env = m.env;
-    const brain = await attachBrain(m.wasmModule, m.brainMem, m.slot, data, 101 + m.id);
+    if (m.burstSteps) burstSteps = m.burstSteps;
+    if (m.burstMs) burstMs = m.burstMs;
+    const seed = m.seed || 0;
+    const brain = await attachBrain(m.wasmModule, m.brainMem, m.slot, data, 101 + m.id + seed);
     const flyvis = m.brainMem.fv ? { eyes: attachEyes(brain.instance, m.brainMem, m.slot), map: m.flyvisMap, gain: 150 } : null;
     fly = new FlyAgent({ brain, flyvis, mj, flyXML: m.flyXML, env, data, size: g.size, sign: g.sign, bodymap: m.bodymap, gait: m.gait, id: m.id,
-      pos: m.pos, yaw: m.yaw, nProxies: m.nProxies, mode: m.mode, brainOpts: m.brainOpts, vision: m.vision, neuromod: { calib: m.neuromod }, sex: m.sex });
+      pos: m.pos, yaw: m.yaw, nProxies: m.nProxies, mode: m.mode, brainOpts: m.brainOpts, vision: m.vision, neuromod: { calib: m.neuromod }, sex: m.sex, seed });
     meter = new GroupMeter(buildGroups(m.bodymap, data.meta.types, data.side), g.N);
     proxyIds = Array.from({ length:m.nProxies }, (_,k) => fly.model.body_mocapid[fly.model.body(`proxy${k}`).id]);
     postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj) });
@@ -59,7 +63,7 @@ async function loop() {
   const t0 = performance.now(); let steps = 0;
   // Bound both CPU bursts and GPU work in flight. An unbounded compute queue stalls WebGL
   // and leaves the motor reading increasingly old brain state when many flies share the GPU.
-  while (running && simAhead >= 1 && steps < 8 && performance.now() - t0 < 8) { fly.step(); simAhead -= 1; steps++; }
+  while (running && simAhead >= 1 && steps < burstSteps && performance.now() - t0 < burstMs) { fly.step(); simAhead -= 1; steps++; }
   fly.brain.flush?.();
   if (steps && fly.brain.device) await fly.brain.device.queue.onSubmittedWorkDone();
   if (simAhead > 50) simAhead = 50;   // can't keep up: run as fast as possible

@@ -10,10 +10,11 @@ Files: `arena.html`, `src/arena.js`, `src/sim/fly.worker.js`, `src/sim/fly.js`.
 - Other-fly positions and sexes are shared at most 30 Hz. Every world has 11 cached collision proxies;
   unused proxies are parked outside the arena. The old seven-proxy allocation generated invalid-body
   lookups once the population exceeded eight flies.
-- WebGPU brains use bounded bursts (at most eight simulated milliseconds / eight CPU milliseconds),
-  flush, and await their submitted GPU work before scheduling more. This prevents an accumulating
-  compute queue from starving WebGL or making motor readback increasingly stale. WASM uses the same
-  CPU burst limit without a GPU fence. Neither backend skips neural/physics steps.
+- WebGPU brains use bounded bursts (at most eight simulated milliseconds / eight CPU milliseconds;
+  odor race uses 16 / 16), flush, and await their submitted GPU work before scheduling more. This
+  prevents an accumulating compute queue from starving WebGL or making motor readback increasingly
+  stale. WASM uses the same CPU burst limit without a GPU fence. Neither backend skips neural/physics
+  steps.
 - `?gpu=0` forces the WebAssembly brain; flyvis eyes always use WASM.
 - Food consumption is accumulated between pose messages and broadcast back to the workers.
 
@@ -138,7 +139,7 @@ gates permit launch. See [Flight](24-flight.md) for the motor approximation and 
 | Maze | Three walls, food at the far end |
 | Social | Five flies, one food patch |
 | Courtship | A male and a female |
-| Odor race | Game view (`?env=race`): 12.5 cm circle, mixed-height maze, centre vinegar, three named flies. Centre Start; first to the disc wins; 10 s then they return to the rim. No left lab panel; names and a right scoreboard only. |
+| Odor race | Game view (`?env=race`): 12.5 cm circle, dusty-purple plate floor and matching outer wall (flies still see the lab checker). Three identical radial maze lanes (0°/120°/240°, same wall height) to the centre, vinegar plume (σ ≈ 4.5 plus lane blobs) and inward wind, three named flies. They start hungry and forage on vinegar (easier surge, in-plume wind steer, tropotaxis); they do not visually home on the disc. Centre Start; first to the disc wins, or the last remaining / last to die if they starve (wall-clock time, fly-time smaller); last 3 winners on the overlay; 10 s then they return to the rim. Start unlocks looping music; walk ticks and a 218 Hz wing buzz follow the selected fly; `yipee.wav` on a finish. Race workers burst 16 sim-ms / 16 CPU-ms. Left scoreboard (clock, names); right panel is the selected fly's eyes, group traces and brain inset. |
 
 ## Controls
 Run and pause, speed, add fly, add female, motor mode, follow camera, placement tools, looming threat,

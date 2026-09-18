@@ -3,7 +3,7 @@
 //   physics state -> Senses (+ CompoundEye every 10 ms) -> sensory neuron drive -> brain (2 x 0.5 ms LIF steps)
 //   -> Motor (descending commands / motor neurons) -> actuators -> physics (10 x 0.1 ms MuJoCo steps)
 import { buildWorldXML } from './world.js';
-import { Senses, CompoundEye, clearance, heatAt } from './senses.js';
+import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt } from './senses.js';
 import { Intrinsic } from './intrinsic.js';
 import { Neuromod } from './neuromod.js';
 import { Flight } from './flight.js';
@@ -45,12 +45,12 @@ export class FlyAgent {
     this.fv = vision && flyvis ? new FlyVisionFV(mj, M, this.mjd, bodymap, flyvis.map, flyvis.eyes, this.bid.head, this.bid.thorax, flyvis.gain ?? 150) : null;
     this.eye = vision && !this.fv ? new CompoundEye(mj, M, this.mjd, bodymap, this.bid.head, this.bid.thorax) : null;
     this.motor = new Motor(mj, M, this.mjd, bodymap, typeOf, sideOf, gait, mode);
-    this.intrinsic = intrinsic ? new Intrinsic(typeOf, sideOf, id + 1 + (seed || 0), bodymap.feeding) : null;
+    this.intrinsic = intrinsic ? new Intrinsic(typeOf, sideOf, id + 1 + (seed || 0), bodymap.feeding, { forage: !!env.hungryForage }) : null;
     this.flight = new Flight({ mj, model: M, data: this.mjd, thorax: this.bid.thorax, jointAdr: this.jointAdr, act: this.motor.act, range: this.motor.range, rand: this.intrinsic?.rand });
     this.flights = 0;
     this.driven = new Int32Array(0);
     // physiology
-    this.energy = 0.6; this.health = 1; this.alive = true; this.eaten = 0; this.t = 0; this.foodEaten = env.food.map(() => 0); this.dist = 0; this.jumps = 0; this._lastPos = null; this._wasJumping = false;
+    this.energy = env.hungryForage ? 0.25 : 0.6; this.health = 1; this.alive = true; this.eaten = 0; this.t = 0; this.foodEaten = env.food.map(() => 0); this.dist = 0; this.jumps = 0; this._lastPos = null; this._wasJumping = false;
     this.others = [];   // [{x,y,yaw}] of other flies (set by the host)
     this.log = [];
     this.takeoffPending = false;
@@ -145,9 +145,13 @@ export class FlyAgent {
     // Hold an explicit request until the startup/contact gates actually permit a launch.
     // The former 80 ms pulse silently expired if the user clicked just after loading.
     if (this.takeoffPending && this.intrinsic) this.intrinsic.takeoffUntil = this.intrinsic.t + 80;
-    if (this.intrinsic) this.intrinsic.update(1, B, { energy: this.energy, arousal: this.neuromod?.arousal, touch: st.antTouch, rearing: st.pitchUp > 0.45 && this.motor.jumpT < 0 && !this.motor.righting,
-      heat: { left: heatAt(st.antenna.left, this.env), right: heatAt(st.antenna.right, this.env) }, sugar: this._sugar || 0, flying: this.flight.active, ahead: st.ahead, court,
-      mouthOnFood: this.env.food.some(f => f.amount > 0 && Math.hypot(st.labellum[0] - f.x, st.labellum[1] - f.y) < f.r - 0.02) });
+    if (this.intrinsic) {
+      const hx = Rt9(this.mjd.xmat, this.bid.thorax);
+      this.intrinsic.update(1, B, { energy: this.energy, arousal: this.neuromod?.arousal, touch: st.antTouch, rearing: st.pitchUp > 0.45 && this.motor.jumpT < 0 && !this.motor.righting,
+        heat: { left: heatAt(st.antenna.left, this.env), right: heatAt(st.antenna.right, this.env) }, sugar: this._sugar || 0, flying: this.flight.active, ahead: st.ahead, court,
+        mouthOnFood: this.env.food.some(f => f.amount > 0 && Math.hypot(st.labellum[0] - f.x, st.labellum[1] - f.y) < f.r - 0.02),
+        odor: st.odor, wind: windAt(st.pos, this.env), upwind: upwindAt(st.pos, this.env), heading: hx, forage: !!this.env.hungryForage });
+    }
     const nd = new Int32Array(rates.size); let k = 0; for (const [i, hz] of rates) { B.setDriveOne(i, hz); nd[k++] = i; } this.driven = nd;
     // GF -> TTMn electrical synapse (not in the chemical connectome): GF spikes depolarise TTMn directly
     const before = this.brain.spikeCount[this.motor.dn.escape[0]] + this.brain.spikeCount[this.motor.dn.escape[1]];

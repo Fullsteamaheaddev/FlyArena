@@ -41,23 +41,29 @@ export const PRESETS = {
       arena: { ...DEFAULT_ENV.arena, radius: 12.5 },
       hazards: [],
       bitterPatches: [],
-      food: [{ x: 0, y: 0, r: 0.4, sugar: 1, bitter: 0, water: 0.2, amount: 8 }],
-      odors: [{ x: 0, y: 0, odor: 'vinegar', strength: 1, sigma: 6 }],
-      // Axis-aligned maze: centre kept open, mixed heights (short walls are easy to fly over).
-      obstacles: [
-        { type: 'box', x: 0, y: 2.4, sx: 1.7, sy: 0.1, sz: 0.28 },
-        { type: 'box', x: 0, y: -2.4, sx: 1.7, sy: 0.1, sz: 0.95 },
-        { type: 'box', x: -2.4, y: 0.5, sx: 0.1, sy: 1.5, sz: 0.5 },
-        { type: 'box', x: 2.4, y: -0.5, sx: 0.1, sy: 1.5, sz: 0.35 },
-        { type: 'box', x: -4.2, y: 6.2, sx: 2.2, sy: 0.12, sz: 1.0 },
-        { type: 'box', x: 4.2, y: 6.2, sx: 2.2, sy: 0.12, sz: 0.4 },
-        { type: 'box', x: -4.2, y: -6.2, sx: 2.2, sy: 0.12, sz: 0.55 },
-        { type: 'box', x: 4.2, y: -6.2, sx: 2.2, sy: 0.12, sz: 0.85 },
-        { type: 'box', x: -6.2, y: 2.8, sx: 0.12, sy: 2.4, sz: 0.7 },
-        { type: 'box', x: 6.2, y: -2.8, sx: 0.12, sy: 2.4, sz: 1.0 },
-        { type: 'box', x: 6.2, y: 3.5, sx: 0.12, sy: 1.6, sz: 0.3 },
-        { type: 'box', x: -6.2, y: -3.5, sx: 0.12, sy: 1.6, sz: 0.45 },
+      food: [{ x: 0, y: 0, r: 0.5, sugar: 1, bitter: 0, water: 0.2, amount: 8 }],
+      windRadial: 4,
+      hungryForage: true,
+      odors: [
+        { x: 0, y: 0, odor: 'vinegar', strength: 1, sigma: 4.5 },
+        ...[0, 1, 2].flatMap(i => {
+          const a = i * 2 * Math.PI / 3, ca = Math.cos(a), sa = Math.sin(a);
+          return [
+            { x: 9.2 * ca, y: 9.2 * sa, odor: 'vinegar', strength: 0.6, sigma: 2.0 },
+            { x: 4.5 * ca, y: 4.5 * sa, odor: 'vinegar', strength: 0.5, sigma: 1.4 },
+          ];
+        }),
       ],
+      // Three identical radial lanes (0°, 120°, 240°): same flanking walls and inner gates, same height.
+      obstacles: [0, 1, 2].flatMap(i => {
+        const a = i * 2 * Math.PI / 3, c = Math.cos(a), s = Math.sin(a);
+        return [
+          { x: 6.2, y: 1.5, sx: 2.2, sy: 0.12, sz: 0.55 },
+          { x: 6.2, y: -1.5, sx: 2.2, sy: 0.12, sz: 0.55 },
+          { x: 2.4, y: 1.15, sx: 0.9, sy: 0.12, sz: 0.55 },
+          { x: 2.4, y: -1.15, sx: 0.9, sy: 0.12, sz: 0.55 },
+        ].map(t => ({ type: 'box', x: t.x * c - t.y * s, y: t.x * s + t.y * c, sx: t.sx, sy: t.sy, sz: t.sz, yaw: a }));
+      }),
     }),
   },
 };
@@ -72,7 +78,7 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
     parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${a.wallHeight / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${a.wallHeight / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
   }
   env.obstacles.forEach((o, k) => {
-    if (o.type === 'box') parts.push(`<geom name="obst${k}" type="box" size="${o.sx} ${o.sy} ${o.sz / 2}" pos="${o.x} ${o.y} ${o.sz / 2}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+    if (o.type === 'box') parts.push(`<geom name="obst${k}" type="box" size="${o.sx} ${o.sy} ${o.sz / 2}" pos="${o.x.toFixed(4)} ${o.y.toFixed(4)} ${o.sz / 2}" euler="0 0 ${(o.yaw || 0).toFixed(4)}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
     else parts.push(`<geom name="obst${k}" type="cylinder" size="${o.r} ${o.sz / 2}" pos="${o.x} ${o.y} ${o.sz / 2}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
   });
   // food and patches are flat visual discs (no collision), seen by the eyes

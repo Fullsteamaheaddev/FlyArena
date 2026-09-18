@@ -56,18 +56,20 @@ the right, and P9 also steers, so driving it made the fly circle.
 | Sugar under the mouthparts, hungry | Stop and feed until sated or off the food | |
 | Sugar underfoot only | Walk on slowly onto the food | |
 | After leaving food | 12 s local search: three times the saccades, same direction 75% of the time, so the path loops back | Dethier 1957; Kim & Dickinson 2017 |
+| Food odour (vinegar/banana) | In the plume, walk longer and drop random saccades. Rising concentration: surge (walk straight; turn toward upwind if there is wind). Falling: one casting saccade, toward the stronger antenna if the sides differ. Odor race (`hungryForage`): start hungry, skip grooming and voluntary takeoff, easier surge, steer into the inward wind whenever in the plume, tropotaxis toward the stronger antenna; not visual homing | van Breugel & Dickinson 2014 |
 | Courtship (males) | When the connectome's own courtship readout (pIP10, DNp13 rates) is high and a female is within range: chase on her bearing, and sing with the wing facing her when close | Ewing & Bennet-Clark 1968; see [Courtship](26-courtship.md) |
 | Voluntary takeoff | 10% of bout ends, more when hungry | |
 | In flight | Saccades 1 per second, and collision-avoidance saccades toward open space | Tammero & Dickinson 2002 |
 | Hunger | Longer walk bouts and shorter pauses, less grooming, more takeoffs, faster walking. Scaled by octopamine arousal from [Neuromodulation](25-neuromodulation.md) when it is on, otherwise by energy | Yang et al. 2015 |
 
 ## Senses added for it
-See [Senses](10-senses.md): antennal and front-leg obstacle touch, heat per arista, and suppression of
-footfall touch while stepping (reafference).
+See [Senses](10-senses.md): antennal and front-leg obstacle touch, heat per arista, food-odour
+concentration per antenna, and suppression of footfall touch while stepping (reafference).
 
 ## What is still the brain's
-Sensory steering, such as odour, optomotor and object responses, the sugar stop, bitter aversion, looming
-escape and grooming triggered by touch, all come from the connectome. The module supplies timing and
-intent. With [neuromodulation](25-neuromodulation.md) on, its hunger input for locomotion is the octopamine
+Sensory steering, such as residual odour through the connectome, optomotor and object responses, the sugar stop, bitter aversion, looming
+escape and grooming triggered by touch, all come from the connectome. Cast-and-surge toward food odour is
+supplied here because internasal stereo on a smooth plume is too weak to homing-walk. The module also
+supplies timing and intent. With [neuromodulation](25-neuromodulation.md) on, its hunger input for locomotion is the octopamine
 level of identified neurons rather than the energy variable; feeding still reads energy. Where a pathway is missing from the model, such as turning away from a touched obstacle or from
 heat, the module supplies it and this page lists it.

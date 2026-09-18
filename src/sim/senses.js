@@ -16,6 +16,24 @@ export const AL_NORM = 600;         // GABA_B presynaptic gain control: total ev
                                     // Neurobiol 18:83). The glomerular pattern is preserved; the total is bounded,
                                     // so one strong odour cannot recruit the whole lobe.
 export const FLY_ODOR = { strength: 0.9, sigma: 0.28 };   // another fly is a short-range cVA/fly-odour source
+const FOOD_ODOR = new Set(['vinegar', 'banana']);
+/** air velocity [wx, wy] cm/s at a point: uniform env.wind plus optional inward radial flow (toward origin). */
+export function windAt(p, env) {
+  const w = env.wind || [0, 0];
+  let wx = w[0] || 0, wy = w[1] || 0;
+  const wr = env.windRadial || 0;
+  if (wr) {
+    const r = Math.hypot(p[0], p[1]);
+    if (r > 0.05) { wx += -wr * p[0] / r; wy += -wr * p[1] / r; }
+  }
+  return [wx, wy];
+}
+/** heading to surge along: with windRadial, walk with the inward flow (toward the source); else classic upwind (−wind). */
+export function upwindAt(p, env) {
+  const w = windAt(p, env);
+  if (env.windRadial) return w;
+  return [-w[0], -w[1]];
+}
 
 export class Senses {
   constructor(bodymap, mj, model) {
@@ -57,14 +75,19 @@ export class Senses {
     this.rates.clear();
     const H = Senses.hill;
     // --- olfaction: concentration at each antenna from static plumes (+ wind advection) and other flies ---
+    st.odor = { left: 0, right: 0 };
     for (const sd of ['left', 'right']) {
       const p = st.antenna[sd];
       const act = {};
+      const [wx, wy] = windAt(p, env);
+      let foodC = 0;
       for (const o of env.odors) {
-        const dx = p[0] - o.x - env.wind[0] * 0.5, dy = p[1] - o.y - env.wind[1] * 0.5;
+        const dx = p[0] - o.x - wx * 0.5, dy = p[1] - o.y - wy * 0.5;
         const c = o.strength * Math.exp(-(dx * dx + dy * dy) / (2 * o.sigma * o.sigma));
+        if (FOOD_ODOR.has(o.odor)) foodC = Math.max(foodC, c);
         for (const [g, sens] of Object.entries(ODORANTS[o.odor] || {})) act[g] = Math.max(act[g] || 0, c * sens);
       }
+      st.odor[sd] = foodC;
       for (const f of st.otherFlies) {
         const dx = p[0] - f.x, dy = p[1] - f.y;
         const c = FLY_ODOR.strength * Math.exp(-(dx * dx + dy * dy) / (2 * FLY_ODOR.sigma * FLY_ODOR.sigma));
@@ -114,7 +137,11 @@ export class Senses {
     const w = Math.hypot(st.gyro[0], st.gyro[1], st.gyro[2]);
     for (const sd of ['left', 'right']) if (w > 2) this.set(this.S[`haltere ${sd}`] || [], Math.min(200, 10 * w));
     // antennal mechanosensation (JO): wind and self-motion air flow
-    for (const sd of ['left', 'right']) { const air = Math.hypot(env.wind[0] - st.vel[0], env.wind[1] - st.vel[1]); if (air > 0.5) this.set(this.S[`JO wind/gravity ${sd}`] || [], Math.min(150, 20 * air)); }
+    for (const sd of ['left', 'right']) {
+      const [wx, wy] = windAt(st.antenna[sd], env);
+      const air = Math.hypot(wx - st.vel[0], wy - st.vel[1]);
+      if (air > 0.5) this.set(this.S[`JO wind/gravity ${sd}`] || [], Math.min(150, 20 * air));
+    }
     // temperature: hot floor patches heat the fly (thermosensory neurons of the arista)
     st.heat = heatAt(st.pos, env);
     for (const sd of ['left', 'right']) { const h = heatAt(st.antenna[sd], env); if (h > 0.05) this.set(this.S[`thermosensory ${sd}`] || [], 200 * h); }
