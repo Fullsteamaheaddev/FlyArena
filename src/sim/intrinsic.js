@@ -97,11 +97,11 @@ export class Intrinsic {
     const prevC = this.odorC;
     this.odorC += dtMs / P.odorTau * (rawC - this.odorC);
     const dC = (this.odorC - prevC) / Math.max(0.001, dtMs / 1000);
-    const inPlume = this.odorC > (forage ? 0.02 : P.odorEnter);
+    const inPlume = this.odorC > (forage ? 0.008 : P.odorEnter);
     this.surge = false;
     const free = !courting && !this.avoid && this.state !== 'feed' && this.state !== 'groom' && hot < 0.08;
     if (free && inPlume && this.state === 'walk') this.left = Math.max(this.left, 500);
-    const surgeTh = forage ? 0.08 : P.odorDCsurge, castTh = forage ? -0.35 : P.odorDCcast, castRef = forage ? 500 : P.odorCastRefractory;
+    const surgeTh = forage ? 0.04 : P.odorDCsurge, castTh = forage ? -0.35 : P.odorDCcast, castRef = forage ? 500 : P.odorCastRefractory;
     if (free && inPlume && dC > surgeTh) {
       this.surge = true;
       if (this.state !== 'walk') { this.state = 'walk'; this.left = Math.max(this.left, 800); }
@@ -126,7 +126,7 @@ export class Intrinsic {
     if (this.avoid) {
       const a = this.avoid; a.t += dtMs;
       if (a.t > P.avoidMs && !this.sacc) this.sacc = { t: 0, dur: a.turn, dir: a.dir };   // pivot away
-      if (a.t > P.avoidMs + a.turn) { if (a.fly) this.takeoffUntil = t + 80; this.avoid = null; this.lastDir = a.dir; this.sinceSacc = 0; this.state = 'walk'; this.left = Math.max(this.left, 1000); }
+      if (a.t > P.avoidMs + a.turn) { if (a.fly && !forage) this.takeoffUntil = t + 80; this.avoid = null; this.lastDir = a.dir; this.sinceSacc = 0; this.state = 'walk'; this.left = Math.max(this.left, forage ? 2500 : 1000); }
     } else if (this.state === 'court' && court) {
       // chasing: no spontaneous saccades or bout transitions; steering is set from the target's bearing below
       const b = court.bearing;   // rad; >0 = target to the left
@@ -139,13 +139,13 @@ export class Intrinsic {
         if (this.approach && this.state !== 'feed') { this.state = 'walk'; this.left = 600; } else
         if (this.state !== 'feed' && this.state !== 'groom' && !forage && this.rand() < P.pTakeoff * (1 + 2 * arousal)) this.takeoffUntil = t + 80;   // leave by air
         if (this.state === 'feed') { this.state = 'walk'; this.left = this.lognormal(P.walkBout); }
-        else if (this.state === 'walk') { this.state = !forage && this.rand() < P.pGroom * (1 - arousal) ? 'groom' : 'stop'; this.left = this.lognormal(this.state === 'groom' ? P.groomBout : P.stopBout) * (1 - 0.6 * arousal) * (forage ? 0.15 : 1); }
+        else if (this.state === 'walk') { this.state = !forage && this.rand() < P.pGroom * (1 - arousal) ? 'groom' : 'stop'; this.left = this.lognormal(this.state === 'groom' ? P.groomBout : P.stopBout) * (1 - 0.6 * arousal) * (forage ? 0.05 : 1); }
         else { this.state = 'walk'; this.left = this.lognormal(P.walkBout) * (1 + 1.5 * arousal); }
       }
       // spontaneous saccades; alternate direction more often than not (flies avoid circling)
       this.sinceSacc += dtMs;
       const rate = (this.state === 'walk' ? P.saccadeRate * (searching ? P.searchTurns : 1) : this.state === 'stop' ? P.standSaccadeRate : 0) / 1000;
-      if (!this.sacc && !this.surge && !(inPlume && this.state === 'walk') && this.sinceSacc > 250 && this.rand() < rate * dtMs) {
+      if (!this.sacc && !this.surge && !(inPlume && this.state === 'walk') && !(forage && inPlume) && this.sinceSacc > 250 && this.rand() < rate * dtMs) {
         const dir = this.rand() < (searching ? 0.25 : 0.65) ? -this.lastDir : this.lastDir; this.lastDir = dir;   // searching: keep turning one way, looping
         this.sacc = { t: 0, dur: P.saccadeMs[0] + (P.saccadeMs[1] - P.saccadeMs[0]) * this.rand(), dir }; this.sinceSacc = 0;
       }
@@ -154,7 +154,7 @@ export class Intrinsic {
     this.fwdNoise += dtMs / P.fwdTau * (-this.fwdNoise) + Math.sqrt(2 * dtMs / P.fwdTau) * this.gauss();
     const walking = this.state === 'walk' && !this.avoid;
     const B = this.bias;
-    B.fwd = walking ? P.fwdDrive * (this.approach ? 0.7 : Math.max(0.3, 1 + P.fwdJitter * this.fwdNoise + 0.25 * arousal + 0.6 * this.hot)) : 0;
+    B.fwd = walking ? P.fwdDrive * (this.approach ? 0.7 : Math.max(0.3, 1 + P.fwdJitter * this.fwdNoise + 0.25 * arousal + 0.6 * this.hot + (forage && inPlume ? 0.35 : 0))) : 0;
     B.back = this.avoid && this.avoid.t < P.avoidMs ? P.backDrive : 0;
     B.groom = this.state === 'groom' && !this.avoid ? P.groomDrive : 0;
     B.turnL = this.sacc && this.sacc.dir > 0 ? P.turnDrive : 0; B.turnR = this.sacc && this.sacc.dir < 0 ? P.turnDrive : 0;
@@ -163,14 +163,14 @@ export class Intrinsic {
       const us = Math.hypot(ux, uy), hs = Math.hypot(hx, hy);
       if (us > 0.15 && hs > 0.01) {
         const cross = (hx * uy - hy * ux) / (hs * us);   // >0 desired heading is to the left
-        if (cross > 0.08) B.turnL = Math.max(B.turnL, (forage ? 10 : P.odorUpwind) * Math.min(1, cross));
-        if (cross < -0.08) B.turnR = Math.max(B.turnR, (forage ? 10 : P.odorUpwind) * Math.min(1, -cross));
+        if (cross > 0.08) B.turnL = Math.max(B.turnL, (forage ? 16 : P.odorUpwind) * Math.min(1, cross));
+        if (cross < -0.08) B.turnR = Math.max(B.turnR, (forage ? 16 : P.odorUpwind) * Math.min(1, -cross));
       }
     }
     if (forage && inPlume && walking && !this.sacc) {
       const stereo = (odor.left || 0) - (odor.right || 0);
-      if (stereo > 0.02) B.turnL = Math.max(B.turnL, 4 * Math.min(1, stereo * 8));
-      if (stereo < -0.02) B.turnR = Math.max(B.turnR, 4 * Math.min(1, -stereo * 8));
+      if (stereo > 0.01) B.turnL = Math.max(B.turnL, 12 * Math.min(1, stereo * 8));
+      if (stereo < -0.01) B.turnR = Math.max(B.turnR, 12 * Math.min(1, -stereo * 8));
     }
     if (this.state === 'court' && court) {
       // chase: steer onto the target's bearing; close to singing distance, then keep station and extend

@@ -27,7 +27,9 @@ const isRace = presetKey === 'race' && PRESET === PRESETS.race;
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
-let raceWinner = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null;
+let raceWinner = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0;
+let raceFollow = null, raceCamHome = null, raceCamTween = null, raceAnnounce = null, raceBrainTimer = null, raceBrainTouched = false;
+const RACE_PLUME_TOP = 0.20, RACE_CHASE_BACK = 2.6, RACE_CHASE_Z = 1.15;
 const RACE_HISTORY_KEY = 'odorRaceResults';
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
@@ -64,7 +66,7 @@ async function main() {
   await spawnPresetFlies();
   if (isRace) showRaceStart();
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
-  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish };
+  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish, resetRace, startRaceFollow, stopRaceFollow, announceRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; } };
   animate();
 }
 
@@ -73,8 +75,16 @@ async function spawnPresetFlies() {
   const st0 = PRESET.start || [0, 0, 0];
   if (PRESET.flySpots) {
     const spots = PRESET.flySpots.slice();
-    if (isRace) for (let i = spots.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [spots[i], spots[j]] = [spots[j], spots[i]]; }
-    for (const s of spots) await addFly(s.pos, s.yaw, s.sex);
+    if (isRace) {
+      const n = spots.length, rot = raceSpotRot % n;
+      raceSpotRot++;
+      const ids = [...Array(n).keys()];
+      for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+      for (let i = 0; i < n; i++) {
+        const s = spots[(i + rot) % n], k = ids[i];
+        await addFly(s.pos, s.yaw, s.sex, { name: RACE_NAMES[k], color: FLY_COLORS[k] });
+      }
+    } else for (const s of spots) await addFly(s.pos, s.yaw, s.sex);
   } else { await addFly([st0[0], st0[1]], st0[2]);
     for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
 }
@@ -93,7 +103,7 @@ function buildScene(data) {
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;
   renderer.info.autoReset = false;
-  scene = new THREE.Scene(); scene.background = new THREE.Color(isRace ? '#2a2433' : '#0b0e14');
+  scene = new THREE.Scene(); scene.background = new THREE.Color(isRace ? '#22262D' : '#0b0e14');
   scene.matrixAutoUpdate = false;
   const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment();
   scene.environment = pmrem.fromScene(room, 0.04).texture; scene.environmentIntensity = 0.24;
@@ -104,12 +114,14 @@ function buildScene(data) {
   else camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5;
-  scene.add(new THREE.HemisphereLight(isRace ? '#e8e4ee' : '#f4f2ed', isRace ? '#3a3444' : '#514432', 0.22));
-  sun = new THREE.DirectionalLight(isRace ? '#e4d8f0' : '#fff1da', 2.7); sun.position.set(3, 2, 8); sun.castShadow = true;
+  controls.maxPolarAngle = Math.PI / 2 - 0.02;
+  if (isRace) raceCamHome = { pos: camera.position.clone(), target: controls.target.clone() };
+  scene.add(new THREE.HemisphereLight(isRace ? '#f0d4ff' : '#f4f2ed', isRace ? '#4a2060' : '#514432', 0.22));
+  sun = new THREE.DirectionalLight(isRace ? '#f0c8ff' : '#fff1da', 2.7); sun.position.set(3, 2, 8); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.00002; sun.shadow.normalBias = 0.0003; sun.shadow.radius = 2;
   const shadowSpan = Math.max(4, R + 0.5);
   Object.assign(sun.shadow.camera, { left: -shadowSpan, right: shadowSpan, top: shadowSpan, bottom: -shadowSpan, near: 0.1, far: Math.max(20, R * 3) }); scene.add(sun, sun.target);
-  const rim = new THREE.DirectionalLight(isRace ? '#c8bdd8' : '#f9e5c4', 0.65); rim.position.set(-3, -2, 3); scene.add(rim);
+  const rim = new THREE.DirectionalLight(isRace ? '#e0a8f0' : '#f9e5c4', 0.65); rim.position.set(-3, -2, 3); scene.add(rim);
   const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
   composer = new EffectComposer(renderer, rt); composer.addPass(new RenderPass(scene, camera));
   gtao = new GTAOPass(scene, camera, 1, 1);
@@ -141,8 +153,9 @@ function buildScene(data) {
   envGroup = new THREE.Group(); scene.add(envGroup); rebuildEnv();
   batches = new ArenaBatches(scene, visual, MAX_FLIES);
   raycaster = new THREE.Raycaster();
-  renderer.domElement.addEventListener('pointerdown', e => { pd = [e.clientX, e.clientY]; });
-  renderer.domElement.addEventListener('pointerup', e => { if (pd && Math.hypot(e.clientX - pd[0], e.clientY - pd[1]) < 4) onClick(e); });
+  const clickEl = isRace ? labelRenderer.domElement : renderer.domElement;
+  clickEl.addEventListener('pointerdown', e => { pd = [e.clientX, e.clientY]; });
+  clickEl.addEventListener('pointerup', e => { if (pd && Math.hypot(e.clientX - pd[0], e.clientY - pd[1]) < 4) onClick(e); });
   // brain inset: soma point cloud colored by activity of the selected fly
   const bw = $('#brain').clientWidth || 358, bh = $('#brain').clientHeight || 220;
   brainRenderer = new THREE.WebGLRenderer({ canvas: $('#brain'), antialias: false, alpha: true }); brainRenderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -169,16 +182,16 @@ function rebuildEnv() {
   if (isRace) {
     const fs = 512, fc = document.createElement('canvas'); fc.width = fc.height = fs; const fx = fc.getContext('2d');
     const mid = fs / 2, rg = fx.createRadialGradient(mid, mid, 0, mid, mid, mid);
-    rg.addColorStop(0, '#c9c0d0'); rg.addColorStop(0.35, '#9b91a8'); rg.addColorStop(0.7, '#7d738c'); rg.addColorStop(1, '#5c5568');
+    rg.addColorStop(0, '#8a2fb8'); rg.addColorStop(0.35, '#6b2494'); rg.addColorStop(0.7, '#4a1870'); rg.addColorStop(1, '#2c0d48');
     fx.fillStyle = rg; fx.fillRect(0, 0, fs, fs);
-    fx.strokeStyle = 'rgba(230,220,240,0.22)'; fx.lineWidth = 10;
+    fx.strokeStyle = 'rgba(210,150,255,0.28)'; fx.lineWidth = 10;
     for (const r of [0.22, 0.42, 0.62, 0.82]) { fx.beginPath(); fx.arc(mid, mid, r * mid, 0, Math.PI * 2); fx.stroke(); }
     const ft = new THREE.CanvasTexture(fc); ft.colorSpace = THREE.SRGBColorSpace; ft.generateMipmaps = false; ft.minFilter = THREE.LinearFilter; ft.magFilter = THREE.LinearFilter; ft.anisotropy = aniso;
     floorMat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.82 });
     const wc = document.createElement('canvas'); wc.width = 1024; wc.height = 128; const wx = wc.getContext('2d');
-    const vg = wx.createLinearGradient(0, 0, 0, 128); vg.addColorStop(0, '#b5a8c2'); vg.addColorStop(1, '#6a6278');
+    const vg = wx.createLinearGradient(0, 0, 0, 128); vg.addColorStop(0, '#e0b8f0'); vg.addColorStop(1, '#7a3aa8');
     wx.fillStyle = vg; wx.fillRect(0, 0, 1024, 128);
-    const pastels = ['#c4b8d0', '#9a90a8', '#7e748c']; wx.globalAlpha = 0.32;
+    const pastels = ['#f0c8ff', '#d080e8', '#a050c8']; wx.globalAlpha = 0.32;
     for (let k = 0; k < 12; k++) { wx.fillStyle = pastels[k % pastels.length]; wx.fillRect(k * 1024 / 12, 0, 1024 / 12 + 1, 128); }
     wx.globalAlpha = 1;
     const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
@@ -198,26 +211,63 @@ function rebuildEnv() {
   floorMesh.receiveShadow = true; envGroup.add(floorMesh);
   const wall = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true), wallMat);
   wall.rotation.x = Math.PI / 2; wall.position.z = env.arena.wallHeight / 2; envGroup.add(wall);
-  for (const o of env.obstacles) { const m = new THREE.Mesh(o.type === 'box' ? new THREE.BoxGeometry(o.sx * 2, o.sy * 2, o.sz) : new THREE.CylinderGeometry(o.r, o.r, o.sz, 32), new THREE.MeshStandardMaterial({ color: isRace ? '#4e4658' : '#3d4a3d', roughness: 0.7 }));
+  for (const o of env.obstacles) { const m = new THREE.Mesh(o.type === 'box' ? new THREE.BoxGeometry(o.sx * 2, o.sy * 2, o.sz) : new THREE.CylinderGeometry(o.r, o.r, o.sz, 32), new THREE.MeshStandardMaterial({ color: isRace ? '#6a3d86' : '#3d4a3d', roughness: 0.7 }));
     if (o.type !== 'box') m.rotation.x = Math.PI / 2; else m.rotation.z = o.yaw || 0; m.position.set(o.x, o.y, o.sz / 2); m.castShadow = m.receiveShadow = true; envGroup.add(m); }
   for (const f of env.food) { const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y, 0.002); m.userData.food = f; envGroup.add(m); }
   for (const b of env.bitterPatches) { const m = discMesh(b.r, '#4f8fd6', 0.9); m.position.set(b.x, b.y, 0.002); envGroup.add(m); }
   for (const h of env.hazards) { const m = discMesh(h.r, '#d9502f', 0.9); m.position.set(h.x, h.y, 0.002); envGroup.add(m); const glow = discMesh(h.r + 0.4, '#d9502f', 0.12, 0.001); glow.position.set(h.x, h.y, 0.001); envGroup.add(glow); }
-  for (const o of env.odors) { // plume as a soft radial gradient (quad, not a triangle fan — fans mipmap into rays)
-    const s = 256, g = document.createElement('canvas'); g.width = g.height = s; const gx = g.getContext('2d');
-    const grd = gx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-    const col = o.odor === 'co2' ? '120,200,255' : '190,255,120'; grd.addColorStop(0, `rgba(${col},0.45)`); grd.addColorStop(1, `rgba(${col},0)`); gx.fillStyle = grd; gx.fillRect(0, 0, s, s);
-    const tex = new THREE.CanvasTexture(g); tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
-    const span = o.sigma * 4.4;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(span, span), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false }));
-    m.position.set(o.x, o.y, 0.004); envGroup.add(m); }
+  for (const o of env.odors) {
+    if (o.hidden) continue;
+    const across = o.sigmaAcross || o.sigma, along = o.sigmaAlong;
+    const spanX = (along || across) * 4.4, spanY = across * 4.4;
+    const yaw = along ? Math.atan2(o.y, o.x) : 0;
+    const rgb = o.odor === 'co2' ? [120, 200, 255] : [190, 255, 120];
+    const z0 = 0.004, z1 = isRace ? RACE_PLUME_TOP : z0;
+    const addPlane = z => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(spanX, spanY), new THREE.MeshBasicMaterial({ map: plumeTexture(spanX, spanY, !!along, rgb), transparent: true, depthWrite: false, depthTest: false }));
+      m.position.set(o.x, o.y, z); m.rotation.z = yaw; envGroup.add(m);
+    };
+    addPlane(z1);
+    if (isRace && z1 > z0) addPlane(z0);
+  }
+}
+function plumeTexture(spanX, spanY, capsule, rgb) {
+  const s = 256, g = document.createElement('canvas'); g.width = g.height = s;
+  const gx = g.getContext('2d'), img = gx.createImageData(s, s), d = img.data;
+  const rCap = spanY * 0.5, x0 = -spanX * 0.5 + rCap, x1 = spanX * 0.5 - rCap;
+  for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) {
+    const x = (i / (s - 1) - 0.5) * spanX, y = (j / (s - 1) - 0.5) * spanY;
+    let dist;
+    if (capsule && x1 > x0) { const cx = Math.max(x0, Math.min(x1, x)); dist = Math.hypot(x - cx, y); }
+    else dist = Math.hypot(x, y);
+    const u = Math.max(0, 1 - dist / Math.max(1e-4, rCap));
+    const a = 0.48 * u * u;
+    const p = (j * s + i) * 4;
+    d[p] = rgb[0]; d[p + 1] = rgb[1]; d[p + 2] = rgb[2]; d[p + 3] = Math.round(a * 255);
+  }
+  gx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(g); tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+  return tex;
+}
+function makeFlyGlow(color) {
+  const s = 64, c = document.createElement('canvas'); c.width = c.height = s;
+  const x = c.getContext('2d'), g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  const rgb = new THREE.Color(color);
+  const col = `${Math.round(rgb.r * 255)},${Math.round(rgb.g * 255)},${Math.round(rgb.b * 255)}`;
+  g.addColorStop(0, `rgba(${col},0.9)`); g.addColorStop(0.4, `rgba(${col},0.35)`); g.addColorStop(1, `rgba(${col},0)`);
+  x.fillStyle = g; x.fillRect(0, 0, s, s);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  spr.scale.set(0.9, 0.9, 1); spr.position.set(0, 0, 0.06); spr.visible = false;
+  return spr;
 }
 function buildFlyMesh(color, sex) {
   const appearance = visual.instantiate(sex);
   // Fine ground marker leaves the legs and contact shadow readable at macro scale.
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.175, 0.177, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false }));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(isRace ? 0.14 : 0.175, isRace ? 0.22 : 0.177, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: isRace ? 0.9 : 0.6, depthWrite: false }));
   scene.add(ring);
-  return { ...appearance, ring };
+  let glow = null;
+  if (isRace && appearance.bodies?.thorax) { glow = makeFlyGlow(color); appearance.bodies.thorax.add(glow); }
+  return { ...appearance, ring, glow };
 }
 
 // One instanced draw per wing film across the sampled beat cycle. Poses are thorax-local and immutable.
@@ -242,17 +292,31 @@ function updateWingBlur(f, s) {
 
 // ---------------- flies ----------------
 let nextId = 0;
-async function addFly(pos, yaw, sex = 'm') {
+async function addFly(pos, yaw, sex = 'm', ident = null) {
   const cap = PRESET.maxFlies || MAX_FLIES;
   if (flies.length >= cap) { alert(`At most ${cap} flies`); return; }
-  const id = nextId++; const color = FLY_COLORS[id % FLY_COLORS.length];
+  const id = nextId++; const color = ident?.color || FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
-  const f = { id, worker, color, sex, name: isRace ? RACE_NAMES[id] || `fly ${id}` : `fly ${id}`, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
+  const f = { id, worker, color, sex, name: ident?.name || (isRace ? RACE_NAMES[id] || `fly ${id}` : `fly ${id}`), ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
   scene.add(f.group); flies.push(f); batches.add(f);
   if (isRace) {
     const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color;
-    el.innerHTML = `<span class="fly-label-chip">${f.name}</span>`;
-    el.addEventListener('pointerdown', e => { e.stopPropagation(); selected = f.id; renderFlyList(); });
+    el.innerHTML = `<span class="fly-label-chip">${f.name}</span><div class="fly-label-info"></div>`;
+    const selectFly = () => {
+      selected = f.id;
+      renderFlyList();
+      if (f.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
+    };
+    el.addEventListener('pointerdown', e => { e.stopPropagation(); startRaceFollow(f.id); });
+    const setOpen = open => {
+      const info = el.querySelector('.fly-label-info');
+      info.classList.toggle('open', open);
+      if (open) { paintFlyLabel(f); selectFly(); }
+    };
+    el.addEventListener('pointerenter', () => setOpen(true));
+    el.addEventListener('pointerleave', () => setOpen(false));
+    el.addEventListener('focus', () => setOpen(true));
+    el.addEventListener('blur', () => setOpen(false));
     f.label = new CSS2DObject(el); f.label.position.set(pos[0], pos[1], 1.1); scene.add(f.label);
   }
   worker.onmessage = e => onWorker(f, e.data);
@@ -270,7 +334,8 @@ function removeFly(f) {
   batches.remove(f);
   scene.remove(f.group);
   scene.remove(f.ring);
-  f.ring.geometry.dispose();
+  f.ring.geometry.dispose(); f.ring.material.dispose();
+  if (f.glow) { f.glow.removeFromParent(); f.glow.material.map?.dispose(); f.glow.material.dispose(); }
   if (f.label) { scene.remove(f.label); f.label.element.remove(); }
 }
 function onWorker(f, m) {
@@ -279,7 +344,7 @@ function onWorker(f, m) {
     f.prev = f.last; f.last = m; shadowDirty = true;
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
-    if (isRace) checkRaceFinish(f);
+    if (isRace) { checkRaceFinish(f); paintFlyLabel(f); paintRaceVitals(); }
     if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
     broadcastOthers();
   } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
@@ -305,7 +370,7 @@ function buildUI() {
   $('#mode').onchange = e => { for (const f of flies) f.worker.postMessage({ type: 'mode', mode: e.target.value }); };
   document.querySelectorAll('.tools button').forEach(b => b.onclick = () => { tool = b.dataset.tool; document.querySelectorAll('.tools button').forEach(x => x.classList.toggle('on', x === b)); });
   setupFolds();
-  setInterval(() => { const f = flies.find(x => x.id === selected); if (!document.hidden && f?.ready && !$('#brainpanel').hidden && !$('#brainpanel').classList.contains('folded')) f.worker.postMessage({ type: 'activity' }); }, 120);
+  setInterval(() => { const f = flies.find(x => x.id === selected); if (!document.hidden && f?.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' }); }, 120);
   $('#wind').oninput = e => { const v = +e.target.value; $('#windv').textContent = v; env.wind = [v, 0]; syncEnv(); };
   $('#light').oninput = e => { env.light.sky = +e.target.value; scene.background = new THREE.Color().setHSL(0.6, 0.3, 0.02 + 0.05 * env.light.sky); syncEnv(); };
   $('#threat').onclick = () => launchThreat();
@@ -327,21 +392,124 @@ function raceHistoryHtml(rows) {
     `<li><i style="background:${r.color}"></i><b>${r.name}</b><span>${r.wall}</span></li>`).join('')}</ol>`;
 }
 function setupRaceChrome() {
+  document.body.classList.add('race');
   $('#panel').hidden = true;
-  const board = $('#scoreboard');
-  board.append($('#flies').closest('section'), $('#selsec'));
-  board.hidden = false;
+  $('#raceHud').hidden = false;
   document.title = 'Odor race';
   $('#follow').checked = false;
+  const capL = $('#eyeL')?.closest('figure')?.querySelector('figcaption');
+  const capR = $('#eyeR')?.closest('figure')?.querySelector('figcaption');
+  if (capL) capL.textContent = 'Left';
+  if (capR) capR.textContent = 'Right';
+  const note = $('#bpBody .note');
+  if (note) note.textContent = 'What this fly sees.';
   raceAudio = createRaceAudio(`${BASE}yipee.wav`);
   document.addEventListener('visibilitychange', () => raceAudio.setMuted(document.hidden));
+  $('#raceVitals').addEventListener('pointerdown', e => {
+    const row = e.target.closest('.fly');
+    if (!row) return;
+    e.stopPropagation();
+    startRaceFollow(+row.dataset.id);
+  });
+  setupRaceAnnounce();
+  $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
+  addEventListener('resize', positionBpHint);
+}
+function shouldPollBrainActivity() {
+  const p = $('#brainpanel');
+  return p && !p.hidden && (!p.classList.contains('folded') || isRace);
+}
+function positionBpHint() {
+  const panel = $('#brainpanel'), hint = $('#bpHint');
+  if (!panel || !hint || hint.hidden) return;
+  const r = panel.getBoundingClientRect();
+  hint.style.top = `${r.bottom + 8}px`;
+  hint.style.left = `${r.left + (r.width - hint.offsetWidth) / 2}px`;
+}
+function setupRaceAnnounce() {
+  if (raceAnnounce || !scene) return;
+  const el = document.createElement('div');
+  el.className = 'race-announce';
+  el.innerHTML = '<span class="race-announce-text"></span>';
+  raceAnnounce = new CSS2DObject(el);
+  scene.add(raceAnnounce);
+}
+function announceRace(text, color) {
+  if (!isRace) return;
+  if (!raceAnnounce) setupRaceAnnounce();
+  if (!raceAnnounce) return;
+  const span = raceAnnounce.element.querySelector('.race-announce-text');
+  span.textContent = text;
+  span.style.color = color || '#fff';
+  span.classList.remove('pop');
+  void span.offsetWidth;
+  span.classList.add('pop');
+}
+const announceNdc = new THREE.Vector3();
+function pinRaceAnnounce() {
+  if (!raceAnnounce || !camera) return;
+  announceNdc.set(0, 0.5, 0.5);
+  announceNdc.unproject(camera);
+  raceAnnounce.position.copy(announceNdc);
+}
+function brainFoldChrome(folded) {
+  const b = $('#bpFold'); if (!b) return;
+  b.textContent = folded ? '<' : '>';
+  b.title = `${folded ? 'Show' : 'Hide'} brain panel (])`;
+  b.setAttribute('aria-expanded', String(!folded));
+}
+function setRaceBrainFolded(folded, { user = false, instant = false } = {}) {
+  if (!isRace) return;
+  if (user) { raceBrainTouched = true; clearTimeout(raceBrainTimer); raceBrainTimer = null; }
+  const panel = $('#brainpanel'), hint = $('#bpHint');
+  if (!panel) return;
+  panel.classList.toggle('folded', folded);
+  brainFoldChrome(folded);
+  if (hint) {
+    hint.hidden = !folded;
+    if (folded) {
+      const placeHint = () => requestAnimationFrame(() => requestAnimationFrame(positionBpHint));
+      placeHint();
+      panel.addEventListener('transitionend', e => { if (e.propertyName === 'width') positionBpHint(); }, { once: true });
+      setTimeout(positionBpHint, 400);
+    }
+  }
+  if (folded) {
+    const f = flies.find(x => x.id === selected);
+    if (f?.ready) f.worker.postMessage({ type: 'activity' });
+  } else if (!instant) {
+    const f = flies.find(x => x.id === selected);
+    if (f?.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
+  }
+}
+function scheduleRaceBrainFold() {
+  clearTimeout(raceBrainTimer);
+  raceBrainTouched = false;
+  setRaceBrainFolded(false, { instant: true });
+  raceBrainTimer = setTimeout(() => {
+    if (raceBrainTouched || raceWinner) return;
+    setRaceBrainFolded(true);
+  }, 3000);
+}
+function showRaceOverlayCard(card, { flyColor } = {}) {
+  const overlay = $('#raceOverlay');
+  card.style.removeProperty('--fly');
+  if (flyColor) card.style.setProperty('--fly', flyColor);
+  overlay.hidden = false;
+  overlay.classList.remove('show');
+  void overlay.offsetWidth;
+  overlay.classList.add('show');
 }
 function showRaceStart() {
-  raceAudio?.stop();
-  const overlay = $('#raceOverlay'), card = $('#raceCard');
-  overlay.hidden = false;
-  card.innerHTML = `<h1>Odor race</h1><p>First to the vinegar in the centre wins.</p><button id="raceStart" class="primary">Start</button>${raceHistoryHtml(loadRaceHistory())}`;
+  const card = $('#raceCard');
+  card.innerHTML = `<h1>Odor race</h1><p>First to the vinegar wins!</p><button id="raceStart" class="primary">GO!</button>${raceHistoryHtml(loadRaceHistory())}`;
   $('#raceStart').onclick = startRace;
+  card.onpointerdown = e => {
+    if (e.target.closest('button')) return;
+    raceAudio?.unlock().then(() => raceAudio?.playBed('menu'));
+  };
+  raceAudio?.unlock().then(() => raceAudio?.playBed('menu'));
+  showRaceOverlayCard(card);
 }
 function formatWall(ms) {
   const s = Math.max(0, ms / 1000);
@@ -355,15 +523,19 @@ function paintRaceClock(wall, fly) {
   const el = $('#raceClock'); if (!el) return;
   el.hidden = false;
   $('#raceWall').textContent = wall;
-  $('#raceFly').textContent = fly + ' s fly';
+  $('#raceFly').textContent = fly + ' s fly time';
 }
 function startRace() {
-  $('#raceOverlay').hidden = true;
+  const overlay = $('#raceOverlay');
+  overlay.classList.remove('show');
+  overlay.hidden = true;
   raceStartWall = performance.now();
   paintRaceClock('0.0 s', '0.0');
   running = true;
-  raceAudio?.unlock();
+  raceAudio?.unlock().then(() => raceAudio?.playBed('race'));
   for (const f of flies) f.worker.postMessage({ type: 'run' });
+  announceRace('GO!');
+  scheduleRaceBrainFold();
 }
 function announceRaceWinner(f, why) {
   if (!running || raceWinner || raceResetting) return;
@@ -373,19 +545,25 @@ function announceRaceWinner(f, why) {
   paintRaceClock(wall, fly);
   const hist = saveRaceResult({ name: f.name, color: f.color, wall, fly });
   raceAudio?.setMotion({ flying: false, walk: 0 });
+  raceAudio?.playBed('menu');
   raceAudio?.playYipee();
-  const overlay = $('#raceOverlay'), card = $('#raceCard');
-  overlay.hidden = false;
+  announceRace(`${f.name} wins!`, f.color);
+  clearTimeout(raceBrainTimer); raceBrainTimer = null;
+  const card = $('#raceCard');
   const note = why === 'last' ? 'last remaining' : why === 'died' ? 'last to die' : '';
   let left = 10;
-  const paint = () => { card.innerHTML = `<h1>${f.name} wins</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${wall}</p><p class="flyt">${fly} s fly</p>${raceHistoryHtml(hist)}<p>Resetting in ${left}…</p>`; };
+  const paint = () => { card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${wall}</p><p class="flyt">${fly} s fly</p>${raceHistoryHtml(hist)}<p>Resetting in ${left}…</p>`; };
   paint();
+  showRaceOverlayCard(card, { flyColor: f.color });
   clearInterval(raceResetTimer);
   raceResetTimer = setInterval(() => { left -= 1; if (left <= 0) { clearInterval(raceResetTimer); raceResetTimer = null; resetRace(); } else paint(); }, 1000);
 }
 function checkRaceFinish(f) {
   if (!running || raceWinner || raceResetting) return;
-  if (f?.last?.alive === false && !f.diedAt) f.diedAt = performance.now();
+  if (f?.last?.alive === false && !f.diedAt) {
+    f.diedAt = performance.now();
+    if (!raceWinner) { raceAudio?.playOof(); announceRace(`${f.name} died!`, f.color); }
+  }
   const food = env.food[0];
   if (food && f?.last?.pos && f.last.alive !== false && Math.hypot(f.last.pos[0] - food.x, f.last.pos[1] - food.y) < food.r) {
     announceRaceWinner(f);
@@ -403,10 +581,14 @@ async function resetRace() {
   if (raceResetting) return;
   raceResetting = true;
   clearInterval(raceResetTimer); raceResetTimer = null;
+  clearTimeout(raceBrainTimer); raceBrainTimer = null;
   running = false; raceWinner = null; raceStartWall = null;
   const clock = $('#raceClock'); if (clock) clock.hidden = true;
+  if (raceAnnounce) { raceAnnounce.element.querySelector('.race-announce-text')?.classList.remove('pop'); }
+  setRaceBrainFolded(false, { instant: true });
   for (const f of flies) { f.worker.postMessage({ type: 'pause' }); removeFly(f); }
   flies.length = 0; nextId = 0; selected = 0;
+  snapRaceOverview();
   if (env.food[0]) env.food[0].amount = 8;
   env.threat = null;
   rebuildEnv();
@@ -414,10 +596,67 @@ async function resetRace() {
   showRaceStart();
   raceResetting = false;
 }
+function easeOutBack(t, s = 1.7) { const u = t - 1; return u * u * ((s + 1) * u + s) + 1; }
+function easeInBack(t, s = 1.7) { return t * t * ((s + 1) * t - s); }
+function chaseCam(f, outPos, outTarget) {
+  const p = f.last.pos, yaw = f.last.yaw || 0;
+  outTarget.set(p[0], p[1], p[2]);
+  outPos.set(p[0] - Math.cos(yaw) * RACE_CHASE_BACK, p[1] - Math.sin(yaw) * RACE_CHASE_BACK, p[2] + RACE_CHASE_Z);
+}
+const chasePos = new THREE.Vector3(), chaseTarget = new THREE.Vector3();
+function startRaceFollow(id) {
+  selected = id;
+  if (!isRace) { renderFlyList(); return; }
+  raceFollow = id;
+  raceCamTween = { mode: 'in', t: 0, dur: 0.55, fromPos: camera.position.clone(), fromTarget: controls.target.clone() };
+  renderFlyList();
+  const f = flies.find(x => x.id === id);
+  if (f?.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
+}
+function stopRaceFollow() {
+  if (!isRace || (raceFollow == null && raceCamTween?.mode !== 'in')) return;
+  raceFollow = null;
+  if (!raceCamHome) return;
+  raceCamTween = { mode: 'out', t: 0, dur: 0.5, fromPos: camera.position.clone(), fromTarget: controls.target.clone() };
+}
+function snapRaceOverview() {
+  raceFollow = null;
+  raceCamTween = null;
+  if (!raceCamHome) return;
+  camera.position.copy(raceCamHome.pos);
+  controls.target.copy(raceCamHome.target);
+}
+function tickRaceCamera(dt) {
+  if (!isRace) return;
+  if (raceCamTween) {
+    raceCamTween.t = Math.min(1, raceCamTween.t + dt / raceCamTween.dur);
+    const k = raceCamTween.mode === 'in' ? easeOutBack(raceCamTween.t) : easeInBack(raceCamTween.t);
+    if (raceCamTween.mode === 'in') {
+      const f = flies.find(x => x.id === raceFollow);
+      if (f?.last) chaseCam(f, chasePos, chaseTarget);
+      else { chasePos.copy(raceCamHome.pos); chaseTarget.copy(raceCamHome.target); }
+      camera.position.lerpVectors(raceCamTween.fromPos, chasePos, k);
+      controls.target.lerpVectors(raceCamTween.fromTarget, chaseTarget, k);
+    } else if (raceCamHome) {
+      camera.position.lerpVectors(raceCamTween.fromPos, raceCamHome.pos, k);
+      controls.target.lerpVectors(raceCamTween.fromTarget, raceCamHome.target, k);
+    }
+    if (raceCamTween.t >= 1) raceCamTween = null;
+    return;
+  }
+  if (raceFollow != null) {
+    const f = flies.find(x => x.id === raceFollow);
+    if (f?.last) {
+      followDelta.set(f.last.pos[0], f.last.pos[1], f.last.pos[2]).sub(controls.target).multiplyScalar(0.1);
+      controls.target.add(followDelta); camera.position.add(followDelta);
+    }
+  }
+}
 function onClick(e) {
+  if (isRace && e.target.closest?.('.fly-label')) return;
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
-  // select a fly?
-  for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); return; } }
+  for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { startRaceFollow(f.id); return; } }
+  if (isRace) { if (raceFollow != null || raceCamTween) stopRaceFollow(); return; }
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
   if (tool === 'food') { env.food.push({ x: p.x, y: p.y, r: 0.25, sugar: 1, bitter: 0, water: 0.2, amount: 5 }); env.odors.push({ x: p.x, y: p.y, odor: 'vinegar', strength: 0.8, sigma: 0.7 }); }
@@ -428,22 +667,61 @@ function onClick(e) {
   if (tool === 'obstacle') { alert('Obstacles change the physics world; they apply to flies added after this point.'); env.obstacles.push({ type: 'box', x: p.x, y: p.y, sx: 0.2, sy: 0.2, sz: 0.3 }); }
   rebuildEnv(); syncEnv();
 }
+function flyRowHtml(f, selectedId = selected) {
+  const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
+  return `<div class="fly ${f.id === selectedId ? 'sel' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
+      <div>${f.sex === 'f' ? '♀' : '♂'} <span class="fly-name">${f.name}</span> <span class="fly-behavior" style="color:var(--acc)">${s.behavior || ''}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
+      <span class="fly-t" style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span></div>`;
+}
+function flyKvHtml(f) {
+  const s = f.last; if (!s) return '';
+  const c = s.cmd || {};
+  return `<div class="kv"><span>behaviour</span><span style="color:var(--acc)">${s.behavior || ''}</span><span>energy</span><span>${(s.energy * 100).toFixed(0)}%</span><span>health</span><span>${(s.health * 100).toFixed(0)}%</span>
+      <span>food eaten</span><span>${(s.eaten * 1000).toFixed(1)} mg·eq</span><span>distance travelled</span><span>${(s.dist || 0).toFixed(1)} cm</span><span>takeoffs / flights</span><span>${s.jumps || 0} / ${s.flights || 0}</span><span>endogenous state</span><span>${s.drive || '–'}</span>${s.nm ? `<span>AKH / insulin</span><span>${s.nm.akh.toFixed(2)} / ${s.nm.dilp.toFixed(2)}</span><span>octopamine (AKHR neurons)</span><span>${s.nm.oa.toFixed(1)} Hz, arousal ${(s.nm.arousal * 100).toFixed(0)}%</span>` : ''}<span>walk drive (BDN2/oDN1/P9)</span><span>${(c.drive || 0).toFixed(0)} Hz</span>
+      <span>backward (MDN)</span><span>${(c.back || 0).toFixed(0)} Hz</span><span>steering (DNa01/02)</span><span>${(c.turn || 0).toFixed(2)}</span>
+      <span>giant fibre</span><span>${(c.escape || 0).toFixed(0)} Hz</span><span>MN9 (proboscis)</span><span>${(s.mn9 || 0).toFixed(0)} Hz</span>
+      <span>pharyngeal pump</span><span>${((s.feeding || 0) * 100).toFixed(0)}%</span><span>sensory neurons driven</span><span>${s.nSensory}</span></div>`;
+}
+function paintFlyLabel(f) {
+  const info = f.label?.element.querySelector('.fly-label-info');
+  if (!info || !info.classList.contains('open')) return;
+  info.innerHTML = flyKvHtml(f);
+}
+function paintRaceVitals(force = false) {
+  const el = $('#raceVitals'); if (!el) return;
+  const now = performance.now();
+  if (!force && now - (paintRaceVitals.at || 0) < 150) return;
+  paintRaceVitals.at = now;
+  const key = flies.map(f => `${f.id}:${f.name}:${f.color}`).join('|');
+  if (el.dataset.ids !== key) {
+    el.dataset.ids = key;
+    el.innerHTML = flies.map(f => flyRowHtml(f)).join('');
+  }
+  for (const f of flies) {
+    const row = el.querySelector(`.fly[data-id="${f.id}"]`);
+    if (!row) continue;
+    row.classList.toggle('sel', f.id === selected);
+    const s = f.last || {};
+    const beh = row.querySelector('.fly-behavior');
+    if (beh) beh.textContent = s.behavior || '';
+    const eBar = row.querySelector('.bar-energy > i');
+    if (eBar) eBar.style.width = `${(s.energy ?? 0) * 100}%`;
+    const hBar = row.querySelector('.bar-health > i');
+    if (hBar) hBar.style.width = `${(s.health ?? 1) * 100}%`;
+    const t = row.querySelector('.fly-t');
+    if (t) t.textContent = s.t ? (s.t / 1000).toFixed(1) + 's' : '…';
+  }
+}
 function renderFlyList() {
   $('#nfly').textContent = flies.length;
-  $('#flies').innerHTML = flies.map(f => { const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
-    return `<div class="fly ${f.id === selected ? 'sel' : ''}" data-id="${f.id}"><i class="dot" style="background:${f.color}"></i>
-      <div>${f.sex === 'f' ? '♀' : '♂'} ${f.name} <span style="color:var(--acc)">${s.behavior || ''}</span><div class="bar"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
-      <span style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span></div>`; }).join('');
+  $('#flies').innerHTML = flies.map(f => flyRowHtml(f)).join('');
   $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); });
   const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f;
   $('#takeoff').textContent = f?.last?.takeoffPending ? (running ? 'Takeoff queued' : 'Takeoff queued · press Run') : 'Activate takeoff DNs';
   $('#takeoff').disabled = !f?.ready || f.last?.flying || f.last?.alive === false;
-  if (f?.last) { const s = f.last, c = s.cmd || {};
-    $('#sel').innerHTML = `<div class="kv"><span>behaviour</span><span style="color:var(--acc)">${s.behavior || ''}</span><span>energy</span><span>${(s.energy * 100).toFixed(0)}%</span><span>health</span><span>${(s.health * 100).toFixed(0)}%</span>
-      <span>food eaten</span><span>${(s.eaten * 1000).toFixed(1)} mg·eq</span><span>distance travelled</span><span>${(s.dist || 0).toFixed(1)} cm</span><span>takeoffs / flights</span><span>${s.jumps || 0} / ${s.flights || 0}</span><span>endogenous state</span><span>${s.drive || '–'}</span>${s.nm ? `<span>AKH / insulin</span><span>${s.nm.akh.toFixed(2)} / ${s.nm.dilp.toFixed(2)}</span><span>octopamine (AKHR neurons)</span><span>${s.nm.oa.toFixed(1)} Hz, arousal ${(s.nm.arousal * 100).toFixed(0)}%</span>` : ''}<span>walk drive (BDN2/oDN1/P9)</span><span>${(c.drive || 0).toFixed(0)} Hz</span>
-      <span>backward (MDN)</span><span>${(c.back || 0).toFixed(0)} Hz</span><span>steering (DNa01/02)</span><span>${(c.turn || 0).toFixed(2)}</span>
-      <span>giant fibre</span><span>${(c.escape || 0).toFixed(0)} Hz</span><span>MN9 (proboscis)</span><span>${(s.mn9 || 0).toFixed(0)} Hz</span>
-      <span>pharyngeal pump</span><span>${((s.feeding || 0) * 100).toFixed(0)}%</span><span>sensory neurons driven</span><span>${s.nSensory}</span></div>`; }
+  if (f?.last) $('#sel').innerHTML = flyKvHtml(f);
+  for (const x of flies) paintFlyLabel(x);
+  if (isRace) paintRaceVitals(true);
 }
 
 // ---------------- brain panel: what the selected fly sees, and its named neuron groups ----------------
@@ -534,7 +812,7 @@ const shadowOffset = new THREE.Vector3(3, 2, 8);
 function animate() {
   requestAnimationFrame(animate);
   if (document.hidden) return;
-  const now = performance.now(); fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
+  const now = performance.now(); const dt = Math.min(0.1, (now - lastFrame) / 1000); fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
   for (const f of flies) {
     const s = f.last; if (!s || !f.bodyGroups) continue;
     const previous = f.prev, blend = running && previous && s.t>previous.t ? Math.min(1,(now-f.recvAt)/f.poseInterval) : 1;
@@ -557,10 +835,13 @@ function animate() {
       if (f.label) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + 1.05);
       updateWingBlur(f, s); f.drawnPose = s; f.drawnBlend = blend;
     }
-    f.ring.visible = f.id === selected;
+    const mark = f.id === selected && raceFollow == null;
+    f.ring.visible = mark;
+    if (f.glow) f.glow.visible = mark;
   }
   const sf = flies.find(x => x.id === selected);
   if (!isRace && sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
+  tickRaceCamera(dt);
   if (isRace && raceStartWall != null && !raceWinner) paintRaceClock(formatWall(now - raceStartWall), flySecs());
   if (isRace && raceAudio && running && !raceWinner) {
     const s = sf?.last;
@@ -568,7 +849,9 @@ function animate() {
   }
   if (sf?.last) { const t = sf.last.t / 1000; $('#simt').textContent = t.toFixed(2); if (now - lastSimReal > 1000) { $('#rt').textContent = ((t - lastSim) / ((now - lastSimReal) / 1000)).toFixed(2); lastSim = t; lastSimReal = now; } }
   updateThreat(); controls.update();
+  camera.position.z = Math.max(camera.position.z, 0.02);
   camera.updateMatrixWorld();
+  pinRaceAnnounce();
   viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
   let largest = 0;
   const projection = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
@@ -611,13 +894,23 @@ main().catch(e => { if ($('#status')) status('error: ' + e.message); console.err
 // side panels fold to their title bar (chevron button, or the [ and ] keys); the choice persists
 function setupFolds() {
   const folds = isRace
-    ? [['#brainpanel', '#bpFold', ']', '›', '‹', 'brain panel']]
+    ? [['#brainpanel', '#bpFold', ']', '>', '<', 'brain panel']]
     : [['#panel', '#panelFold', '[', '‹', '›', 'controls'], ['#brainpanel', '#bpFold', ']', '›', '‹', 'brain panel']];
   const apply = ([panel, btn, key, open, shut, what], folded) => {
     $(panel).classList.toggle('folded', folded); const b = $(btn);
     b.textContent = folded ? shut : open; b.title = `${folded ? 'Show' : 'Hide'} ${what} (${key})`; b.setAttribute('aria-expanded', String(!folded));
     try { localStorage.setItem(`fold${panel}`, folded ? '1' : ''); } catch {}
   };
+  if (isRace) {
+    const f = folds[0];
+    setRaceBrainFolded(false, { instant: true });
+    $(f[1]).onclick = () => setRaceBrainFolded(!$('#brainpanel').classList.contains('folded'), { user: true });
+    addEventListener('keydown', e => {
+      if (e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === ']') setRaceBrainFolded(!$('#brainpanel').classList.contains('folded'), { user: true });
+    });
+    return;
+  }
   for (const f of folds) {
     let saved = false; try { saved = localStorage.getItem(`fold${f[0]}`) === '1'; } catch {}
     apply(f, saved);

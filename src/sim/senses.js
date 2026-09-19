@@ -83,7 +83,15 @@ export class Senses {
       let foodC = 0;
       for (const o of env.odors) {
         const dx = p[0] - o.x - wx * 0.5, dy = p[1] - o.y - wy * 0.5;
-        const c = o.strength * Math.exp(-(dx * dx + dy * dy) / (2 * o.sigma * o.sigma));
+        let c;
+        if (o.sigmaAlong) {
+          const len = Math.hypot(o.x, o.y) || 1, ux = o.x / len, uy = o.y / len;
+          const rx = dx * ux + dy * uy, ry = -dx * uy + dy * ux;
+          const sa = o.sigmaAlong, sc = o.sigmaAcross || o.sigma;
+          c = o.strength * Math.exp(-(rx * rx / (2 * sa * sa) + ry * ry / (2 * sc * sc)));
+        } else {
+          c = o.strength * Math.exp(-(dx * dx + dy * dy) / (2 * o.sigma * o.sigma));
+        }
         if (FOOD_ODOR.has(o.odor)) foodC = Math.max(foodC, c);
         for (const [g, sens] of Object.entries(ODORANTS[o.odor] || {})) act[g] = Math.max(act[g] || 0, c * sens);
       }

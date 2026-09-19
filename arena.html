@@ -19,6 +19,7 @@
   </div>
   <canvas id="brain"></canvas>
 </aside>
+<button id="bpHint" hidden type="button" title="Show brain panel">!</button>
 <div id="loading"><div class="title">Embodied male fly connectome</div><div id="status">loading…</div></div>
 <aside id="panel">
   <header>
@@ -62,12 +63,15 @@
     <div id="sel"></div>
   </section>
 </aside>
-<aside id="scoreboard" hidden>
+<div id="raceHud" hidden>
+<aside id="scoreboard">
   <header>
     <h1>Odor race</h1>
-    <div id="raceClock" class="race-clock" hidden><b id="raceWall">0.0 s</b><span id="raceFly">0.0 s fly</span></div>
+    <div id="raceClock" class="race-clock" hidden><b id="raceWall">0.0 s</b><span id="raceFly">0.0 s fly time</span></div>
   </header>
 </aside>
+<div id="raceVitals"></div>
+</div>
 <div id="raceOverlay" hidden>
   <div class="race-card" id="raceCard"></div>
 </div>

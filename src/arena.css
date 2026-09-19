@@ -1,7 +1,7 @@
 .tools button.on { background: var(--acc); color: #1a1200; }
-#flies .fly { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
-#flies .fly:hover, #flies .fly.sel { background: rgba(255,255,255,.07); }
-#flies .dot { width: 10px; height: 10px; border-radius: 50%; }
+#flies .fly, .fly-label-info .fly { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+#flies .fly:hover, #flies .fly.sel, .fly-label-info .fly.sel { background: rgba(255,255,255,.07); }
+#flies .dot, .fly-label-info .dot { width: 10px; height: 10px; border-radius: 50%; }
 .bar { height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; margin-top: 2px; }
 .bar i { display: block; height: 100%; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
@@ -48,7 +48,7 @@ a { color: var(--acc); }
 #brain { flex: none; width: 100%; height: 220px; border-top: 1px solid var(--line); background: rgba(5,7,12,.6); }
 
 #scoreboard { position: fixed; top: 12px; left: 12px; right: auto; width: 340px; max-height: calc(100% - 24px); overflow: auto; background: var(--panel); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 10px; padding: 0 0 8px; z-index: 3; }
-#scoreboard[hidden] { display: none; }
+#scoreboard[hidden], #raceHud[hidden] { display: none; }
 #scoreboard header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
 #scoreboard h1 { margin: 0; font-size: 15px; font-weight: 600; }
 #scoreboard .race-clock { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
@@ -83,3 +83,166 @@ a { color: var(--acc); }
 .fly-label:hover .fly-label-chip, .fly-label:focus-visible .fly-label-chip {
   transform: scale(1.18); box-shadow: 0 8px 22px rgba(0,0,0,.45);
 }
+
+@font-face {
+  font-family: "Luckiest Guy";
+  src: url("/fonts/luckiest-guy.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* odor race only: even grey outlines + block titles; lab #panel stays as it is */
+body.race {
+  --race-title: "Luckiest Guy", ui-rounded, system-ui, sans-serif;
+  --race-outline: #9aa3b2;
+}
+body.race #scoreboard,
+body.race #brainpanel,
+body.race .race-card {
+  border: 4px solid var(--race-outline);
+  border-radius: 18px;
+}
+body.race #scoreboard,
+body.race #brainpanel { box-shadow: none; }
+body.race #raceOverlay { background: rgba(8, 6, 14, .42); }
+body.race .race-card {
+  transform-origin: center center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
+}
+body.race #raceOverlay.show .race-card {
+  animation: raceCardEnter .45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    raceCardIdle 2.6s ease-in-out .45s infinite;
+}
+@keyframes raceCardEnter {
+  0% { transform: scale(0.82); }
+  70% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+@keyframes raceCardIdle {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+@keyframes raceGoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+body.race #raceHud:not([hidden]) {
+  display: flex; flex-direction: column; gap: 10px;
+  position: fixed; top: 12px; left: 12px; width: 340px; z-index: 3;
+  max-height: calc(100% - 24px);
+}
+body.race #scoreboard {
+  position: static; width: auto; max-height: none; overflow: visible; padding-bottom: 8px;
+}
+body.race #brainpanel { bottom: auto; max-height: calc(100vh - 24px); overflow: auto; transform-origin: top right; transition: width .35s cubic-bezier(0.34, 1.2, 0.64, 1); }
+body.race #brainpanel.folded { width: 220px; max-height: none; overflow: hidden; }
+body.race #brainpanel.folded #bpBody { display: block; padding: 8px 10px 10px; overflow: hidden; }
+body.race #brainpanel.folded #groups,
+body.race #brainpanel.folded .note,
+body.race #brainpanel.folded #brain,
+body.race #brainpanel.folded .lr { display: none; }
+body.race #brainpanel.folded .eyes { gap: 6px; }
+body.race #brainpanel.folded .eyes figcaption { font-size: 10px; margin-top: 2px; }
+#bpHint { display: none; }
+body.race #bpHint {
+  position: fixed; top: auto; left: auto; right: auto; z-index: 4;
+  width: 42px; height: 42px; padding: 0; border-radius: 50%;
+  border: 4px solid var(--race-outline); background: rgba(18,16,24,.92); color: #fff;
+  font: 400 22px/1 var(--race-title); cursor: pointer;
+  animation: bpHintBlink 1s ease-in-out infinite;
+}
+body.race #bpHint:not([hidden]) { display: grid; place-items: center; }
+body.race #bpHint[hidden] { display: none; animation: none; }
+@keyframes bpHintBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.92); }
+}
+.race-announce { pointer-events: none; text-align: center; }
+.race-announce-text {
+  display: inline-block; font-family: "Luckiest Guy", ui-rounded, system-ui, sans-serif;
+  font-size: clamp(32px, 6vw, 72px); line-height: 1.05; color: #fff;
+  text-shadow: 0 3px 0 #000, 0 8px 20px rgba(0,0,0,.5); opacity: 0; white-space: nowrap;
+}
+.race-announce-text.pop { animation: raceAnnouncePop 2.5s cubic-bezier(0.34, 1.4, 0.64, 1) forwards; }
+@keyframes raceAnnouncePop {
+  0% { transform: scale(0.2); opacity: 0; }
+  18% { transform: scale(1.18); opacity: 1; }
+  28% { transform: scale(1); opacity: 1; }
+  82% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+body.race #bpBody { flex: none; }
+body.race #scoreboard h1,
+body.race .race-card h1,
+body.race #brainpanel h2,
+body.race #scoreboard h2,
+body.race .race-card h2.hist {
+  font-family: var(--race-title);
+  font-weight: 400;
+}
+body.race #scoreboard h1 { font-size: 22px; }
+body.race .race-card h1 { font-size: 34px; line-height: 1.1; color: var(--fly, inherit); }
+body.race #brainpanel h2 { font-size: 16px; }
+body.race #scoreboard h2,
+body.race .race-card h2.hist {
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+body.race .race-card { padding: 30px 34px; }
+body.race .race-card button {
+  min-width: 160px;
+  padding: 12px 28px;
+  font: 400 20px/1.1 var(--race-title);
+  border: 4px solid var(--race-outline);
+  border-radius: 999px;
+  box-shadow: none;
+}
+body.race .race-card button.primary {
+  background: var(--acc);
+  color: #fff;
+  font-weight: 400;
+  animation: raceGoPulse 1.4s ease-in-out .2s infinite;
+}
+body.race .race-card button.primary:hover,
+body.race .race-card button.primary:focus-visible {
+  filter: none;
+  animation-play-state: paused;
+  transform: scale(1.1);
+}
+@media (prefers-reduced-motion: reduce) {
+  body.race #raceOverlay.show .race-card,
+  body.race .race-card button.primary { animation: none; }
+}
+body.race #scoreboard .race-clock b { font-family: var(--race-title); font-weight: 400; font-size: 32px; }
+body.race #bpFold { font-family: var(--race-title); font-weight: 400; font-size: 28px; line-height: 1; padding: 6px 12px; }
+body.race .fly-label { position: relative; display: inline-block; }
+body.race .fly-label-chip { font-family: var(--race-title); font-weight: 400; }
+body.race .fly-label:hover, body.race .fly-label:focus-visible { z-index: 2; }
+body.race #raceVitals {
+  display: flex; flex-direction: column; gap: 12px; padding: 0;
+  background: transparent; border: 0; box-shadow: none; backdrop-filter: none;
+}
+body.race #raceVitals .fly {
+  padding: 8px 12px; border-radius: 999px; background: rgba(18,16,24,.88);
+  border: 3px solid var(--fly, var(--race-outline));
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+}
+body.race #raceVitals .fly.sel {
+  transform: scale(1.05);
+  background: rgba(36, 32, 48, .95);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.7), 0 0 14px var(--fly, #fff);
+}
+body.race #raceVitals .dot { width: 14px; height: 14px; }
+body.race #raceVitals .fly-name { font-family: var(--race-title); font-weight: 400; font-size: 16px; }
+body.race .fly-label-info {
+  position: absolute; bottom: calc(100% + 8px); top: auto; left: 50%; width: 280px; padding: 10px 12px; text-align: left; color: var(--fg);
+  background: var(--panel); border: 4px solid var(--race-outline); border-radius: 18px; box-shadow: none;
+  cursor: default; opacity: 0; transform: translate(-50%, -8px); visibility: hidden; pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease, visibility .2s;
+}
+body.race .fly-label-info.open {
+  opacity: 1; transform: translate(-50%, 0); visibility: visible; pointer-events: auto;
+}
+body.race #brainpanel .fold { border-radius: 8px; }

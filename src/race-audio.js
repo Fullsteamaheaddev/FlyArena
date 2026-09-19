@@ -1,19 +1,20 @@
-// Race-only sounds: Start-unlocked Web Audio bed, wing buzz, foot ticks; Yipee.wav on a win.
+// Race-only sounds: menu/race looping beds, wing buzz, foot ticks; Yipee.wav on a win.
 export function createRaceAudio(yipeeUrl) {
-  let ctx, master, duckGain, musicGain, buzzGain, musicSrc, musicBuf, yipeeBuf, lastStep = 0, muted = false;
+  let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf;
+  let currentBed = null, lastStep = 0, muted = false;
 
   async function unlock() {
     if (!ctx) {
       ctx = new AudioContext();
       master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
       duckGain = ctx.createGain(); duckGain.gain.value = 1; duckGain.connect(master);
-      musicGain = ctx.createGain(); musicGain.gain.value = 0.055; musicGain.connect(duckGain);
+      musicGain = ctx.createGain(); musicGain.gain.value = 0.1; musicGain.connect(duckGain);
       buzzGain = ctx.createGain(); buzzGain.gain.value = 0; buzzGain.connect(master);
       musicBuf = makeMusicBuffer(ctx);
+      menuBuf = makeMenuMusicBuffer(ctx);
       startBuzz();
     }
     if (ctx.state === 'suspended') await ctx.resume();
-    startMusic();
     if (!yipeeBuf) {
       try {
         const raw = await (await fetch(yipeeUrl)).arrayBuffer();
@@ -32,14 +33,35 @@ export function createRaceAudio(yipeeUrl) {
     const ng = ctx.createGain(); ng.gain.value = 0.35;
     noise.connect(nbp); nbp.connect(ng); ng.connect(buzzGain); noise.start();
   }
-  function startMusic() {
-    if (!ctx || musicSrc) return;
-    musicSrc = ctx.createBufferSource(); musicSrc.buffer = musicBuf; musicSrc.loop = true;
-    musicSrc.connect(musicGain); musicSrc.start();
+  function playBed(kind) {
+    if (!ctx || ctx.state !== 'running') return;
+    const buf = kind === 'menu' ? menuBuf : musicBuf;
+    if (!buf || (currentBed === kind && musicSrc)) return;
+    const now = ctx.currentTime, fade = 0.25;
+    if (musicSrc && bedGain) {
+      const oldSrc = musicSrc, oldGain = bedGain;
+      const from = oldGain.gain.value;
+      oldGain.gain.cancelScheduledValues(now);
+      oldGain.gain.setValueAtTime(from, now);
+      oldGain.gain.linearRampToValueAtTime(0, now + fade);
+      try { oldSrc.stop(now + fade + 0.02); } catch {}
+    }
+    currentBed = kind;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(1, now + fade);
+    src.connect(g); g.connect(musicGain); src.start();
+    musicSrc = src;
+    bedGain = g;
   }
   function stop() {
     try { musicSrc?.stop(); } catch {}
     musicSrc = null;
+    bedGain = null;
+    currentBed = null;
     lastStep = 0;
     if (ctx && buzzGain) buzzGain.gain.setTargetAtTime(0, ctx.currentTime, 0.04);
     duck(false);
@@ -78,13 +100,35 @@ export function createRaceAudio(yipeeUrl) {
     lastStep = now;
     stepClick(now);
   }
+  function playOof() {
+    if (!ctx || muted) return;
+    const t0 = ctx.currentTime;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 780; lp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.018);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32);
+    lp.connect(g); g.connect(master);
+    const o1 = ctx.createOscillator(); o1.type = 'sawtooth';
+    o1.frequency.setValueAtTime(190, t0); o1.frequency.exponentialRampToValueAtTime(72, t0 + 0.24);
+    const o2 = ctx.createOscillator(); o2.type = 'sine';
+    o2.frequency.setValueAtTime(310, t0); o2.frequency.exponentialRampToValueAtTime(88, t0 + 0.2);
+    o1.connect(lp); o2.connect(lp);
+    const n = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.12), ctx.sampleRate);
+    const d = n.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const ns = ctx.createBufferSource(); ns.buffer = n;
+    const ng = ctx.createGain(); ng.gain.value = 0.14;
+    ns.connect(ng); ng.connect(lp);
+    o1.start(t0); o2.start(t0); ns.start(t0);
+    o1.stop(t0 + 0.34); o2.stop(t0 + 0.34); ns.stop(t0 + 0.12);
+  }
   function stepClick(t0) {
     const o = ctx.createOscillator(); o.type = 'sine';
     o.frequency.setValueAtTime(700, t0); o.frequency.exponentialRampToValueAtTime(320, t0 + 0.08);
     const g = ctx.createGain(); g.gain.setValueAtTime(0.07, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
     o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.13);
   }
-  return { unlock, stop, playYipee, setMuted, setMotion };
+  return { unlock, playBed, stop, playYipee, playOof, setMuted, setMotion };
 }
 
 function makeMusicBuffer(ctx) {
@@ -102,6 +146,28 @@ function makeMusicBuffer(ctx) {
       const pad = 0.2 * Math.sin(2 * Math.PI * 130.81 * t) + 0.14 * Math.sin(2 * Math.PI * 196 * t * pan) + 0.08 * Math.sin(2 * Math.PI * 261.63 * t);
       const fade = t < 0.06 ? t / 0.06 : t > dur - 0.06 ? (dur - t) / 0.06 : 1;
       d[i] = (pad + 0.13 * env * tri) * 0.2 * fade;
+    }
+  }
+  return buf;
+}
+
+function makeMenuMusicBuffer(ctx) {
+  const sr = ctx.sampleRate, dur = 10, n = Math.floor(sr * dur);
+  const buf = ctx.createBuffer(2, n, sr);
+  const notes = [392.00, 0, 493.88, 392.00, 0, 587.33, 493.88, 0, 329.63, 392.00, 0, 493.88, 587.33, 0, 659.25, 392.00];
+  const beat = dur / notes.length, lag = 0.007;
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < n; i++) {
+      const wall = i / sr;
+      const t = ch ? (wall - lag + dur) % dur : wall;
+      const k = Math.floor(t / beat) % notes.length, f = notes[k], u = (t % beat) / beat;
+      const fade = wall < 0.08 ? wall / 0.08 : wall > dur - 0.08 ? (dur - wall) / 0.08 : 1;
+      if (!f) { d[i] = 0; continue; }
+      const env = Math.exp(-u * 9);
+      const bell = Math.sin(2 * Math.PI * f * t) + 0.4 * Math.sin(2 * Math.PI * 2.01 * f * t)
+        + 0.15 * Math.sin(2 * Math.PI * 3.02 * f * t) + 0.08 * Math.sin(2 * Math.PI * 5.04 * f * t);
+      d[i] = bell * env * 0.2 * fade;
     }
   }
   return buf;

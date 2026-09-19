@@ -42,15 +42,15 @@ export const PRESETS = {
       hazards: [],
       bitterPatches: [],
       food: [{ x: 0, y: 0, r: 0.5, sugar: 1, bitter: 0, water: 0.2, amount: 8 }],
-      windRadial: 4,
+      windRadial: 6,
       hungryForage: true,
       odors: [
-        { x: 0, y: 0, odor: 'vinegar', strength: 1, sigma: 4.5 },
-        ...[0, 1, 2].flatMap(i => {
-          const a = i * 2 * Math.PI / 3, ca = Math.cos(a), sa = Math.sin(a);
+        { x: 0, y: 0, odor: 'vinegar', strength: 1, sigma: 1.0 },
+        ...[0, 1, 2, 3, 4, 5].flatMap(i => {
+          const a = i * Math.PI / 3, ca = Math.cos(a), sa = Math.sin(a);
           return [
-            { x: 9.2 * ca, y: 9.2 * sa, odor: 'vinegar', strength: 0.6, sigma: 2.0 },
-            { x: 4.5 * ca, y: 4.5 * sa, odor: 'vinegar', strength: 0.5, sigma: 1.4 },
+            { x: 9.2 * ca, y: 9.2 * sa, odor: 'vinegar', strength: 0.45, sigma: 0.7, sigmaAcross: 0.7, sigmaAlong: 2.4, hidden: i % 2 === 0 },
+            { x: 4.5 * ca, y: 4.5 * sa, odor: 'vinegar', strength: 0.7, sigma: 0.7, sigmaAcross: 0.7, sigmaAlong: 2.4, hidden: i % 2 === 0 },
           ];
         }),
       ],
@@ -58,10 +58,10 @@ export const PRESETS = {
       obstacles: [0, 1, 2].flatMap(i => {
         const a = i * 2 * Math.PI / 3, c = Math.cos(a), s = Math.sin(a);
         return [
-          { x: 6.2, y: 1.5, sx: 2.2, sy: 0.12, sz: 0.55 },
-          { x: 6.2, y: -1.5, sx: 2.2, sy: 0.12, sz: 0.55 },
-          { x: 2.4, y: 1.15, sx: 0.9, sy: 0.12, sz: 0.55 },
-          { x: 2.4, y: -1.15, sx: 0.9, sy: 0.12, sz: 0.55 },
+          { x: 6.2, y: 1.5, sx: 2.2, sy: 0.12, sz: 0.275 },
+          { x: 6.2, y: -1.5, sx: 2.2, sy: 0.12, sz: 0.275 },
+          { x: 2.4, y: 1.15, sx: 0.9, sy: 0.12, sz: 0.275 },
+          { x: 2.4, y: -1.15, sx: 0.9, sy: 0.12, sz: 0.275 },
         ].map(t => ({ type: 'box', x: t.x * c - t.y * s, y: t.x * s + t.y * c, sx: t.sx, sy: t.sy, sz: t.sz, yaw: a }));
       }),
     }),
