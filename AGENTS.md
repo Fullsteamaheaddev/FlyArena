@@ -11,6 +11,7 @@ Upstream: [Lulzx/fly-brain](https://github.com/Lulzx/fly-brain). Browser sim of 
 ```sh
 npm install
 npm run dev                  # Vite; COOP/COEP headers in vite.config.js
+npm run relay                # Match WebSocket (host/watch); ws://localhost:8787
 ```
 
 | URL | App |
@@ -19,7 +20,8 @@ npm run dev                  # Vite; COOP/COEP headers in vite.config.js
 | `/arena.html` | Embodied arena (`src/arena.js`) |
 | `/arena.html?gpu=0` | Force WASM brain (no WebGPU) |
 | `/arena.html?env=courtship` | Preset (`foraging` default; see `PRESETS` in `src/sim/world.js`) |
-| `/arena.html?env=race` | Odor race game: 12.5 cm maze with three identical radial lanes, tighter vinegar + inward wind, 3 named flies, Start overlay, winner = reach centre disc, 10s reset to rim |
+| `/arena.html?env=race` | Odor race (this machine runs it) |
+| `/watch` | Live spectator view of that race |
 | `/fly.html` | Anatomy / Blender fly (`src/fly.js`) |
 | `/structures.html` | Algorithmic structures (`src/structures.js`) |
 | `/textbook/` | Textbook reader (`src/textbook.js`) |
@@ -56,6 +58,7 @@ Worker bursts ≤8 sim-ms / 8 CPU-ms (race: 16/16); poses to main ≤30 Hz. Grou
 | Path | Role |
 |---|---|
 | `src/arena.js`, `arena.html` | Main-thread UI, workers, render, presets, `?env=` / `?gpu=` |
+| `src/match.js`, `scripts/match-relay.mjs` | Live match snapshots; host publishes, watchers subscribe |
 | `src/arena-batches.js`, `src/render-resolution.js`, `src/wing-blur.js` | Arena draw batching / DPR / wing blur |
 | `src/sim/fly.js` | Closed-loop agent |
 | `src/sim/fly.worker.js` | Worker protocol: `init/run/pause/speed/env/others/mode/stimulate/takeoff/activity` |
@@ -155,7 +158,7 @@ Roadmap (do not start unless asked): `docs/20-roadmap.md` — loom/feeding pathw
 - MN9 leaks from olfaction → walking with proboscis out is known.
 - Physics XML masses/inertias are exact; visual meshes are decimated separately.
 - Worker `foodEaten` is a delta each pose; main thread must broadcast consumption back.
-- Odor race (`?env=race`) is a game shell: hides `#panel`, left `#scoreboard` (clock/names), right `#brainpanel` (selected fly eyes + traces + inset), dusty-purple plate floor and matching wall (eye checker unchanged), Start overlay, winner = thorax inside centre food disc or last remaining / last to die (wall-clock time, fly-time smaller), last 3 winners in `localStorage` (`odorRaceResults`), then 10s in-page respawn at rim spots. Race flies start hungry (`env.hungryForage`) and forage on vinegar; they do not visually home. Start unlocks race audio (`src/race-audio.js`: music bed; walk ticks and 218 Hz buzz follow the selected fly); `public/yipee.wav` on a finish. Vinegar is a centre disc (σ ≈ 1) plus overlapping elongated lane trails (stronger toward the food); `windRadial` blows toward the origin. Race workers burst 16/16. Do not treat it as a lab preset.
+- Odor race (`?env=race`) is a game shell: hides `#panel`, left `#scoreboard` (clock/names), right `#brainpanel` (selected fly eyes + traces + inset), dusty-purple plate floor and matching wall (eye checker unchanged), Start overlay, winner = thorax inside centre food disc or last remaining / last to die (wall-clock time, fly-time smaller), last 3 winners in `localStorage` (`odorRaceResults`), then 10s in-page respawn at rim spots. Race flies start hungry (`env.hungryForage`) and forage on vinegar; they do not visually home. Start unlocks race audio (`src/race-audio.js`: music bed; walk ticks and 218 Hz buzz follow the selected fly); `public/yipee.wav` on a finish. Vinegar is a centre disc (σ ≈ 1) plus overlapping elongated lane trails (stronger toward the food); `windRadial` blows toward the origin. Race workers burst 16/16. Do not treat it as a lab preset. Live watchers: `npm run relay`, host at `/arena.html?env=race`, spectators at `/watch`.
 
 ---
 

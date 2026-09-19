@@ -12,13 +12,22 @@ const NOT_DEPLOYED = ['graph_w3.bin', 'neurons.bin'];
 const dropUnpacked = { name: 'drop-unpacked-data', apply: 'build', closeBundle() { for (const f of NOT_DEPLOYED) fs.rmSync(`dist/data/${f}`, { force: true }); } };
 // Cross-origin isolation enables SharedArrayBuffer (one read-only connectome shared by all fly workers)
 const isolation = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' };
+function rewriteWatch(req) {
+  const q = req.url.indexOf('?'), path = q < 0 ? req.url : req.url.slice(0, q), qs = q < 0 ? '' : req.url.slice(q);
+  if (/\/watch\/?$/.test(path)) req.url = path.replace(/\/watch\/?$/, '/watch.html') + qs;
+}
+const watchRoute = {
+  name: 'watch-route',
+  configureServer(server) { server.middlewares.use((req, _res, next) => { rewriteWatch(req); next(); }); },
+  configurePreviewServer(server) { server.middlewares.use((req, _res, next) => { rewriteWatch(req); next(); }); },
+};
 export default defineConfig({
   base: process.env.BASE_PATH || '/', // CI sets /fly-brain/ for GitHub Pages
-  plugins: [dropUnpacked],
+  plugins: [dropUnpacked, watchRoute],
   define: { __DATA_FILES__: JSON.stringify(DATA_FILES) },
   server: { headers: isolation },
   preview: { headers: isolation },
   optimizeDeps: { exclude: ['@mujoco/mujoco'] },
   worker: { format: 'es' },
-  build: { target: 'esnext', rollupOptions: { input: { main: 'index.html', arena: 'arena.html', fly: 'fly.html', structures: 'structures.html', textbook: 'textbook/index.html' } } },
+  build: { target: 'esnext', rollupOptions: { input: { main: 'index.html', arena: 'arena.html', watch: 'watch.html', fly: 'fly.html', structures: 'structures.html', textbook: 'textbook/index.html' } } },
 });

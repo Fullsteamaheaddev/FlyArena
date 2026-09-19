@@ -9,25 +9,32 @@ import { loadCuticleDetail } from './fly-appearance.js';
 import { loadBlenderFly, createBlenderFly, loadArenaDetail, blenderOutput } from './fly-blender.js';
 import { ArenaBatches } from './arena-batches.js';
 import { RenderResolution } from './render-resolution.js';
-import { loadConnectome } from './data.js';
+import { loadConnectome, loadNeurons } from './data.js';
 import { PRESETS } from './sim/world.js';
 import { allocBrainMemory, MAX_FLIES } from './brainsetup.js';
 import { parseFlyVis } from './flyvis.js';
 import { buildGroups } from './sim/groups.js';
 import { createRaceAudio } from './race-audio.js';
+import { matchRole, isWatchPath, matchUrl, createMatchLink, buildMatchState, packAct, unpackAct } from './match.js';
 const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pages
 
 const $ = s => document.querySelector(s);
 const status = s => { $('#status').textContent = s; };
 const FLY_COLORS = ['#ffb347', '#5ac8fa', '#a3e635', '#f472b6', '#c084fc', '#facc15', '#fb7185', '#2dd4bf'];
 const RACE_NAMES = ['Amber', 'Blue', 'Lime'];
-const presetKey = new URLSearchParams(location.search).get('env') || 'foraging';
+const presetKey = isWatchPath() || new URLSearchParams(location.search).get('watch') === '1'
+  ? 'race'
+  : (new URLSearchParams(location.search).get('env') || 'foraging');
 const PRESET = PRESETS[presetKey] || PRESETS.foraging;
 const isRace = presetKey === 'race' && PRESET === PRESETS.race;
+const raceRole = isRace ? (matchRole() || 'host') : null;
+const isWatch = raceRole === 'watch';
+const isHost = raceRole === 'host';
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
-let raceWinner = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0;
+let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0;
+let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null;
 let raceFollow = null, raceCamHome = null, raceCamTween = null, raceAnnounce = null, raceBrainTimer = null, raceBrainTouched = false;
 const RACE_PLUME_TOP = 0.20, RACE_CHASE_BACK = 2.6, RACE_CHASE_Z = 1.15;
 const RACE_HISTORY_KEY = 'odorRaceResults';
@@ -35,6 +42,7 @@ const RACE_HISTORY_KEY = 'odorRaceResults';
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
 async function main() {
+  if (isWatch) return mainWatch();
   if (!crossOriginIsolated) console.warn('not cross-origin isolated: SharedArrayBuffer unavailable');
   const data = await loadConnectome(status);
   meta = data.meta;
@@ -64,9 +72,30 @@ async function main() {
   $('#loading').remove();
   if (isRace) setupRaceChrome();
   await spawnPresetFlies();
-  if (isRace) showRaceStart();
+  if (isRace) { await waitRacePoses(); showRaceStart(); }
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
   window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish, resetRace, startRaceFollow, stopRaceFollow, announceRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; } };
+  animate();
+}
+
+async function mainWatch() {
+  status('loading arena');
+  const [blender, levels, output, detail, fvm, data, bm] = await Promise.all([
+    loadBlenderFly(BASE, status), loadArenaDetail(BASE), blenderOutput(BASE), loadCuticleDetail(`${BASE}body/cuticle_detail.png`),
+    fetch(`${BASE}vision/flyvis_map.json`).then(r => r.json()),
+    loadNeurons(status),
+    fetch(`${BASE}data/bodymap.json`).then(r => r.json())]);
+  visual = createBlenderFly(blender, detail, levels); outputPass = output;
+  flyvisMap = fvm; meta = data.meta; bodymap = bm;
+  buildScene(data);
+  buildBrainPanel(data);
+  setupRaceChrome();
+  setupFolds();
+  setRaceBrainFolded(raceMobile(), { instant: true });
+  setupWatchBrainPanel();
+  showWatchWaiting('Waiting for the next race');
+  $('#loading').remove();
+  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, rebuildEnv, startRaceFollow, stopRaceFollow, announceRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; } };
   animate();
 }
 
@@ -87,6 +116,9 @@ async function spawnPresetFlies() {
     } else for (const s of spots) await addFly(s.pos, s.yaw, s.sex);
   } else { await addFly([st0[0], st0[1]], st0[2]);
     for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
+}
+function waitRacePoses() {
+  return Promise.all(flies.map(f => f.last ? Promise.resolve() : new Promise(res => { f.onPose = res; })));
 }
 
 let renderer, scene, camera, controls, envGroup, raycaster, floorMesh, sun, composer, gtao, resolution;
@@ -141,6 +173,7 @@ function buildScene(data) {
     gtao.setSize(Math.ceil(innerWidth * renderer.getPixelRatio() / 2), Math.ceil(innerHeight * renderer.getPixelRatio() / 2));
     labelRenderer?.setSize(innerWidth, innerHeight);
     shadowDirty = true;
+    syncBrainInset();
   }
   addEventListener('resize', () => { resolution.reset(); resize(); }); resize();
   if (isRace) {
@@ -156,6 +189,7 @@ function buildScene(data) {
   const clickEl = isRace ? labelRenderer.domElement : renderer.domElement;
   clickEl.addEventListener('pointerdown', e => { pd = [e.clientX, e.clientY]; });
   clickEl.addEventListener('pointerup', e => { if (pd && Math.hypot(e.clientX - pd[0], e.clientY - pd[1]) < 4) onClick(e); });
+  if (!data) return;
   // brain inset: soma point cloud colored by activity of the selected fly
   const bw = $('#brain').clientWidth || 358, bh = $('#brain').clientHeight || 220;
   brainRenderer = new THREE.WebGLRenderer({ canvas: $('#brain'), antialias: false, alpha: true }); brainRenderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -305,7 +339,7 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
     const selectFly = () => {
       selected = f.id;
       renderFlyList();
-      if (f.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
+      if (f.ready && f.worker && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
     };
     el.addEventListener('pointerdown', e => { e.stopPropagation(); startRaceFollow(f.id); });
     const setOpen = open => {
@@ -330,7 +364,7 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
   return f;
 }
 function removeFly(f) {
-  f.worker.terminate();
+  f.worker?.terminate();
   batches.remove(f);
   scene.remove(f.group);
   scene.remove(f.ring);
@@ -342,13 +376,15 @@ function onWorker(f, m) {
   if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
     f.prev = f.last; f.last = m; shadowDirty = true;
+    f.onPose?.(); f.onPose = null;
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
-    if (isRace) { checkRaceFinish(f); paintFlyLabel(f); paintRaceVitals(); }
+    if (isRace) { checkRaceFinish(f); paintFlyLabel(f); paintRaceVitals(); publishMatchState(matchPhase === 'lobby'); }
     if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
     broadcastOthers();
   } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
-    f.activityTime = m.t; brainAct.set(m.trace); brainDirty = true; onActivity(f, m);
+    f.activityTime = m.t; f.lastEyes = m.eyes; f.lastGroups = m.groups;
+    brainAct.set(m.trace); brainDirty = true; onActivity(f, m);
   }
 }
 let foodDirty = false, lastOthers = 0;
@@ -370,7 +406,7 @@ function buildUI() {
   $('#mode').onchange = e => { for (const f of flies) f.worker.postMessage({ type: 'mode', mode: e.target.value }); };
   document.querySelectorAll('.tools button').forEach(b => b.onclick = () => { tool = b.dataset.tool; document.querySelectorAll('.tools button').forEach(x => x.classList.toggle('on', x === b)); });
   setupFolds();
-  setInterval(() => { const f = flies.find(x => x.id === selected); if (!document.hidden && f?.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' }); }, 120);
+  setInterval(() => { const f = flies.find(x => x.id === selected); if (!document.hidden && f?.ready && f.worker && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' }); }, 120);
   $('#wind').oninput = e => { const v = +e.target.value; $('#windv').textContent = v; env.wind = [v, 0]; syncEnv(); };
   $('#light').oninput = e => { env.light.sky = +e.target.value; scene.background = new THREE.Color().setHSL(0.6, 0.3, 0.02 + 0.05 * env.light.sky); syncEnv(); };
   $('#threat').onclick = () => launchThreat();
@@ -405,6 +441,8 @@ function setupRaceChrome() {
   if (note) note.textContent = 'What this fly sees.';
   raceAudio = createRaceAudio(`${BASE}yipee.wav`);
   document.addEventListener('visibilitychange', () => raceAudio.setMuted(document.hidden));
+  if (isWatch) armWatchAudio();
+  setupMatchLink();
   $('#raceVitals').addEventListener('pointerdown', e => {
     const row = e.target.closest('.fly');
     if (!row) return;
@@ -415,9 +453,175 @@ function setupRaceChrome() {
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
   addEventListener('resize', positionBpHint);
 }
+function setupMatchLink() {
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'A', location: 'arena.js:setupMatchLink', message: 'match role', data: { isHost, isWatch, raceRole, search: location.search, pathname: location.pathname, href: location.href, matchUrl: matchUrl() }, timestamp: Date.now() }) }).catch(() => {});
+  // #endregion
+  if (!isHost && !isWatch) return;
+  matchLink = createMatchLink({
+    role: isHost ? 'host' : 'watch',
+    onState: isWatch ? applyWatchState : undefined,
+    onStatus: s => {
+      // #region agent log
+      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'D', location: 'arena.js:onStatus', message: 'match status', data: { status: s, isHost, isWatch }, timestamp: Date.now() }) }).catch(() => {});
+      // #endregion
+      if (isWatch && (s === 'offline' || s === 'host-taken')) showWatchWaiting('Waiting for the next race');
+    },
+  });
+}
+function publishMatchState(force = false) {
+  if (!isHost || !matchLink) {
+    // #region agent log
+    if (force) fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'A', location: 'arena.js:publishMatchState', message: 'skip publish, not host or no link', data: { isHost, hasLink: !!matchLink, phase: matchPhase }, timestamp: Date.now() }) }).catch(() => {});
+    // #endregion
+    return;
+  }
+  const now = performance.now();
+  if (!force && now - lastMatchSend < 1000 / 15) return;
+  lastMatchSend = now;
+  const wall = raceStartWall != null ? formatWall(now - raceStartWall) : '0.0 s';
+  const sel = flies.find(f => f.id === selected) || flies[0];
+  let act = null;
+  if (now - lastActSend > 400 && brainAct) { lastActSend = now; act = packAct(brainAct); }
+  matchLink.sendState(buildMatchState({
+    matchId, phase: matchPhase, flies,
+    clock: { wall, fly: flySecs() },
+    winner: raceWinner, why: raceWinnerWhy,
+    bodyNames: flies.find(f => f.bodyNames)?.bodyNames || null,
+    resetIn: matchResetIn,
+    selected,
+    eyes: sel?.lastEyes || null,
+    groups: sel?.lastGroups ? Array.from(sel.lastGroups) : null,
+    act,
+  }));
+  // #region agent log
+  if (matchPhase === 'lobby') fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'F', location: 'arena.js:publishMatchState', message: 'lobby snapshot', data: { force, n: flies.length, withLast: flies.filter(x => x.last).length }, timestamp: Date.now(), runId: 'post-fix' }) }).catch(() => {});
+  // #endregion
+}
+let watchOverlayPhase = null, watchSawRest = false;
+function playWatchBed() {
+  raceAudio?.playBed(watchOverlayPhase === 'live' ? 'race' : 'menu');
+}
+function armWatchAudio() {
+  const unlock = () => raceAudio.unlock().then(playWatchBed);
+  unlock();
+  addEventListener('pointerdown', unlock);
+  addEventListener('keydown', unlock);
+}
+function showWatchWaiting(msg) {
+  const card = $('#raceCard');
+  card.innerHTML = `<h1>Odor race</h1><p>${msg}</p>`;
+  if (watchOverlayPhase !== 'wait') showRaceOverlayCard(card);
+  else { const overlay = $('#raceOverlay'); overlay.hidden = false; }
+  watchOverlayPhase = 'wait';
+  raceAudio?.setMotion({ flying: false, walk: 0 });
+  playWatchBed();
+}
+function applyWatchOverlay(st) {
+  if (st.phase === 'live') {
+    const overlay = $('#raceOverlay');
+    overlay.classList.remove('show');
+    overlay.hidden = true;
+    watchOverlayPhase = 'live';
+    return;
+  }
+  const card = $('#raceCard');
+  if (st.phase === 'results' && st.winner) {
+    const w = st.winner;
+    const note = w.why === 'last' ? 'last remaining' : w.why === 'died' ? 'last to die' : '';
+    card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${st.clock?.wall || ''}</p><p class="flyt">${st.clock?.fly || '0.0'} s fly</p>${st.resetIn != null ? `<p>Resetting in ${st.resetIn}…</p>` : ''}`;
+    if (watchOverlayPhase !== 'results') showRaceOverlayCard(card, { flyColor: w.color });
+    else card.style.setProperty('--fly', w.color);
+    watchOverlayPhase = 'results';
+    return;
+  }
+  if (watchOverlayPhase !== 'wait') showWatchWaiting('Waiting for the next race');
+  watchOverlayPhase = 'wait';
+}
+function addVisualFly(row, bodyNames) {
+  const f = { id: row.id, worker: null, color: row.color, sex: row.sex || 'm', name: row.name, ready: true, last: null, prev: null, stats: {}, ...buildFlyMesh(row.color, row.sex || 'm') };
+  f.bodyNames = bodyNames;
+  f.bodyGroups = bodyNames.map(n => f.bodies[n] || null);
+  scene.add(f.group); flies.push(f); batches.add(f);
+  const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color;
+  el.innerHTML = `<span class="fly-label-chip">${f.name}</span><div class="fly-label-info"></div>`;
+  el.addEventListener('pointerdown', e => { e.stopPropagation(); startRaceFollow(f.id); });
+  const setOpen = open => {
+    const info = el.querySelector('.fly-label-info');
+    info.classList.toggle('open', open);
+    if (open) { paintFlyLabel(f); selected = f.id; renderFlyList(); }
+  };
+  el.addEventListener('pointerenter', () => setOpen(true));
+  el.addEventListener('pointerleave', () => setOpen(false));
+  el.addEventListener('focus', () => setOpen(true));
+  el.addEventListener('blur', () => setOpen(false));
+  f.label = new CSS2DObject(el);
+  f.label.position.set(row.pos?.[0] || 0, row.pos?.[1] || 0, 1.1);
+  scene.add(f.label);
+  return f;
+}
+function applyWatchState(st) {
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'E', location: 'arena.js:applyWatchState', message: 'apply watch snapshot', data: { phase: st.phase, flies: st.flies?.length, bodyNames: st.bodyNames?.length, overlay: watchOverlayPhase, localFlies: flies.length }, timestamp: Date.now() }) }).catch(() => {});
+  // #endregion
+  const wasLive = watchOverlayPhase === 'live';
+  if (st.bodyNames) watchBodyNames = st.bodyNames;
+  applyWatchOverlay(st);
+  if (st.clock) paintRaceClock(st.clock.wall, st.clock.fly);
+  if (st.phase !== 'live') watchSawRest = true;
+  if (st.phase === 'live' && !wasLive) {
+    if (watchSawRest) announceRace('GO!');
+    scheduleRaceBrainFold();
+    playWatchBed();
+  }
+  if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && !raceWinner) {
+    announceRace(`${st.winner.name} wins!`, st.winner.color);
+    raceAudio?.setMotion({ flying: false, walk: 0 });
+    raceAudio?.playBed('menu');
+    raceAudio?.playYipee();
+  }
+  const names = watchBodyNames;
+  const seen = new Set();
+  for (const row of st.flies || []) {
+    seen.add(row.id);
+    let f = flies.find(x => x.id === row.id);
+    if (!f && names) f = addVisualFly(row, names);
+    if (!f) continue;
+    if (f.last && f.last.alive !== false && row.alive === false && !st.winner) raceAudio?.playOof();
+    f.prev = f.last; f.last = row;
+    const received = performance.now();
+    f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received - f.recvAt)) : 1000 / 30;
+    f.recvAt = received;
+    paintFlyLabel(f);
+  }
+  for (let i = flies.length - 1; i >= 0; i--) if (!seen.has(flies[i].id)) { removeFly(flies[i]); flies.splice(i, 1); }
+  paintRaceVitals(true);
+  running = st.phase === 'live';
+  raceWinner = st.winner ? flies.find(x => x.id === st.winner.id) || null : null;
+  raceWinnerWhy = st.winner?.why || null;
+  if (st.selected != null) selected = st.selected;
+  const f = flies.find(x => x.id === selected) || flies[0];
+  if (f && (st.groups || st.eyes) && groups.length) onActivity(f, { groups: st.groups || [], eyes: st.eyes, t: f.last?.t || 0 });
+  if (st.act && brainAct && unpackAct(st.act, brainAct)) brainDirty = true;
+}
+function setupWatchBrainPanel() {
+  $('#brainpanel').hidden = false;
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'E', location: 'arena.js:setupWatchBrainPanel', message: 'watch brain panel shown', data: { hidden: $('#brainpanel').hidden, groupsHidden: $('#groups')?.hidden, brainHidden: $('#brain')?.hidden, groupRows: $('#groups')?.children.length, hasPts: !!brainPts }, timestamp: Date.now() }) }).catch(() => {});
+  // #endregion
+}
 function shouldPollBrainActivity() {
   const p = $('#brainpanel');
   return p && !p.hidden && (!p.classList.contains('folded') || isRace);
+}
+function syncBrainInset() {
+  const el = $('#brain');
+  if (!el || !brainRenderer || !brainCam) return;
+  const bw = el.clientWidth, bh = el.clientHeight;
+  if (bw < 8 || bh < 8) return;
+  brainRenderer.setSize(bw, bh, false);
+  brainCam.aspect = bw / bh;
+  brainCam.updateProjectionMatrix();
 }
 function positionBpHint() {
   const panel = $('#brainpanel'), hint = $('#bpHint');
@@ -454,7 +658,8 @@ function pinRaceAnnounce() {
 }
 function brainFoldChrome(folded) {
   const b = $('#bpFold'); if (!b) return;
-  b.textContent = folded ? '<' : '>';
+  const mobile = raceMobile();
+  b.textContent = mobile ? (folded ? '∧' : '∨') : (folded ? '<' : '>');
   b.title = `${folded ? 'Show' : 'Hide'} brain panel (])`;
   b.setAttribute('aria-expanded', String(!folded));
 }
@@ -466,25 +671,36 @@ function setRaceBrainFolded(folded, { user = false, instant = false } = {}) {
   panel.classList.toggle('folded', folded);
   brainFoldChrome(folded);
   if (hint) {
-    hint.hidden = !folded;
-    if (folded) {
-      const placeHint = () => requestAnimationFrame(() => requestAnimationFrame(positionBpHint));
-      placeHint();
-      panel.addEventListener('transitionend', e => { if (e.propertyName === 'width') positionBpHint(); }, { once: true });
-      setTimeout(positionBpHint, 400);
+    if (raceMobile()) hint.hidden = true;
+    else {
+      hint.hidden = !folded;
+      if (folded) {
+        const placeHint = () => requestAnimationFrame(() => requestAnimationFrame(positionBpHint));
+        placeHint();
+        panel.addEventListener('transitionend', e => { if (e.propertyName === 'width') positionBpHint(); }, { once: true });
+        setTimeout(positionBpHint, 400);
+      }
     }
   }
+  if (!folded) requestAnimationFrame(() => requestAnimationFrame(syncBrainInset));
   if (folded) {
     const f = flies.find(x => x.id === selected);
-    if (f?.ready) f.worker.postMessage({ type: 'activity' });
+    if (f?.ready && f.worker) f.worker.postMessage({ type: 'activity' });
   } else if (!instant) {
     const f = flies.find(x => x.id === selected);
-    if (f?.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
+    if (f?.ready && f.worker && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
   }
+}
+function raceMobile() {
+  return matchMedia('(max-width: 700px), (max-height: 500px)').matches;
 }
 function scheduleRaceBrainFold() {
   clearTimeout(raceBrainTimer);
   raceBrainTouched = false;
+  if (raceMobile()) {
+    setRaceBrainFolded(true, { instant: true });
+    return;
+  }
   setRaceBrainFolded(false, { instant: true });
   raceBrainTimer = setTimeout(() => {
     if (raceBrainTouched || raceWinner) return;
@@ -501,6 +717,11 @@ function showRaceOverlayCard(card, { flyColor } = {}) {
   overlay.classList.add('show');
 }
 function showRaceStart() {
+  matchPhase = 'lobby';
+  matchResetIn = null;
+  raceWinner = null;
+  publishMatchState(true);
+  if (isWatch) return showWatchWaiting('Waiting for the next race');
   const card = $('#raceCard');
   card.innerHTML = `<h1>Odor race</h1><p>First to the vinegar wins!</p><button id="raceStart" class="primary">GO!</button>${raceHistoryHtml(loadRaceHistory())}`;
   $('#raceStart').onclick = startRace;
@@ -526,20 +747,30 @@ function paintRaceClock(wall, fly) {
   $('#raceFly').textContent = fly + ' s fly time';
 }
 function startRace() {
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'A', location: 'arena.js:startRace', message: 'host startRace', data: { isHost, isWatch, hasLink: !!matchLink, matchId, matchPhase, flies: flies.length }, timestamp: Date.now() }) }).catch(() => {});
+  // #endregion
   const overlay = $('#raceOverlay');
   overlay.classList.remove('show');
   overlay.hidden = true;
   raceStartWall = performance.now();
   paintRaceClock('0.0 s', '0.0');
   running = true;
+  matchPhase = 'live';
+  matchId += 1;
+  matchResetIn = null;
   raceAudio?.unlock().then(() => raceAudio?.playBed('race'));
-  for (const f of flies) f.worker.postMessage({ type: 'run' });
+  for (const f of flies) f.worker?.postMessage({ type: 'run' });
   announceRace('GO!');
   scheduleRaceBrainFold();
+  publishMatchState(true);
 }
 function announceRaceWinner(f, why) {
   if (!running || raceWinner || raceResetting) return;
   raceWinner = f;
+  raceWinnerWhy = why || null;
+  matchPhase = 'results';
+  matchResetIn = 10;
   const wall = formatWall(performance.now() - (raceStartWall || performance.now()));
   const fly = flySecs(f);
   paintRaceClock(wall, fly);
@@ -552,7 +783,7 @@ function announceRaceWinner(f, why) {
   const card = $('#raceCard');
   const note = why === 'last' ? 'last remaining' : why === 'died' ? 'last to die' : '';
   let left = 10;
-  const paint = () => { card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${wall}</p><p class="flyt">${fly} s fly</p>${raceHistoryHtml(hist)}<p>Resetting in ${left}…</p>`; };
+  const paint = () => { card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${wall}</p><p class="flyt">${fly} s fly</p>${raceHistoryHtml(hist)}<p>Resetting in ${left}…</p>`; matchResetIn = left; publishMatchState(true); };
   paint();
   showRaceOverlayCard(card, { flyColor: f.color });
   clearInterval(raceResetTimer);
@@ -582,17 +813,18 @@ async function resetRace() {
   raceResetting = true;
   clearInterval(raceResetTimer); raceResetTimer = null;
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
-  running = false; raceWinner = null; raceStartWall = null;
+  running = false; raceWinner = null; raceWinnerWhy = null; raceStartWall = null;
   const clock = $('#raceClock'); if (clock) clock.hidden = true;
   if (raceAnnounce) { raceAnnounce.element.querySelector('.race-announce-text')?.classList.remove('pop'); }
-  setRaceBrainFolded(false, { instant: true });
-  for (const f of flies) { f.worker.postMessage({ type: 'pause' }); removeFly(f); }
+  setRaceBrainFolded(raceMobile(), { instant: true });
+  for (const f of flies) { f.worker?.postMessage({ type: 'pause' }); removeFly(f); }
   flies.length = 0; nextId = 0; selected = 0;
   snapRaceOverview();
   if (env.food[0]) env.food[0].amount = 8;
   env.threat = null;
   rebuildEnv();
   await spawnPresetFlies();
+  await waitRacePoses();
   showRaceStart();
   raceResetting = false;
 }
@@ -874,7 +1106,7 @@ function animate() {
   metrics.renderMs = performance.now() - renderStart; metrics.calls = renderer.info.render.calls; metrics.triangles = renderer.info.render.triangles;
   // The trace arrives at ~8 Hz. Upload colours only when the trace, selection or highlight changes.
   // Rotate/draw the inset at 30 Hz independently from the main camera.
-  if ($('#brainpanel').hidden || $('#brainpanel').classList.contains('folded') || now - lastBrainDraw < 1000 / 30) return;
+  if ($('#brainpanel').hidden || $('#brainpanel').classList.contains('folded') || !brainPts || now - lastBrainDraw < 1000 / 30) return;
   const elapsed = Math.min(0.1, (now - lastBrainDraw) / 1000); lastBrainDraw = now;
   if (brainDirty || brainColorFly !== selected || brainColorHover !== hover) {
     const col = brainPts.geometry.attributes.color, a = col.array;
@@ -903,7 +1135,7 @@ function setupFolds() {
   };
   if (isRace) {
     const f = folds[0];
-    setRaceBrainFolded(false, { instant: true });
+    setRaceBrainFolded(raceMobile(), { instant: true });
     $(f[1]).onclick = () => setRaceBrainFolded(!$('#brainpanel').classList.contains('folded'), { user: true });
     addEventListener('keydown', e => {
       if (e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;

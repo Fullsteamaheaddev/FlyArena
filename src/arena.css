@@ -246,3 +246,108 @@ body.race .fly-label-info.open {
   opacity: 1; transform: translate(-50%, 0); visibility: visible; pointer-events: auto;
 }
 body.race #brainpanel .fold { border-radius: 8px; }
+
+@media (max-width: 700px), (max-height: 500px) {
+  body.race #raceHud:not([hidden]) {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    width: min(200px, calc(100% - 24px));
+    max-height: calc(100% - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+  body.race #scoreboard { padding-bottom: 4px; }
+  body.race #scoreboard header { padding: 8px 10px 6px; }
+  body.race #scoreboard h1 { font-size: 16px; }
+  body.race #scoreboard .race-clock { margin-top: 2px; }
+  body.race #scoreboard .race-clock b { font-size: 20px; }
+  body.race #scoreboard .race-clock span { font-size: 10px; }
+  body.race #raceVitals { gap: 6px; }
+  body.race #raceVitals .fly {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 12px 10px;
+    transform-origin: left center;
+  }
+  body.race #raceVitals .fly.sel { transform: scale(1.03); }
+  body.race #raceVitals .fly-name { font-size: 12px; }
+  body.race #raceVitals .dot { width: 12px; height: 12px; }
+  body.race #raceVitals .fly-t { display: none; }
+  body.race #raceVitals .bar { height: 3px; margin-top: 1px; width: 85%; max-width: 144px; }
+
+  body.race #brainpanel,
+  body.race #brainpanel.folded,
+  body.race #brainpanel:not(.folded) {
+    top: auto;
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    transform-origin: bottom center;
+  }
+  body.race #brainpanel.folded {
+    max-height: none;
+    overflow: hidden;
+  }
+  body.race #brainpanel:not(.folded) {
+    display: flex;
+    flex-direction: column;
+    max-height: 55vh;
+    overflow: auto;
+  }
+  body.race #brainpanel:not(.folded) header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--panel);
+  }
+  body.race #brainpanel:not(.folded) #bpBody {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+  }
+  body.race #brainpanel:not(.folded) #brain { flex: none; }
+  body.race #brainpanel.folded header { border-bottom: 0; padding: 8px 12px; }
+  body.race #brainpanel.folded #bpBody,
+  body.race #brainpanel.folded #brain { display: none; }
+  body.race #brainpanel h2 { font-size: 14px; }
+  body.race #bpFold { font-size: 20px; padding: 6px 12px; min-height: 44px; min-width: 44px; }
+  body.race #bpHint { display: none !important; }
+  body.race #brain {
+    width: min(280px, 100%);
+    height: 160px;
+    margin: 0 auto;
+    border-top: 1px solid var(--line);
+  }
+  body.race #groups .g { grid-template-columns: 1fr auto; }
+  body.race #groups canvas { display: none; }
+  body.race #groups .v { font-size: 10px; }
+  body.race #groups .name { font-size: 11px; }
+
+  body.race .race-card {
+    min-width: 0;
+    width: min(260px, calc(100% - 48px));
+    max-width: 260px;
+    min-height: 252px;
+    padding: 28px 22px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin: 0;
+  }
+  body.race .race-card h1 { font-size: 24px; }
+  body.race .race-card p { margin-bottom: 14px; }
+  body.race .race-card button {
+    min-width: 160px;
+    min-height: 44px;
+    padding: 12px 24px;
+    align-self: center;
+  }
+  body.race .fly-label-info { width: min(280px, 80vw); }
+  body.race .fly-label-chip { font-size: 14px; padding: 5px 10px; }
+}
+
+@media (max-height: 500px) {
+  body.race #brainpanel:not(.folded) { max-height: min(70vh, calc(100dvh - 24px)); }
+  body.race #brain { width: min(220px, 100%); height: min(140px, 40vh); }
+}
