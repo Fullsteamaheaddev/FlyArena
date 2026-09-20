@@ -15,6 +15,7 @@ const isolation = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-E
 function rewriteWatch(req) {
   const q = req.url.indexOf('?'), path = q < 0 ? req.url : req.url.slice(0, q), qs = q < 0 ? '' : req.url.slice(q);
   if (/\/watch\/?$/.test(path)) req.url = path.replace(/\/watch\/?$/, '/watch.html') + qs;
+  else if (/\/admin\/?$/.test(path)) req.url = path.replace(/\/admin\/?$/, '/admin.html') + qs;
 }
 const watchRoute = {
   name: 'watch-route',
@@ -29,5 +30,5 @@ export default defineConfig({
   preview: { headers: isolation },
   optimizeDeps: { exclude: ['@mujoco/mujoco'] },
   worker: { format: 'es' },
-  build: { target: 'esnext', rollupOptions: { input: { main: 'index.html', arena: 'arena.html', watch: 'watch.html', fly: 'fly.html', structures: 'structures.html', textbook: 'textbook/index.html' } } },
+  build: { target: 'esnext', rollupOptions: { input: { main: 'index.html', arena: 'arena.html', watch: 'watch.html', admin: 'admin.html', fly: 'fly.html', structures: 'structures.html', textbook: 'textbook/index.html' } } },
 });

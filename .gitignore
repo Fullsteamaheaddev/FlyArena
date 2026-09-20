@@ -10,3 +10,10 @@ data/calib_log.jsonl
 scripts/_tmp
 data/ir
 __pycache__
+contracts/cache
+contracts/artifacts
+.env
+.env.local
+deployer-import.txt
+.cursor
+debug-6b97f7.log

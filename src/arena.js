@@ -16,6 +16,11 @@ import { parseFlyVis } from './flyvis.js';
 import { buildGroups } from './sim/groups.js';
 import { createRaceAudio } from './race-audio.js';
 import { matchRole, isWatchPath, matchUrl, createMatchLink, buildMatchState, packAct, unpackAct } from './match.js';
+import {
+  DEFAULT_WINDOW, chainConfigured, connectWallet, disconnectWallet, ensureWallet, restoreWallet, switchAccount, onWalletChange, getAccount, readWindow, readPools,
+  openRace, lockRace, settleRace, voidRace, placeBet, claimRace, refundRace,
+  readBalance, loadHistory, userTotal, userStake, isClaimed, readRace, chipFmt, setDebugSink,
+} from './chain.js';
 const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pages
 
 const $ = s => document.querySelector(s);
@@ -35,9 +40,17 @@ const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
 let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0;
 let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null;
+let betClosesAt = null, poolSnap = [], lobbyTimer = null, lastPoolRead = 0, chainSettled = false, betFlyId = null, lastLobbyKind = '', lastPoolKey = '', lastLobbyTickSec = null;
+let poolStatus = null, betWindowSec = DEFAULT_WINDOW, betWindowArmed = false, lobbyStartedAt = 0, resultsAt = 0, settledAt = 0;
+let resultActions = { key: '', claim: false, refund: false, note: '' }, profileSeq = 0, profileAcct = null;
+const OPEN_GRACE_MS = 25000;     // if the pool never opens (operator offline) the lobby still runs
+const SETTLE_GRACE_MS = 45000;   // nor does a stuck settle strand the results card forever
+const CLAIM_WINDOW_MS = 6000;    // time to see the payout / Claim once the match is settled
 let raceFollow = null, raceCamHome = null, raceCamTween = null, raceAnnounce = null, raceBrainTimer = null, raceBrainTouched = false;
 const RACE_PLUME_TOP = 0.20, RACE_CHASE_BACK = 2.6, RACE_CHASE_Z = 1.15;
 const RACE_HISTORY_KEY = 'odorRaceResults';
+const RACE_FLIES_KEY = 'odorRaceFlies';
+let lastRaceFliesKey = '';
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
@@ -72,7 +85,7 @@ async function main() {
   $('#loading').remove();
   if (isRace) setupRaceChrome();
   await spawnPresetFlies();
-  if (isRace) { await waitRacePoses(); showRaceStart(); }
+  if (isRace) { await waitRacePoses(); await showRaceStart(); }
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
   window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish, resetRace, startRaceFollow, stopRaceFollow, announceRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; } };
   animate();
@@ -93,7 +106,6 @@ async function mainWatch() {
   setupFolds();
   setRaceBrainFolded(raceMobile(), { instant: true });
   setupWatchBrainPanel();
-  showWatchWaiting('Waiting for the next race');
   $('#loading').remove();
   window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, rebuildEnv, startRaceFollow, stopRaceFollow, announceRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; } };
   animate();
@@ -379,7 +391,7 @@ function onWorker(f, m) {
     f.onPose?.(); f.onPose = null;
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
-    if (isRace) { checkRaceFinish(f); paintFlyLabel(f); paintRaceVitals(); publishMatchState(matchPhase === 'lobby'); }
+    if (isRace) { checkRaceFinish(f); paintFlyLabel(f); paintRaceVitals(); publishMatchState(matchPhase === 'lobby'); cueSelectedTakeoff(f); }
     if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
     broadcastOthers();
   } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
@@ -439,9 +451,50 @@ function setupRaceChrome() {
   if (capR) capR.textContent = 'Right';
   const note = $('#bpBody .note');
   if (note) note.textContent = 'What this fly sees.';
-  raceAudio = createRaceAudio(`${BASE}yipee.wav`);
-  document.addEventListener('visibilitychange', () => raceAudio.setMuted(document.hidden));
-  if (isWatch) armWatchAudio();
+  raceAudio = createRaceAudio(`${BASE}yipee.wav`, `${BASE}gong.wav`);
+  document.addEventListener('visibilitychange', () => {
+    raceAudio.setMuted(document.hidden);
+    if (isHost && document.hidden) raceAudio.unlock().then(() => raceAudio.hold(true));
+    if (document.hidden) return;
+    kickHostSim();
+  });
+  if (isHost) {
+    raceAudio.unlock().then(() => raceAudio.hold(true));
+    setInterval(() => {
+      if (matchPhase === 'lobby') tickLobby();
+      else if (matchPhase === 'live' && running) {
+        const now = performance.now();
+        if (flies.some(f => f.ready && (!f.recvAt || now - f.recvAt > 1500))) {
+          for (const f of flies) f.worker?.postMessage({ type: 'run' });
+        }
+        publishMatchState(true);
+      }
+    }, 1000);
+  }
+  if (isWatch) {
+    armWatchAudio();
+    const profile = $('#profile');
+    if (profile) {
+      profile.hidden = false;
+      $('#profileConnect').onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
+      $('#profileDisconnect').onclick = () => clearWalletUi();
+      restoreWallet().then(a => {
+        // #region agent log
+        dbg('arena.js:restoreWallet', 'silent restore', { acct: a ? a.slice(0, 10) : null }, 'I');
+        // #endregion
+        if (!a) return;
+        refreshProfile();
+        if (matchPhase === 'lobby') paintLobbyOverlay(true);
+      });
+    }
+    showWatchWaiting('Waiting for the next race');
+    onWalletChange(() => { refreshProfile(); if (matchPhase === 'lobby') paintLobbyOverlay(true); if (matchPhase === 'results') paintResultActions(matchId); });
+    window.ethereum?.on?.('accountsChanged', accs => {
+      // #region agent log
+      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',location:'arena.js:accountsChanged',message:'mm accountsChanged',data:{accs:(accs||[]).map(a=>String(a).slice(0,10)),cached:getAccount()?.slice(0,10)},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+    });
+  }
   setupMatchLink();
   $('#raceVitals').addEventListener('pointerdown', e => {
     const row = e.target.closest('.fly');
@@ -453,29 +506,54 @@ function setupRaceChrome() {
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
   addEventListener('resize', positionBpHint);
 }
-function setupMatchLink() {
+function settleNote() {
+  if (!chainConfigured()) return 'Next race starting…';
+  if (poolStatus === 3 || poolStatus === 4) return 'Settled — next race starting…';
+  return 'Settling match on-chain…';
+}
+function readyForNextRace() {
+  if (!chainConfigured()) return Date.now() - resultsAt > CLAIM_WINDOW_MS;
+  if (settledAt) return Date.now() - settledAt > CLAIM_WINDOW_MS;
+  return Date.now() - resultsAt > SETTLE_GRACE_MS;
+}
+// The relay is the pool operator; it tells everyone when the race opens, locks or settles.
+function applyPoolStatus(p) {
+  if (p?.matchId == null || Number(p.matchId) !== Number(matchId)) return;
+  const was = poolStatus;
+  poolStatus = p.status;
+  if ((poolStatus === 3 || poolStatus === 4) && !settledAt) settledAt = Date.now();
   // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'A', location: 'arena.js:setupMatchLink', message: 'match role', data: { isHost, isWatch, raceRole, search: location.search, pathname: location.pathname, href: location.href, matchUrl: matchUrl() }, timestamp: Date.now() }) }).catch(() => {});
+  dbg('arena.js:applyPoolStatus', 'pool status', { matchId, status: poolStatus, was, phase: matchPhase, sinceResults: resultsAt ? Date.now() - resultsAt : null }, 'H');
   // #endregion
+  if (isHost && poolStatus === 1 && matchPhase === 'lobby') armBetWindow();
+  if (was === poolStatus) return;
+  if (matchPhase === 'lobby') paintLobbyOverlay(true);
+  else if (matchPhase === 'results') {
+    paintResultActions(matchId);
+    const el = $('#raceReset'); if (el) el.textContent = settleNote();
+  }
+}
+function kickHostSim() {
+  if (!isHost) return;
+  if (matchPhase === 'live' && running) {
+    for (const f of flies) f.worker?.postMessage({ type: 'run' });
+    publishMatchState(true);
+  }
+  if (matchPhase === 'lobby' && betClosesAt && Date.now() >= betClosesAt) goLiveFromLobby();
+}
+function setupMatchLink() {
   if (!isHost && !isWatch) return;
   matchLink = createMatchLink({
     role: isHost ? 'host' : 'watch',
     onState: isWatch ? applyWatchState : undefined,
+    onPool: applyPoolStatus,
     onStatus: s => {
-      // #region agent log
-      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'D', location: 'arena.js:onStatus', message: 'match status', data: { status: s, isHost, isWatch }, timestamp: Date.now() }) }).catch(() => {});
-      // #endregion
       if (isWatch && (s === 'offline' || s === 'host-taken')) showWatchWaiting('Waiting for the next race');
     },
   });
 }
 function publishMatchState(force = false) {
-  if (!isHost || !matchLink) {
-    // #region agent log
-    if (force) fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'A', location: 'arena.js:publishMatchState', message: 'skip publish, not host or no link', data: { isHost, hasLink: !!matchLink, phase: matchPhase }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
-    return;
-  }
+  if (!isHost || !matchLink) return;
   const now = performance.now();
   if (!force && now - lastMatchSend < 1000 / 15) return;
   lastMatchSend = now;
@@ -493,10 +571,9 @@ function publishMatchState(force = false) {
     eyes: sel?.lastEyes || null,
     groups: sel?.lastGroups ? Array.from(sel.lastGroups) : null,
     act,
+    betClosesAt,
+    pools: poolSnap,
   }));
-  // #region agent log
-  if (matchPhase === 'lobby') fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'F', location: 'arena.js:publishMatchState', message: 'lobby snapshot', data: { force, n: flies.length, withLast: flies.filter(x => x.last).length }, timestamp: Date.now(), runId: 'post-fix' }) }).catch(() => {});
-  // #endregion
 }
 let watchOverlayPhase = null, watchSawRest = false;
 function playWatchBed() {
@@ -510,6 +587,9 @@ function armWatchAudio() {
 }
 function showWatchWaiting(msg) {
   const card = $('#raceCard');
+  lastLobbyKind = '';
+  lastPoolKey = '';
+  if (card) card.dataset.kind = '';
   card.innerHTML = `<h1>Odor race</h1><p>${msg}</p>`;
   if (watchOverlayPhase !== 'wait') showRaceOverlayCard(card);
   else { const overlay = $('#raceOverlay'); overlay.hidden = false; }
@@ -523,20 +603,41 @@ function applyWatchOverlay(st) {
     overlay.classList.remove('show');
     overlay.hidden = true;
     watchOverlayPhase = 'live';
+    lastLobbyKind = '';
     return;
   }
   const card = $('#raceCard');
+  if (st.phase === 'lobby') {
+    watchOverlayPhase = 'lobby';
+    return;
+  }
   if (st.phase === 'results' && st.winner) {
     const w = st.winner;
-    const note = w.why === 'last' ? 'last remaining' : w.why === 'died' ? 'last to die' : '';
-    card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${st.clock?.wall || ''}</p><p class="flyt">${st.clock?.fly || '0.0'} s fly</p>${st.resetIn != null ? `<p>Resetting in ${st.resetIn}…</p>` : ''}`;
-    if (watchOverlayPhase !== 'results') showRaceOverlayCard(card, { flyColor: w.color });
-    else card.style.setProperty('--fly', w.color);
+    const reset = settleNote();
+    if (watchOverlayPhase !== 'results') {
+      const note = w.why === 'last' ? 'last remaining' : w.why === 'died' ? 'last to die' : '';
+      card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${st.clock?.wall || ''}</p><p class="flyt">${st.clock?.fly || '0.0'} s fly</p>
+        <div class="bet-actions"></div>
+        <p id="betNote" class="flyt"></p>
+        <p id="raceReset">${reset}</p>`;
+      showRaceOverlayCard(card, { flyColor: w.color });
+      paintResultActions(st.matchId);
+      // #region agent log
+      dbg('arena.js:applyWatchOverlay', 'results card built', { matchId: st.matchId, acct: getAccount()?.slice(0, 10), poolStatus }, 'D');
+      // #endregion
+    } else {
+      card.style.setProperty('--fly', w.color);
+      const el = card.querySelector('#raceReset');
+      if (el) el.textContent = reset;
+      if (!card.querySelector('.bet-actions')?.childElementCount) injectResultActions(st.matchId);
+    }
     watchOverlayPhase = 'results';
+    lastLobbyKind = '';
     return;
   }
   if (watchOverlayPhase !== 'wait') showWatchWaiting('Waiting for the next race');
   watchOverlayPhase = 'wait';
+  lastLobbyKind = '';
 }
 function addVisualFly(row, bodyNames) {
   const f = { id: row.id, worker: null, color: row.color, sex: row.sex || 'm', name: row.name, ready: true, last: null, prev: null, stats: {}, ...buildFlyMesh(row.color, row.sex || 'm') };
@@ -560,14 +661,50 @@ function addVisualFly(row, bodyNames) {
   scene.add(f.label);
   return f;
 }
+function applyWatchFlyIdent(f, row) {
+  if (!row || (f.name === row.name && f.color === row.color)) return;
+  f.name = row.name;
+  f.color = row.color;
+  const el = f.label?.element;
+  if (el) {
+    el.style.color = f.color;
+    const chip = el.querySelector('.fly-label-chip');
+    if (chip) chip.textContent = f.name;
+  }
+  if (f.ring?.material?.color) f.ring.material.color.set(f.color);
+}
 function applyWatchState(st) {
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'E', location: 'arena.js:applyWatchState', message: 'apply watch snapshot', data: { phase: st.phase, flies: st.flies?.length, bodyNames: st.bodyNames?.length, overlay: watchOverlayPhase, localFlies: flies.length }, timestamp: Date.now() }) }).catch(() => {});
-  // #endregion
   const wasLive = watchOverlayPhase === 'live';
+  matchPhase = st.phase || matchPhase;
   if (st.bodyNames) watchBodyNames = st.bodyNames;
-  applyWatchOverlay(st);
+  if (st.matchId != null && st.matchId !== matchId) { matchId = st.matchId; poolStatus = null; }
+  betClosesAt = st.betClosesAt ?? null;
+  if (st.pools) poolSnap = st.pools;
   if (st.clock) paintRaceClock(st.clock.wall, st.clock.fly);
+  const names = watchBodyNames;
+  const seen = new Set();
+  for (const row of st.flies || []) {
+    seen.add(row.id);
+    let f = flies.find(x => x.id === row.id);
+    if (!f && names) f = addVisualFly(row, names);
+    else if (f && (f.name !== row.name || f.color !== row.color)) applyWatchFlyIdent(f, row);
+    if (!f) continue;
+    if (f.last && f.last.alive !== false && row.alive === false && !st.winner) raceAudio?.playOof();
+    f.prev = f.last; f.last = row;
+    cueSelectedTakeoff(f);
+    const received = performance.now();
+    f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received - f.recvAt)) : 1000 / 30;
+    f.recvAt = received;
+    paintFlyLabel(f);
+  }
+  for (let i = flies.length - 1; i >= 0; i--) if (!seen.has(flies[i].id)) { removeFly(flies[i]); flies.splice(i, 1); }
+  applyWatchOverlay(st);
+  if (st.phase === 'lobby') {
+    if (!lobbyTimer) lobbyTimer = setInterval(() => { if (matchPhase === 'lobby') paintLobbyOverlay(); }, 250);
+    paintLobbyOverlay();
+  } else {
+    clearInterval(lobbyTimer); lobbyTimer = null;
+  }
   if (st.phase !== 'live') watchSawRest = true;
   if (st.phase === 'live' && !wasLive) {
     if (watchSawRest) announceRace('GO!');
@@ -579,36 +716,19 @@ function applyWatchState(st) {
     raceAudio?.setMotion({ flying: false, walk: 0 });
     raceAudio?.playBed('menu');
     raceAudio?.playYipee();
+    refreshProfile();
   }
-  const names = watchBodyNames;
-  const seen = new Set();
-  for (const row of st.flies || []) {
-    seen.add(row.id);
-    let f = flies.find(x => x.id === row.id);
-    if (!f && names) f = addVisualFly(row, names);
-    if (!f) continue;
-    if (f.last && f.last.alive !== false && row.alive === false && !st.winner) raceAudio?.playOof();
-    f.prev = f.last; f.last = row;
-    const received = performance.now();
-    f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received - f.recvAt)) : 1000 / 30;
-    f.recvAt = received;
-    paintFlyLabel(f);
-  }
-  for (let i = flies.length - 1; i >= 0; i--) if (!seen.has(flies[i].id)) { removeFly(flies[i]); flies.splice(i, 1); }
   paintRaceVitals(true);
   running = st.phase === 'live';
   raceWinner = st.winner ? flies.find(x => x.id === st.winner.id) || null : null;
   raceWinnerWhy = st.winner?.why || null;
-  if (st.selected != null) selected = st.selected;
+  if (!isWatch && st.selected != null) selected = st.selected;
   const f = flies.find(x => x.id === selected) || flies[0];
   if (f && (st.groups || st.eyes) && groups.length) onActivity(f, { groups: st.groups || [], eyes: st.eyes, t: f.last?.t || 0 });
   if (st.act && brainAct && unpackAct(st.act, brainAct)) brainDirty = true;
 }
 function setupWatchBrainPanel() {
   $('#brainpanel').hidden = false;
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'E', location: 'arena.js:setupWatchBrainPanel', message: 'watch brain panel shown', data: { hidden: $('#brainpanel').hidden, groupsHidden: $('#groups')?.hidden, brainHidden: $('#brain')?.hidden, groupRows: $('#groups')?.children.length, hasPts: !!brainPts }, timestamp: Date.now() }) }).catch(() => {});
-  // #endregion
 }
 function shouldPollBrainActivity() {
   const p = $('#brainpanel');
@@ -648,6 +768,7 @@ function announceRace(text, color) {
   span.classList.remove('pop');
   void span.offsetWidth;
   span.classList.add('pop');
+  if (text === 'GO!') raceAudio?.playGong();
 }
 const announceNdc = new THREE.Vector3();
 function pinRaceAnnounce() {
@@ -716,21 +837,361 @@ function showRaceOverlayCard(card, { flyColor } = {}) {
   void overlay.offsetWidth;
   overlay.classList.add('show');
 }
-function showRaceStart() {
+function maybeLobbyTick() {
+  if (matchPhase !== 'lobby' || !betClosesAt) return;
+  const left = Math.max(0, Math.ceil((betClosesAt - Date.now()) / 1000));
+  if (left < 1 || left > 5) { lastLobbyTickSec = null; return; }
+  if (lastLobbyTickSec === left) return;
+  lastLobbyTickSec = left;
+  raceAudio?.playLobbyTick(left);
+}
+function cueSelectedTakeoff(f) {
+  if (!isRace || !f || f.id !== selected) return;
+  const prev = f.prev, cur = f.last;
+  if (!cur) return;
+  if ((!prev?.flying && cur.flying) || (!prev?.takeoffPending && cur.takeoffPending)) raceAudio?.playTakeoff();
+}
+function lobbyClockLabel() {
+  if (betClosesAt == null) return 'Waiting for betting to open…';
+  const left = Math.max(0, Math.ceil((betClosesAt - Date.now()) / 1000));
+  return `Bets close in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+}
+function poolRowsHtml(list = flies) {
+  const total = poolSnap.reduce((s, p) => s + Number(p.display || 0), 0);
+  return `<div id="betRows" class="bet-rows">${list.map(f => {
+    const p = poolSnap.find(x => x.id === f.id);
+    const amt = p ? Number(p.display || 0) : 0;
+    const odds = amt > 0 && total > 0 ? (total / amt).toFixed(2) + '×' : '—';
+    const on = betFlyId === f.id ? ' on' : '';
+    return `<button type="button" class="bet-fly${on}" data-fly="${f.id}" style="--fly:${f.color}"><b>${f.name}</b><span>${amt} CHIP</span><i>${odds}</i></button>`;
+  }).join('')}</div>`;
+}
+async function refreshPoolSnap() {
+  if (!chainConfigured() || !matchId || Date.now() - lastPoolRead < 2000) return;
+  lastPoolRead = Date.now();
+  try { poolSnap = await readPools(matchId, flies.map(f => f.id)); }
+  catch { /* offline pool */ }
+}
+// #region agent log
+function dbg(location, message, data, hypothesisId = 'C') {
+  if (matchLink?.sendLog({ location, message, data, hypothesisId })) return true;
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',runId:'post-fix',location,message,data,hypothesisId,timestamp:Date.now()})}).catch(()=>{});
+  return true;
+}
+setDebugSink(dbg);
+// #endregion
+function shortAddr(a) {
+  return a ? a.slice(0, 6) + '…' + a.slice(-4) : 'Connect';
+}
+function matchWhen(id) {
+  const n = Number(id);
+  if (!Number.isFinite(n) || n < 1e12) return '—';
+  return new Date(n).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+// Fly ids are reshuffled onto names each race, so a ticket must keep the identity it was bet on.
+function readRaceFlies() {
+  try { return JSON.parse(localStorage.getItem(RACE_FLIES_KEY) || '{}'); } catch { return {}; }
+}
+function rememberRaceFlies() {
+  if (!matchId || !flies.length) return;
+  const key = `${matchId}:${flies.map(f => f.id + f.name).join(',')}`;
+  if (key === lastRaceFliesKey) return;
+  lastRaceFliesKey = key;
+  const all = readRaceFlies();
+  all[matchId] = flies.map(f => [f.id, f.name, f.color]);
+  for (const k of Object.keys(all).sort((a, b) => Number(a) - Number(b)).slice(0, -24)) delete all[k];
+  try { localStorage.setItem(RACE_FLIES_KEY, JSON.stringify(all)); } catch { /* storage full */ }
+}
+function flyTag(flyId, id = matchId) {
+  const saved = readRaceFlies()[id]?.find(r => r[0] === flyId);
+  const f = saved ? null : flies.find(x => x.id === flyId);
+  const name = saved?.[1] || f?.name || RACE_NAMES[flyId] || `Fly ${flyId}`;
+  const color = saved?.[2] || f?.color || FLY_COLORS[flyId] || 'currentColor';
+  return `<span class="tk-fly" style="--fly:${color}">${name}</span>`;
+}
+async function connectFromUi(fn = connectWallet) {
+  const note = $('#betNote') || $('#profileNote');
+  try {
+    if (note) note.textContent = 'Check your wallet…';
+    await fn();
+    if (note) note.textContent = '';
+    if (matchPhase === 'lobby') paintLobbyOverlay(true);
+    if (matchPhase === 'results') paintResultActions(matchId);
+    await refreshProfile();
+  } catch (e) {
+    // #region agent log
+    dbg('arena.js:connectFromUi', 'connect failed', { err: e?.shortMessage || e?.message || String(e) }, 'A');
+    // #endregion
+    if (note) note.textContent = e.shortMessage || e.message || String(e);
+  }
+}
+function clearWalletUi() {
+  disconnectWallet();
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',runId:'post-fix',location:'arena.js:clearWalletUi',message:'disconnect',data:{phase:matchPhase,acct:getAccount()},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  refreshProfile();
+  if (matchPhase === 'lobby') paintLobbyOverlay(true);
+  if (matchPhase === 'results') paintResultActions(matchId);
+}
+function injectResultActions(id) {
+  const host = $('#raceCard .bet-actions');
+  if (!host) return;
+  if (resultActions.key.split(':')[0] !== String(id)) { host.innerHTML = ''; return; }
+  host.innerHTML = (resultActions.claim ? '<button id="betClaim" class="primary" type="button">Claim</button>' : '')
+    + (resultActions.refund ? '<button id="betRefund" type="button">Refund</button>' : '');
+  const claim = host.querySelector('#betClaim');
+  if (claim) claim.onclick = () => runBetTx(() => claimRace(id));
+  const refund = host.querySelector('#betRefund');
+  if (refund) refund.onclick = () => runBetTx(() => refundRace(id));
+  const note = $('#raceCard #betNote');
+  if (note && resultActions.note != null) note.textContent = resultActions.note;
+}
+async function paintResultActions(id) {
+  const acct = getAccount();
+  const key = `${id}:${acct || '0'}:${poolStatus}`;
+  if (resultActions.key !== key) {
+    let claim = false, refund = false, status = null, stakeAll = 0n;
+    if (acct && id && chainConfigured()) {
+      try {
+        const info = await readRace(id);
+        status = info.status;
+        if (status === 3 || status === 4) {
+          const [mine, done] = await Promise.all([userTotal(id, acct), isClaimed(id, acct)]);
+          stakeAll = mine;
+          // winnerFly 0 is a real fly, so never test it for truthiness.
+          const winStake = status === 3 ? await userStake(id, acct, info.winnerFly) : 0n;
+          claim = status === 3 && !done && winStake > 0n && info.winningPool > 0n;
+          refund = !done && mine > 0n && (status === 4 || info.winningPool === 0n);
+        }
+      } catch { /* pool offline */ }
+    }
+    // The #raceReset line already says we are settling, so only speak up when there is money to take.
+    const note = claim ? 'You won — claim your payout.' : (refund ? 'Race voided — take your refund.' : '');
+    resultActions = { key, claim, refund, note };
+    // #region agent log
+    dbg('arena.js:paintResultActions', 'claim/refund visibility', { id, acct: acct ? acct.slice(0, 10) : null, status, claim, refund, stake: String(stakeAll) }, 'D');
+    // #endregion
+  }
+  injectResultActions(id);
+}
+function wireLobbyCard(card) {
+  card.querySelectorAll('.bet-fly').forEach(b => {
+    b.onclick = () => { betFlyId = +b.dataset.fly; paintLobbyOverlay(true); };
+  });
+  const connect = card.querySelector('#betConnect');
+  if (connect) connect.onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
+  const disc = card.querySelector('#betDisconnect');
+  if (disc) disc.onclick = () => clearWalletUi();
+  const bet = card.querySelector('#betPlace');
+  if (bet) bet.onclick = () => runBetTx(async () => {
+    const amt = +card.querySelector('#betAmt')?.value || 10;
+    const fly = betFlyId ?? flies[0]?.id;
+    if (fly == null) throw new Error('Pick a fly');
+    await placeBet(matchId, fly, amt);
+    lastPoolRead = 0; await refreshPoolSnap(); paintLobbyOverlay(true); await refreshProfile();
+  });
+}
+async function runBetTx(fn) {
+  const note = $('#betNote') || $('#profileNote');
+  try {
+    await ensureWallet();
+    if (note) note.textContent = 'Confirm in wallet…';
+    // #region agent log
+    dbg('arena.js:runBetTx', 'tx start', { acct: getAccount()?.slice(0, 10), phase: matchPhase, matchId }, 'E');
+    // #endregion
+    await fn();
+    if (note) note.textContent = 'Done.';
+    await refreshProfile();
+  } catch (e) {
+    // #region agent log
+    dbg('arena.js:runBetTx', 'tx failed', { acct: getAccount()?.slice(0, 10), phase: matchPhase, matchId, err: e?.shortMessage || e?.reason || e?.message || String(e) }, 'G');
+    // #endregion
+    if (note) note.textContent = e.shortMessage || e.message || String(e);
+  }
+}
+async function refreshProfile() {
+  const el = $('#profile');
+  if (!el || el.hidden) return;
+  const seq = ++profileSeq;
+  const connect = $('#profileConnect');
+  const disc = $('#profileDisconnect');
+  const acct = getAccount();
+  if (connect) connect.textContent = shortAddr(acct);
+  if (disc) disc.hidden = !acct;
+  const bal = $('#profileBal'), list = $('#profileTickets');
+  if (!chainConfigured()) {
+    if (bal) bal.textContent = 'Pool not configured';
+    if (list) list.innerHTML = '';
+    return;
+  }
+  if (!acct) {
+    profileAcct = null;
+    if (bal) bal.textContent = 'Connect a wallet';
+    if (list) list.innerHTML = '';
+    return;
+  }
+  if (acct !== profileAcct) {          // a switch must not leave the old wallet's tickets on screen
+    profileAcct = acct;
+    if (bal) bal.textContent = 'Loading…';
+    if (list) list.innerHTML = '<li>Loading…</li>';
+  }
+  try {
+    const [chips, hist, stake] = await Promise.all([
+      readBalance(acct),
+      loadHistory(acct),
+      matchId ? userTotal(matchId, acct) : 0n,
+    ]);
+    if (seq !== profileSeq) return;    // a newer refresh already owns the panel
+    if (bal) bal.textContent = `${Number(chips).toFixed(1)} CHIP` + (stake && stake > 0n ? ` · this race ${Number(chipFmt(stake)).toFixed(1)}` : '');
+    if (list) {
+      list.innerHTML = hist.slice(0, 8).map(r => {
+        const act = r.outcome === 'unclaimed' ? `<button type="button" data-claim="${r.matchId}">Claim</button>`
+          : (r.outcome === 'void' ? `<button type="button" data-refund="${r.matchId}">Refund</button>` : '');
+        const win = r.payout != null && Number(r.payout) > 0 && r.outcome !== 'lost' ? ` +${Number(r.payout).toFixed(1)}` : '';
+        return `<li><b>${matchWhen(r.matchId)}</b>${flyTag(r.flyId, r.matchId)}<span>${Number(r.amount).toFixed(1)}</span><i>${r.outcome}${win}</i>${act}</li>`;
+      }).join('') || '<li>No tickets yet</li>';
+      list.querySelectorAll('[data-claim]').forEach(b => { b.onclick = () => runBetTx(() => claimRace(+b.dataset.claim)); });
+      list.querySelectorAll('[data-refund]').forEach(b => { b.onclick = () => runBetTx(() => refundRace(+b.dataset.refund)); });
+    }
+  } catch (e) {
+    if (seq !== profileSeq) return;
+    if (bal) bal.textContent = e.shortMessage || e.message || String(e);
+  }
+}
+function paintLobbyOverlay(force = false) {
+  const card = $('#raceCard');
+  if (!card) return;
+  const clock = lobbyClockLabel();
+  const acct = getAccount();
+  const kind = `${isWatch ? 'w' : 'h'}:${matchId}:${acct || '0'}:${poolStatus}:${flies.map(f => f.id).join(',')}`;
+  const skip = !force && card.dataset.kind === 'lobby' && lastLobbyKind === kind && card.querySelector('#lobbyClock');
+  // #region agent log
+  if (force || !skip) fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',location:'arena.js:paintLobbyOverlay',message:'lobby paint',data:{force,skip,acct:acct?acct.slice(0,10):null,kind,btn:$('#betConnect')?.textContent},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  if (skip) {
+    const el = card.querySelector('#lobbyClock'); if (el) el.textContent = clock;
+    const key = poolSnap.map(p => p.id + ':' + (p.display || '0')).join('|');
+    const rows = card.querySelector('#betRows');
+    if (rows && key !== lastPoolKey) {
+      lastPoolKey = key;
+      rows.outerHTML = poolRowsHtml();
+      wireLobbyCard(card);
+    }
+    maybeLobbyTick();
+    return;
+  }
+  lastLobbyKind = kind;
+  lastPoolKey = poolSnap.map(p => p.id + ':' + (p.display || '0')).join('|');
+  card.dataset.kind = 'lobby';
+  rememberRaceFlies();
+  if (isWatch) {
+    // Unknown status with a running clock means no operator is reporting: let them try anyway.
+    const open = !chainConfigured() || poolStatus === 1 || (poolStatus == null && betClosesAt != null);
+    const note = !chainConfigured() ? 'Pool not configured (set VITE_POOL).'
+      : (open ? 'Pick a fly, then Bet.' : 'Opening the race on-chain…');
+    card.innerHTML = `<h1>Odor race</h1><p>Winner pool — first to the vinegar</p>
+      <p class="sub" id="lobbyClock">${clock}</p>
+      ${poolRowsHtml()}
+      <div class="bet-stake"><input id="betAmt" type="number" min="1" value="10"><span>CHIP</span>
+        <button id="betConnect" type="button">${shortAddr(acct)}</button>
+        ${acct ? '<button id="betDisconnect" class="danger" type="button">Disconnect</button>' : ''}
+        <button id="betPlace" class="primary" type="button"${open ? '' : ' disabled'}>Bet</button></div>
+      <p id="betNote" class="flyt">${note}</p>`;
+  } else {
+    card.innerHTML = `<h1>Odor race</h1><p>First to the vinegar wins!</p>
+      <p class="sub" id="lobbyClock">${clock}</p>
+      <p class="flyt">Race starts itself — no GO</p>
+      ${poolRowsHtml()}${raceHistoryHtml(loadRaceHistory())}`;
+  }
+  showRaceOverlayCard(card);
+  wireLobbyCard(card);
+  maybeLobbyTick();
+  if (isWatch) refreshProfile();
+  card.onpointerdown = e => {
+    if (e.target.closest('button, input')) return;
+    raceAudio?.unlock().then(() => raceAudio?.playBed('menu'));
+  };
+}
+// The countdown starts only once bets can actually be placed, so nobody loses window time.
+function armBetWindow() {
+  if (betWindowArmed || matchPhase !== 'lobby') return;
+  betWindowArmed = true;
+  betClosesAt = Date.now() + betWindowSec * 1000;
+  // #region agent log
+  dbg('arena.js:armBetWindow', 'bet window armed', { matchId, poolStatus, waited: Date.now() - lobbyStartedAt }, 'H');
+  // #endregion
+  paintLobbyOverlay(true);
+  publishMatchState(true);
+}
+async function tickLobby() {
+  if (matchPhase !== 'lobby') return;
+  if (isHost && !betWindowArmed && Date.now() - lobbyStartedAt > OPEN_GRACE_MS) armBetWindow();
+  await refreshPoolSnap();
+  paintLobbyOverlay();
+  maybeLobbyTick();
+  publishMatchState();
+  if (isHost && betClosesAt && Date.now() >= betClosesAt) {
+    clearInterval(lobbyTimer); lobbyTimer = null;
+    await goLiveFromLobby();
+  }
+}
+async function goLiveFromLobby() {
+  if (matchPhase !== 'lobby') return;
+  if (isHost && chainConfigured() && getAccount()) {
+    try { await lockRace(matchId); } catch (e) { console.warn('lockRace', e); }
+  }
+  startRace();
+}
+async function openHostRace() {
+  if (!isHost || !chainConfigured() || !getAccount()) return;
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',runId:'post-fix',location:'arena.js:openHostRace',message:'openRace',data:{matchId,flies:flies.map(f=>f.id),acct:getAccount()?.slice(0,10)},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+  await openRace(matchId, flies.map(f => f.id));
+}
+async function settleHostRace(winnerId) {
+  if (chainSettled || !isHost || !chainConfigured() || !getAccount()) return;
+  chainSettled = true;
+  try { await settleRace(matchId, winnerId); }
+  catch (e) {
+    console.warn('settleRace', e);
+    try { await voidRace(matchId); }
+    catch (e2) { chainSettled = false; console.warn('voidRace', e2); }
+  }
+}
+async function showRaceStart() {
   matchPhase = 'lobby';
   matchResetIn = null;
   raceWinner = null;
+  chainSettled = false;
+  matchId = Date.now();
+  lastLobbyKind = '';
+  betFlyId = null;
+  poolStatus = null;
+  betWindowArmed = false;
+  lobbyStartedAt = Date.now();
+  resultsAt = 0;
+  settledAt = 0;
+  resultActions = { key: '', claim: false, refund: false, note: '' };
+  clearInterval(lobbyTimer); lobbyTimer = null;
+  // Clear the old clock before any await, or the previous race's countdown shows for a frame.
+  betClosesAt = null;
+  betWindowArmed = false;
+  lastPoolRead = 0;
+  poolSnap = flies.map(f => ({ id: f.id, amount: '0', display: '0' }));
+  paintLobbyOverlay(true);
   publishMatchState(true);
-  if (isWatch) return showWatchWaiting('Waiting for the next race');
-  const card = $('#raceCard');
-  card.innerHTML = `<h1>Odor race</h1><p>First to the vinegar wins!</p><button id="raceStart" class="primary">GO!</button>${raceHistoryHtml(loadRaceHistory())}`;
-  $('#raceStart').onclick = startRace;
-  card.onpointerdown = e => {
-    if (e.target.closest('button')) return;
-    raceAudio?.unlock().then(() => raceAudio?.playBed('menu'));
-  };
+  let windowSec = DEFAULT_WINDOW;
+  try { windowSec = await readWindow(); } catch { /* local default */ }
+  betWindowSec = windowSec;
+  if (!chainConfigured()) { betWindowArmed = true; betClosesAt = Date.now() + windowSec * 1000; }
+  paintLobbyOverlay(true);
   raceAudio?.unlock().then(() => raceAudio?.playBed('menu'));
-  showRaceOverlayCard(card);
+  lobbyTimer = setInterval(() => { tickLobby(); }, 250);
+  publishMatchState(true);
+  if (isHost && chainConfigured()) openHostRace().catch(e => console.warn('openRace', e));
+  refreshPoolSnap().then(() => paintLobbyOverlay());
 }
 function formatWall(ms) {
   const s = Math.max(0, ms / 1000);
@@ -747,9 +1208,6 @@ function paintRaceClock(wall, fly) {
   $('#raceFly').textContent = fly + ' s fly time';
 }
 function startRace() {
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId: 'A', location: 'arena.js:startRace', message: 'host startRace', data: { isHost, isWatch, hasLink: !!matchLink, matchId, matchPhase, flies: flies.length }, timestamp: Date.now() }) }).catch(() => {});
-  // #endregion
   const overlay = $('#raceOverlay');
   overlay.classList.remove('show');
   overlay.hidden = true;
@@ -757,8 +1215,8 @@ function startRace() {
   paintRaceClock('0.0 s', '0.0');
   running = true;
   matchPhase = 'live';
-  matchId += 1;
   matchResetIn = null;
+  clearInterval(lobbyTimer); lobbyTimer = null;
   raceAudio?.unlock().then(() => raceAudio?.playBed('race'));
   for (const f of flies) f.worker?.postMessage({ type: 'run' });
   announceRace('GO!');
@@ -770,7 +1228,9 @@ function announceRaceWinner(f, why) {
   raceWinner = f;
   raceWinnerWhy = why || null;
   matchPhase = 'results';
-  matchResetIn = 10;
+  matchResetIn = null;
+  resultsAt = Date.now();
+  settledAt = 0;
   const wall = formatWall(performance.now() - (raceStartWall || performance.now()));
   const fly = flySecs(f);
   paintRaceClock(wall, fly);
@@ -782,12 +1242,22 @@ function announceRaceWinner(f, why) {
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   const card = $('#raceCard');
   const note = why === 'last' ? 'last remaining' : why === 'died' ? 'last to die' : '';
-  let left = 10;
-  const paint = () => { card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${wall}</p><p class="flyt">${fly} s fly</p>${raceHistoryHtml(hist)}<p>Resetting in ${left}…</p>`; matchResetIn = left; publishMatchState(true); };
-  paint();
+  card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${wall}</p><p class="flyt">${fly} s fly</p>${raceHistoryHtml(hist)}<p id="raceReset">${settleNote()}</p>`;
+  publishMatchState(true);
   showRaceOverlayCard(card, { flyColor: f.color });
+  settleHostRace(f.id);
   clearInterval(raceResetTimer);
-  raceResetTimer = setInterval(() => { left -= 1; if (left <= 0) { clearInterval(raceResetTimer); raceResetTimer = null; resetRace(); } else paint(); }, 1000);
+  // The next lobby waits for the match to settle on-chain, not for a countdown.
+  raceResetTimer = setInterval(() => {
+    const el = $('#raceReset'); if (el) el.textContent = settleNote();
+    publishMatchState();
+    if (!readyForNextRace()) return;
+    clearInterval(raceResetTimer); raceResetTimer = null;
+    // #region agent log
+    dbg('arena.js:announceRaceWinner', 'results -> next lobby', { poolStatus, settleMs: settledAt ? settledAt - resultsAt : null, heldMs: Date.now() - resultsAt }, 'I');
+    // #endregion
+    resetRace();
+  }, 1000);
 }
 function checkRaceFinish(f) {
   if (!running || raceWinner || raceResetting) return;
@@ -825,7 +1295,7 @@ async function resetRace() {
   rebuildEnv();
   await spawnPresetFlies();
   await waitRacePoses();
-  showRaceStart();
+  await showRaceStart();
   raceResetting = false;
 }
 function easeOutBack(t, s = 1.7) { const u = t - 1; return u * u * ((s + 1) * u + s) + 1; }
@@ -837,8 +1307,10 @@ function chaseCam(f, outPos, outTarget) {
 }
 const chasePos = new THREE.Vector3(), chaseTarget = new THREE.Vector3();
 function startRaceFollow(id) {
+  const same = isRace && raceFollow === id;
   selected = id;
   if (!isRace) { renderFlyList(); return; }
+  if (!same) raceAudio?.playSelect(id);
   raceFollow = id;
   raceCamTween = { mode: 'in', t: 0, dur: 0.55, fromPos: camera.position.clone(), fromTarget: controls.target.clone() };
   renderFlyList();

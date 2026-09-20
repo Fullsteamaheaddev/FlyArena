@@ -12,6 +12,10 @@ Upstream: [Lulzx/fly-brain](https://github.com/Lulzx/fly-brain). Browser sim of 
 npm install
 npm run dev                  # Vite; COOP/COEP headers in vite.config.js
 npm run relay                # Match WebSocket (host/watch); ws://localhost:8787
+npm run compile:contracts    # PlayChip + RacePool
+npm run chain                # local Hardhat (31337)
+npm run deploy:local         # write contracts/deployments/31337.json
+npm run deploy:robinhood-testnet # PlayChip + RacePool on Robinhood testnet (46630)
 ```
 
 | URL | App |
@@ -22,6 +26,7 @@ npm run relay                # Match WebSocket (host/watch); ws://localhost:8787
 | `/arena.html?env=courtship` | Preset (`foraging` default; see `PRESETS` in `src/sim/world.js`) |
 | `/arena.html?env=race` | Odor race (this machine runs it) |
 | `/watch` | Live spectator view of that race |
+| `/admin` | Race pool owner (token, window, operator, mint); UI only after owner wallet connects |
 | `/fly.html` | Anatomy / Blender fly (`src/fly.js`) |
 | `/structures.html` | Algorithmic structures (`src/structures.js`) |
 | `/textbook/` | Textbook reader (`src/textbook.js`) |
@@ -158,7 +163,7 @@ Roadmap (do not start unless asked): `docs/20-roadmap.md` — loom/feeding pathw
 - MN9 leaks from olfaction → walking with proboscis out is known.
 - Physics XML masses/inertias are exact; visual meshes are decimated separately.
 - Worker `foodEaten` is a delta each pose; main thread must broadcast consumption back.
-- Odor race (`?env=race`) is a game shell: hides `#panel`, left `#scoreboard` (clock/names), right `#brainpanel` (selected fly eyes + traces + inset), dusty-purple plate floor and matching wall (eye checker unchanged), Start overlay, winner = thorax inside centre food disc or last remaining / last to die (wall-clock time, fly-time smaller), last 3 winners in `localStorage` (`odorRaceResults`), then 10s in-page respawn at rim spots. Race flies start hungry (`env.hungryForage`) and forage on vinegar; they do not visually home. Start unlocks race audio (`src/race-audio.js`: music bed; walk ticks and 218 Hz buzz follow the selected fly); `public/yipee.wav` on a finish. Vinegar is a centre disc (σ ≈ 1) plus overlapping elongated lane trails (stronger toward the food); `windRadial` blows toward the origin. Race workers burst 16/16. Do not treat it as a lab preset. Live watchers: `npm run relay`, host at `/arena.html?env=race`, spectators at `/watch`.
+- Odor race (`?env=race`) is a game shell: hides `#panel`, left `#scoreboard` (clock/names), right `#brainpanel` (selected fly eyes + traces + inset), dusty-purple plate floor and matching wall (eye checker unchanged), auto lobby (no GO; default 45s then lock + start), winner = thorax inside centre food disc or last remaining / last to die (wall-clock time, fly-time smaller), last 3 winners in `localStorage` (`odorRaceResults`), then 10s in-page respawn at rim spots. Race flies start hungry (`env.hungryForage`) and forage on vinegar; they do not visually home. Lobby unlocks race audio (`src/race-audio.js`: music bed; walk ticks and 218 Hz buzz follow the selected fly); `public/gong.wav` on the in-scene GO announcement; `public/yipee.wav` on a finish. Vinegar is a centre disc (σ ≈ 1) plus overlapping elongated lane trails (stronger toward the food); `windRadial` blows toward the origin. Race workers burst 16/16. Do not treat it as a lab preset. Live watchers: `npm run relay`, host at `/arena.html?env=race`, spectators at `/watch` (winner-pool bets in the lobby overlay; `#profile` bottom-right). On-chain pool: `PlayChip` + `RacePool` (Hardhat; `npm run compile:contracts` / `deploy:local` / `deploy:robinhood-testnet`). Default chain Robinhood testnet (`46630`); fallback addresses in `contracts/deployments/46630.json`. Vite env `VITE_CHAIN_ID`, `VITE_POOL`, `VITE_CHIP`, `VITE_RPC`. Owner admin at `/admin` (token, window, operator, mint) — controls stay hidden until the connected wallet is `owner()`. Host wallet is the operator (open/lock/settle/void). Watchers do not need SharedArrayBuffer.
 
 ---
 

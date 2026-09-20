@@ -1,7 +1,7 @@
 // Race-only sounds: menu/race looping beds, wing buzz, foot ticks; Yipee.wav on a win.
-export function createRaceAudio(yipeeUrl) {
-  let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf;
-  let currentBed = null, lastStep = 0, muted = false;
+export function createRaceAudio(yipeeUrl, gongUrl) {
+  let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf;
+  let currentBed = null, lastStep = 0, muted = false, keepOsc = null;
 
   async function unlock() {
     if (!ctx) {
@@ -20,6 +20,12 @@ export function createRaceAudio(yipeeUrl) {
         const raw = await (await fetch(yipeeUrl)).arrayBuffer();
         yipeeBuf = await ctx.decodeAudioData(raw.slice(0));
       } catch { yipeeBuf = null; }
+    }
+    if (gongUrl && !gongBuf) {
+      try {
+        const raw = await (await fetch(gongUrl)).arrayBuffer();
+        gongBuf = await ctx.decodeAudioData(raw.slice(0));
+      } catch { gongBuf = null; }
     }
   }
   function startBuzz() {
@@ -86,9 +92,45 @@ export function createRaceAudio(yipeeUrl) {
     el.play().catch(() => done());
     setTimeout(done, 4000);
   }
+  function playGong() {
+    duck(true);
+    const done = () => duck(false);
+    if (ctx && gongBuf) {
+      const src = ctx.createBufferSource(), g = ctx.createGain();
+      g.gain.value = 0.85; src.buffer = gongBuf; src.connect(g); g.connect(master);
+      src.onended = done;
+      src.start();
+      setTimeout(done, (gongBuf.duration + 0.4) * 1000);
+      return;
+    }
+    if (!gongUrl) { done(); return; }
+    const el = new Audio(gongUrl); el.volume = 0.8;
+    el.onended = done;
+    el.play().catch(() => done());
+    setTimeout(done, 4000);
+  }
   function setMuted(v) {
     muted = v;
     if (master && ctx) master.gain.setTargetAtTime(v ? 0 : 1, ctx.currentTime, 0.04);
+  }
+  // Inaudible tone that bypasses mute so Chrome does not freeze a background host tab.
+  function hold(on) {
+    if (!ctx) return;
+    if (!on) {
+      try { keepOsc?.stop(); } catch {}
+      keepOsc = null;
+      return;
+    }
+    if (keepOsc) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const osc = ctx.createOscillator();
+    osc.frequency.value = 18000;
+    const g = ctx.createGain();
+    g.gain.value = 0.0004;
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start();
+    keepOsc = osc;
   }
   function setMotion({ flying, walk }) {
     if (!ctx || ctx.state !== 'running' || muted) return;
@@ -128,7 +170,41 @@ export function createRaceAudio(yipeeUrl) {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.07, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
     o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.13);
   }
-  return { unlock, playBed, stop, playYipee, playOof, setMuted, setMotion };
+  function playSelect(id = 0) {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const f0 = 720 * Math.pow(2, ((id % 6) / 12));
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f0 * 1.7, t0 + 0.07);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.09, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.11);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.12);
+  }
+  function playTakeoff() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(180, t0); o.frequency.exponentialRampToValueAtTime(980, t0 + 0.22);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 1.4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.08, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28);
+    o.connect(bp); bp.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.3);
+  }
+  function playLobbyTick(left = 5) {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const f0 = 520 + (6 - Math.min(5, Math.max(1, left))) * 90;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f0 * 0.7, t0 + 0.06);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.08, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.09);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.1);
+  }
+  return { unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, setMuted, setMotion, hold };
 }
 
 function makeMusicBuffer(ctx) {

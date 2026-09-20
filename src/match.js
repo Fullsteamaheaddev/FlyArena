@@ -16,51 +16,27 @@ export function matchUrl() {
   return `${proto}//${location.hostname}:8787`;
 }
 
-function dbg(hypothesisId, location, message, data) {
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' }, body: JSON.stringify({ sessionId: '6b97f7', hypothesisId, location, message, data, timestamp: Date.now() }) }).catch(() => {});
-  // #endregion
-}
-
-export function createMatchLink({ role, onState, onStatus }) {
-  let ws, alive = true, timer = null, lastMsgLog = 0, skipLogged = false;
+export function createMatchLink({ role, onState, onStatus, onPool }) {
+  let ws, alive = true, timer = null;
   function connect() {
     if (!alive) return;
     const url = matchUrl();
-    // #region agent log
-    dbg('B', 'match.js:connect', 'ws connecting', { role, url, href: location.href });
-    // #endregion
     try { ws = new WebSocket(url); }
-    catch (err) {
-      // #region agent log
-      dbg('B', 'match.js:connect', 'ws construct failed', { role, url, err: String(err) });
-      // #endregion
+    catch {
       onStatus?.('offline'); timer = setTimeout(connect, 1500); return;
     }
     ws.onopen = () => {
-      // #region agent log
-      dbg('B', 'match.js:onopen', 'ws open, sending hello', { role, url });
-      // #endregion
       ws.send(JSON.stringify({ type: 'hello', role }));
       onStatus?.('live');
     };
     ws.onmessage = e => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
-      const now = Date.now();
-      if (msg.type !== 'state' || now - lastMsgLog > 2000) {
-        lastMsgLog = now;
-        // #region agent log
-        dbg('D', 'match.js:onmessage', 'ws message', { role, type: msg.type, phase: msg.phase, flies: msg.flies?.length, bodyNames: msg.bodyNames?.length, error: msg.error, hasOnState: !!onState });
-        // #endregion
-      }
       if (msg.type === 'state') onState?.(msg);
+      if (msg.type === 'pool') onPool?.(msg);
       if (msg.type === 'error') onStatus?.(msg.error);
     };
-    ws.onclose = ev => {
-      // #region agent log
-      dbg('B', 'match.js:onclose', 'ws closed', { role, code: ev.code, reason: ev.reason });
-      // #endregion
+    ws.onclose = () => {
       onStatus?.('offline');
       if (alive) timer = setTimeout(connect, 1500);
     };
@@ -69,26 +45,16 @@ export function createMatchLink({ role, onState, onStatus }) {
   connect();
   return {
     sendState(state) {
-      const ready = ws?.readyState;
-      if (ready !== 1) {
-        if (!skipLogged) {
-          skipLogged = true;
-          // #region agent log
-          dbg('C', 'match.js:sendState', 'skip send, socket not open', { ready, phase: state?.phase, flies: state?.flies?.length });
-          // #endregion
-        }
-        return;
-      }
-      skipLogged = false;
+      if (ws?.readyState !== 1) return;
       ws.send(JSON.stringify(state));
-      const nowSend = Date.now();
-      if (nowSend - lastMsgLog > 2000) {
-        lastMsgLog = nowSend;
-        // #region agent log
-        dbg('C', 'match.js:sendState', 'sent state', { role, phase: state?.phase, flies: state?.flies?.length, matchId: state?.matchId });
-        // #endregion
-      }
     },
+    // #region agent log
+    sendLog(payload) {
+      if (ws?.readyState !== 1) return false;
+      ws.send(JSON.stringify({ type: 'log', ...payload }));
+      return true;
+    },
+    // #endregion
     close() {
       alive = false;
       clearTimeout(timer);
@@ -113,14 +79,17 @@ export function unpackAct(b64, dest) {
   return true;
 }
 
-export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, resetIn, why, selected, eyes, groups, act }) {
+export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, resetIn, why, selected, eyes, groups, act, betClosesAt, pools }) {
   return {
     type: 'state',
     matchId,
+    flyIds: flies.map(f => f.id),
     phase,
     clock,
     bodyNames: bodyNames || null,
     resetIn: resetIn ?? null,
+    betClosesAt: betClosesAt ?? null,
+    pools: pools || [],
     winner: winner ? { id: winner.id, name: winner.name, color: winner.color, why: why || null } : null,
     selected: selected ?? null,
     eyes: eyes || null,
@@ -140,6 +109,7 @@ export function buildMatchState({ matchId, phase, flies, clock, winner, bodyName
       energy: f.last.energy,
       health: f.last.health,
       flying: !!f.last.flying,
+      takeoffPending: !!f.last.takeoffPending,
       cmd: f.last.cmd || null,
       behavior: f.last.behavior || '',
     })),

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Race pool admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/src/style.css" />
+<link rel="stylesheet" href="/src/arena.css" />
+</head>
+<body class="race admin">
+<main id="admin">
+  <h1>Odor race pool</h1>
+  <p class="sub">Connect the owner wallet to set chip token, betting window, operator, and mint faucet chips.</p>
+  <p id="adminStatus">Connect the owner wallet.</p>
+  <div class="row"><button id="adminConnect" class="primary">Connect</button></div>
+  <div id="adminPanel" hidden>
+    <section>
+      <h2>Pool</h2>
+      <div class="kv" id="adminInfo"></div>
+    </section>
+    <section>
+      <h2>Window (seconds)</h2>
+      <div class="row"><input id="adminWindow" type="number" min="10" max="600" value="45"><button id="adminSetWindow">Save window</button></div>
+    </section>
+    <section>
+      <h2>Stake token</h2>
+      <div class="row"><input id="adminToken" type="text" placeholder="0x…" style="width:28em"><button id="adminSetToken">Set token</button></div>
+    </section>
+    <section>
+      <h2>Operator</h2>
+      <p class="note">The host tab should use this wallet so open/lock/settle are automatic.</p>
+      <div class="row"><input id="adminOp" type="text" placeholder="0x…" style="width:28em"><button id="adminSetOp">Set operator</button></div>
+    </section>
+    <section>
+      <h2>Faucet mint</h2>
+      <div class="row"><input id="adminMintTo" type="text" placeholder="to 0x…" style="width:28em"><input id="adminMintAmt" type="number" min="1" value="100"><button id="adminMint">Mint CHIP</button></div>
+    </section>
+  </div>
+</main>
+<script type="module" src="/src/admin.js"></script>
+</body>
+</html>

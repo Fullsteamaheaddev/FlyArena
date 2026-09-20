@@ -4,7 +4,7 @@ import { FlyAgent } from './fly.js';
 import { attachBrain, attachEyes } from '../brainsetup.js';
 import { buildGroups, GroupMeter } from './groups.js';
 
-let fly = null, meter = null, running = false, speed = 1, others = [], env = null, lastReal = 0, simAhead = 0, timer = null;
+let fly = null, meter = null, running = false, speed = 1, others = [], env = null, lastReal = 0, simAhead = 0, timer = null, loopEpoch = 0;
 let burstSteps = 8, burstMs = 8;
 let proxyIds = [], lastPose = -Infinity, loopActive = false;
 const POSE_EVERY = 1000 / 30; // wall ms: twelve workers must not flood the render thread
@@ -27,8 +27,15 @@ onmessage = async (e) => {
     proxyIds = Array.from({ length:m.nProxies }, (_,k) => fly.model.body_mocapid[fly.model.body(`proxy${k}`).id]);
     postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj) });
     postPose();
-    if (running) { lastReal = performance.now(); loop(); }
-  } else if (m.type === 'run') { if (running) return; running = true; lastReal = performance.now(); clearTimeout(timer); if (fly) loop(); }   // before init: loop starts once ready; clearTimeout kills a pending reschedule from a paused loop
+    if (running) { lastReal = performance.now(); loop(loopEpoch); }
+  } else if (m.type === 'run') {
+    loopEpoch++;
+    running = true;
+    lastReal = performance.now();
+    clearTimeout(timer);
+    loopActive = false;
+    if (fly) loop(loopEpoch);
+  }
   else if (m.type === 'pause') { running = false; clearTimeout(timer); }
   else if (m.type === 'speed') speed = m.speed;
   else if (m.type === 'env') { Object.assign(env, m.env); fly.env = env; if (fly.foodEaten.length !== env.food.length) fly.foodEaten = env.food.map(() => 0); }
@@ -56,18 +63,21 @@ function postPose() {
     mn9: fly.motor.mean(fly.motor.muscles.find(x => x.name.startsWith('MN9'))?.idx || []), feeding: fly.motor.feeding(), heat: st.heat || 0, nSensory: fly.driven.length,
     foodEaten: fly.foodEaten.splice(0, fly.foodEaten.length, ...fly.foodEaten.map(() => 0)), behavior: fly.behavior(st), drive: fly.intrinsic?.label(), nm: fly.neuromod?.readout(), flying: fly.flight.active, flights: fly.flights, dist: fly.dist, jumps: fly.jumps, pos: st.pos, yaw: Math.atan2(fly.mjd.xmat[fly.bid.thorax * 9 + 3], fly.mjd.xmat[fly.bid.thorax * 9]) }, [p.xpos.buffer, p.xquat.buffer]);
 }
-async function loop() {
-  if (!running || loopActive) return;
+async function loop(epoch = loopEpoch) {
+  if (!running || epoch !== loopEpoch || loopActive) return;
   loopActive = true;
   const now = performance.now(); simAhead += Math.min(100, now - lastReal) * speed; lastReal = now;
   const t0 = performance.now(); let steps = 0;
   // Bound both CPU bursts and GPU work in flight. An unbounded compute queue stalls WebGL
   // and leaves the motor reading increasingly old brain state when many flies share the GPU.
-  while (running && simAhead >= 1 && steps < burstSteps && performance.now() - t0 < burstMs) { fly.step(); simAhead -= 1; steps++; }
+  while (running && epoch === loopEpoch && simAhead >= 1 && steps < burstSteps && performance.now() - t0 < burstMs) { fly.step(); simAhead -= 1; steps++; }
   fly.brain.flush?.();
   if (steps && fly.brain.device) await fly.brain.device.queue.onSubmittedWorkDone();
+  if (epoch !== loopEpoch) { loopActive = false; return; }
   if (simAhead > 50) simAhead = 50;   // can't keep up: run as fast as possible
   if (steps && (!running || performance.now() - lastPose >= POSE_EVERY)) postPose();
   loopActive = false;
-  if (running) timer = setTimeout(loop, 0);
+  if (running && epoch === loopEpoch) timer = setTimeout(() => loop(epoch), 0);
 }
+// Chrome freezes nested setTimeout(0) in a background host tab; a 1s timer still fires.
+setInterval(() => { if (running && fly && !loopActive) loop(loopEpoch); }, 1000);
