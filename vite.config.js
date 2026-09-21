@@ -14,7 +14,9 @@ const dropUnpacked = { name: 'drop-unpacked-data', apply: 'build', closeBundle()
 const isolation = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' };
 function rewriteWatch(req) {
   const q = req.url.indexOf('?'), path = q < 0 ? req.url : req.url.slice(0, q), qs = q < 0 ? '' : req.url.slice(q);
-  if (/\/watch\/?$/.test(path)) req.url = path.replace(/\/watch\/?$/, '/watch.html') + qs;
+  if (path === '/' || path === '') req.url = '/watch.html' + qs;
+  else if (/\/watch\/?$/.test(path)) req.url = path.replace(/\/watch\/?$/, '/watch.html') + qs;
+  else if (/\/brain\/?$/.test(path)) req.url = path.replace(/\/brain\/?$/, '/index.html') + qs;
   else if (/\/admin\/?$/.test(path)) req.url = path.replace(/\/admin\/?$/, '/admin.html') + qs;
 }
 const watchRoute = {

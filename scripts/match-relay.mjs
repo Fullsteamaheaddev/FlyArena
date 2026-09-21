@@ -21,7 +21,7 @@ for (const name of ['.env', '.env.local']) {
   }
 }
 
-const PORT = Number(process.env.MATCH_PORT || 8787);
+const PORT = Number(process.env.PORT || process.env.MATCH_PORT || 8787);
 const deployed = require('../contracts/deployments/46630.json');
 const poolAbi = require('../src/abi/RacePool.json');
 const POOL = process.env.VITE_POOL || deployed.pool;

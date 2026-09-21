@@ -17,3 +17,4 @@ contracts/artifacts
 deployer-import.txt
 .cursor
 debug-6b97f7.log
+.netlify

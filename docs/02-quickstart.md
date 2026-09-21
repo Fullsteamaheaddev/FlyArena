@@ -11,7 +11,8 @@ npm install
 npm run dev
 ```
 Then open:
-- `http://localhost:5173/` for the connectome viewer
+- `http://localhost:5173/` for the live spectator (watch + bet)
+- `http://localhost:5173/brain` for the connectome viewer
 - `http://localhost:5173/arena.html` for the embodied arena
 - `http://localhost:5173/fly.html` for the interactive Blender-prepared fly. Drag to orbit around the whole body; scroll or pinch to zoom. **Head detail** and **Full body** reposition the same 3D camera. Display controls change sex, wings, backdrop, setae and focus.
 

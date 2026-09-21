@@ -1,0 +1,5 @@
+*
+!scripts/relay-package.json
+!scripts/match-relay.mjs
+!src/abi/RacePool.json
+!contracts/deployments/46630.json

@@ -1,0 +1,9 @@
+{
+  "name": "flyarena-relay",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ethers": "^6.17.0",
+    "ws": "^8.21.3"
+  }
+}

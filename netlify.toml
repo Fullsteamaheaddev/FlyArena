@@ -1,0 +1,45 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Public site is the race spectator (watch + bet). force: dist/index.html would otherwise win at /.
+[[redirects]]
+  from = "/"
+  to = "/watch.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/watch"
+  to = "/"
+  status = 301
+
+[[redirects]]
+  from = "/watch/"
+  to = "/"
+  status = 301
+
+[[redirects]]
+  from = "/brain"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/brain/"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+
+# SharedArrayBuffer for the host sim (watchers do not need it).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"

@@ -1,0 +1,10 @@
+FROM node:20-slim
+WORKDIR /app
+COPY scripts/relay-package.json ./package.json
+COPY scripts/match-relay.mjs ./scripts/
+COPY src/abi/RacePool.json ./src/abi/
+COPY contracts/deployments/46630.json ./contracts/deployments/
+RUN npm install --omit=dev
+ENV NODE_ENV=production
+EXPOSE 8787
+CMD ["node", "scripts/match-relay.mjs"]
