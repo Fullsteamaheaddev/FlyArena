@@ -333,6 +333,7 @@ body.race #profile #profileDisconnect {
   display: inline-flex; align-items: center; justify-content: center;
   height: 24px; box-sizing: border-box;
 }
+body.race #profile #profileDisconnect[hidden] { display: none; }
 body.race #profile #profileBal { margin: 0 0 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 body.race #profile #profileNote { margin: 0 0 8px; color: var(--dim); font-size: 12px; min-height: 1em; }
 body.race #profile #profileTickets { list-style: none; margin: 0; padding: 0; overflow: visible; }
