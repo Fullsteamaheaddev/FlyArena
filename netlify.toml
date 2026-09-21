@@ -7,13 +7,13 @@
 
 [[redirects]]
   from = "/watch"
-  to = "/"
-  status = 301
+  to = "/index.html"
+  status = 200
 
 [[redirects]]
   from = "/watch/"
-  to = "/"
-  status = 301
+  to = "/index.html"
+  status = 200
 
 [[redirects]]
   from = "/brain"
@@ -28,6 +28,16 @@
 [[redirects]]
   from = "/admin"
   to = "/admin.html"
+  status = 200
+
+[[redirects]]
+  from = "/racehost"
+  to = "/arena.html"
+  status = 200
+
+[[redirects]]
+  from = "/racehost/"
+  to = "/arena.html"
   status = 200
 
 # SharedArrayBuffer for the host sim (watchers do not need it).

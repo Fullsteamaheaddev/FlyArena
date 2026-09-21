@@ -15,7 +15,7 @@ import { allocBrainMemory, MAX_FLIES } from './brainsetup.js';
 import { parseFlyVis } from './flyvis.js';
 import { buildGroups } from './sim/groups.js';
 import { createRaceAudio } from './race-audio.js';
-import { matchRole, isWatchPath, matchUrl, createMatchLink, buildMatchState, packAct, unpackAct } from './match.js';
+import { matchRole, isWatchPath, isRaceHostPath, matchUrl, createMatchLink, buildMatchState, packAct, unpackAct } from './match.js';
 import {
   DEFAULT_WINDOW, chainConfigured, connectWallet, disconnectWallet, ensureWallet, restoreWallet, switchAccount, onWalletChange, getAccount, readWindow, readPools,
   openRace, lockRace, settleRace, voidRace, placeBet, claimRace, refundRace,
@@ -27,7 +27,7 @@ const $ = s => document.querySelector(s);
 const status = s => { $('#status').textContent = s; };
 const FLY_COLORS = ['#ffb347', '#5ac8fa', '#a3e635', '#f472b6', '#c084fc', '#facc15', '#fb7185', '#2dd4bf'];
 const RACE_NAMES = ['Amber', 'Blue', 'Lime'];
-const presetKey = isWatchPath() || new URLSearchParams(location.search).get('watch') === '1'
+const presetKey = isWatchPath() || isRaceHostPath() || new URLSearchParams(location.search).get('watch') === '1'
   ? 'race'
   : (new URLSearchParams(location.search).get('env') || 'foraging');
 const PRESET = PRESETS[presetKey] || PRESETS.foraging;

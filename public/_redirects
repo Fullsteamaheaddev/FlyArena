@@ -1,6 +1,8 @@
-/watch  /  301
-/watch/ /  301
+/watch  /index.html  200
+/watch/ /index.html  200
 /brain  /brain.html  200
 /brain/ /brain.html  200
 /admin  /admin.html  200
 /admin/ /admin.html  200
+/racehost  /arena.html  200
+/racehost/ /arena.html  200

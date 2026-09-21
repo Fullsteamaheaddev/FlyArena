@@ -4,10 +4,15 @@ export function isWatchPath() {
   return /(?:^|\/)watch(?:\.html)?$/.test(p);
 }
 
+export function isRaceHostPath() {
+  const p = location.pathname.replace(/\/+$/, '') || '/';
+  return /(?:^|\/)racehost(?:\.html)?$/.test(p);
+}
+
 export function matchRole() {
   const q = new URLSearchParams(location.search);
   if (q.get('watch') === '1' || isWatchPath()) return 'watch';
-  if (q.get('host') === '1') return 'host';
+  if (q.get('host') === '1' || isRaceHostPath()) return 'host';
   return null;
 }
 

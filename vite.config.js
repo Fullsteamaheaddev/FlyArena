@@ -17,6 +17,7 @@ function rewriteWatch(req) {
   if (/\/watch\/?$/.test(path)) req.url = path.replace(/\/watch\/?$/, '/index.html') + qs;
   else if (/\/brain\/?$/.test(path)) req.url = path.replace(/\/brain\/?$/, '/brain.html') + qs;
   else if (/\/admin\/?$/.test(path)) req.url = path.replace(/\/admin\/?$/, '/admin.html') + qs;
+  else if (/\/racehost\/?$/.test(path)) req.url = path.replace(/\/racehost\/?$/, '/arena.html') + qs;
 }
 const watchRoute = {
   name: 'watch-route',
