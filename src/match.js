@@ -84,8 +84,30 @@ export function unpackAct(b64, dest) {
   for (let i = 0; i < dest.length; i++) dest[i] = bin.charCodeAt(i) / 160;
   return true;
 }
+function packBytes(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 32768) s += String.fromCharCode.apply(null, u8.subarray(i, i + 32768));
+  return btoa(s);
+}
+export function packEyes(eyes) {
+  if (!eyes) return null;
+  return eyes.map(lum => {
+    const u8 = new Uint8Array(lum.length);
+    for (let i = 0; i < lum.length; i++) u8[i] = Math.min(255, Math.round(Math.max(0, lum[i] || 0) * 255));
+    return packBytes(u8);
+  });
+}
+export function unpackEyes(packed) {
+  if (!Array.isArray(packed) || typeof packed[0] !== 'string') return packed;
+  return packed.map(b64 => {
+    const bin = atob(b64);
+    const out = new Float32Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i) / 255;
+    return out;
+  });
+}
 
-export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, resetIn, why, selected, eyes, groups, act, betClosesAt, pools }) {
+export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, resetIn, why, selected, eyes, groups, visions, act, betClosesAt, pools }) {
   return {
     type: 'state',
     matchId,
@@ -100,6 +122,7 @@ export function buildMatchState({ matchId, phase, flies, clock, winner, bodyName
     selected: selected ?? null,
     eyes: eyes || null,
     groups: groups || null,
+    visions: visions || null,
     act: act || null,
     flies: flies.filter(f => f.last).map(f => ({
       id: f.id,

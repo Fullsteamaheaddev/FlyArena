@@ -45,7 +45,9 @@ onmessage = async (e) => {
   else if (m.type === 'takeoff') { fly.requestTakeoff(); postPose(); }
   else if (m.type === 'activity') {
     const eyes = fly.fv ? fly.fv.lumEye.map(e => e.slice(0)) : null;
-    postMessage({ type: 'activity', id: fly.id, trace: fly.brain.trace.slice(0), t: fly.t, groups: meter.read(fly.brain.spikeCount, fly.t), eyes });
+    const groups = meter.read(fly.brain.spikeCount, fly.t);
+    if (m.eyesOnly) postMessage({ type: 'activity', id: fly.id, t: fly.t, groups, eyes, eyesOnly: true });
+    else postMessage({ type: 'activity', id: fly.id, trace: fly.brain.trace.slice(0), t: fly.t, groups, eyes });
   }
 };
 function setProxies() {
