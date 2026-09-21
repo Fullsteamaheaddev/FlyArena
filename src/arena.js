@@ -599,13 +599,13 @@ function publishMatchState(force = false) {
   const now = performance.now();
   if (!force && now - lastMatchSend < 1000 / 15) return;
   lastMatchSend = now;
-  const wall = raceStartWall != null ? formatWall(now - raceStartWall) : '0.0 s';
+  const wall = raceStartWall != null ? formatWall(now - raceStartWall) : '0 s';
   const sel = flies.find(f => f.id === selected) || flies[0];
   let act = null;
   if (now - lastActSend > 400 && brainAct) { lastActSend = now; act = packAct(brainAct); }
   matchLink.sendState(buildMatchState({
     matchId, phase: matchPhase, flies,
-    clock: { wall, fly: flySecs() },
+    clock: { wall, fly: flySecs(), elapsed: raceStartWall != null ? now - raceStartWall : null },
     winner: raceWinner, why: raceWinnerWhy,
     bodyNames: flies.find(f => f.bodyNames)?.bodyNames || null,
     resetIn: matchResetIn,
@@ -661,7 +661,7 @@ function applyWatchOverlay(st) {
     const reset = settleNote();
     if (watchOverlayPhase !== 'results') {
       const note = w.why === 'last' ? 'last remaining' : w.why === 'died' ? 'last to die' : '';
-      card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${st.clock?.wall || ''}</p><p class="flyt">${st.clock?.fly || '0.0'} s fly</p>
+      card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${st.clock?.wall || ''}</p><p class="flyt">${st.clock?.fly || '0'} s fly</p>
         <div class="bet-actions"></div>
         <p id="betNote" class="flyt"></p>
         <p id="raceReset">${reset}</p>`;
@@ -725,7 +725,15 @@ function applyWatchState(st) {
   if (st.matchId != null && st.matchId !== matchId) { matchId = st.matchId; poolStatus = null; }
   betClosesAt = st.betClosesAt ?? null;
   if (st.pools) poolSnap = st.pools;
-  if (st.clock) paintRaceClock(st.clock.wall, st.clock.fly);
+  if (st.clock) {
+    if (st.phase === 'live') {
+      const elapsed = st.clock.elapsed ?? parseWallMs(st.clock.wall);
+      if (elapsed != null && raceStartWall == null) raceStartWall = performance.now() - elapsed;
+    } else {
+      raceStartWall = null;
+      paintRaceClock(st.clock.wall, st.clock.fly);
+    }
+  }
   const names = watchBodyNames;
   const seen = new Set();
   for (const row of st.flies || []) {
@@ -1314,12 +1322,20 @@ async function showRaceStart() {
   refreshPoolSnap().then(() => paintLobbyOverlay());
 }
 function formatWall(ms) {
-  const s = Math.max(0, ms / 1000);
-  if (s >= 60) return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-  return s.toFixed(1) + ' s';
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s >= 60) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  return s + ' s';
+}
+function parseWallMs(wall) {
+  if (wall == null) return null;
+  if (typeof wall === 'number' && Number.isFinite(wall)) return Math.max(0, wall);
+  const m = String(wall).match(/^(\d+):(\d{2})/);
+  if (m) return ((+m[1]) * 60 + (+m[2])) * 1000;
+  const s = parseFloat(wall);
+  return Number.isFinite(s) ? Math.max(0, s * 1000) : null;
 }
 function flySecs(f = flies.find(x => x.last)) {
-  return ((f?.last?.t || 0) / 1000).toFixed(1);
+  return String(Math.floor((f?.last?.t || 0) / 1000));
 }
 function paintRaceClock(wall, fly) {
   const el = $('#raceClock'); if (!el) return;
@@ -1332,7 +1348,7 @@ function startRace() {
   overlay.classList.remove('show');
   overlay.hidden = true;
   raceStartWall = performance.now();
-  paintRaceClock('0.0 s', '0.0');
+  paintRaceClock('0 s', '0');
   running = true;
   matchPhase = 'live';
   matchResetIn = null;
