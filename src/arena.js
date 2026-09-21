@@ -140,6 +140,34 @@ const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint 
 const viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4(), flyBounds = new THREE.Sphere(new THREE.Vector3(), 0.24);
 const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0, brainUploads: 0, brainDraws: 0 };
 let brainRenderer, brainScene, brainCam, brainPts, brainAct;
+let raceFloorLogo = null, raceFloorLogoWait = null, raceFloorPaint = 0;
+function raceFloorLogoImg() {
+  if (raceFloorLogo) return Promise.resolve(raceFloorLogo);
+  if (!raceFloorLogoWait) {
+    raceFloorLogoWait = new Promise(res => {
+      const img = new Image();
+      img.onload = () => { raceFloorLogo = img; res(img); };
+      img.onerror = () => res(null);
+      img.src = `${BASE}FruitFlyText.png`;
+    });
+  }
+  return raceFloorLogoWait;
+}
+function paintRaceFloor(fx, fs, logo) {
+  const mid = fs / 2;
+  const rg = fx.createRadialGradient(mid, mid, 0, mid, mid, mid);
+  rg.addColorStop(0, '#8a2fb8'); rg.addColorStop(0.35, '#6b2494'); rg.addColorStop(0.7, '#4a1870'); rg.addColorStop(1, '#2c0d48');
+  fx.fillStyle = rg; fx.fillRect(0, 0, fs, fs);
+  fx.strokeStyle = 'rgba(210,150,255,0.28)'; fx.lineWidth = fs / 51;
+  for (const r of [0.22, 0.42, 0.62, 0.82]) { fx.beginPath(); fx.arc(mid, mid, r * mid, 0, Math.PI * 2); fx.stroke(); }
+  if (!logo) return;
+  const dw = fs * 0.53, dh = dw * (logo.height / logo.width);
+  fx.save();
+  fx.translate(mid, mid);
+  fx.rotate(-Math.PI / 2);
+  fx.drawImage(logo, -dw / 2, -dh / 2, dw, dh);
+  fx.restore();
+}
 function buildScene(data) {
   renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
   resolution = new RenderResolution(() => resize(), { targetFps: 120 });
@@ -154,7 +182,8 @@ function buildScene(data) {
   room.dispose(); pmrem.dispose();
   camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, Math.max(100, env.arena.radius * 8)); camera.up.set(0, 0, 1);
   const R = env.arena.radius;
-  if (isRace) camera.position.set(0, -R * 1.3, R * 1.45);
+  // Race: sit on +X so a maze lane points at the camera (0°/120°/240° stays left-right symmetric).
+  if (isRace) camera.position.set(R * 1.3, 0, R * 1.45);
   else camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5;
@@ -226,14 +255,16 @@ function rebuildEnv() {
   const R = env.arena.radius, aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   let floorMat, wallMat;
   if (isRace) {
-    const fs = 512, fc = document.createElement('canvas'); fc.width = fc.height = fs; const fx = fc.getContext('2d');
-    const mid = fs / 2, rg = fx.createRadialGradient(mid, mid, 0, mid, mid, mid);
-    rg.addColorStop(0, '#8a2fb8'); rg.addColorStop(0.35, '#6b2494'); rg.addColorStop(0.7, '#4a1870'); rg.addColorStop(1, '#2c0d48');
-    fx.fillStyle = rg; fx.fillRect(0, 0, fs, fs);
-    fx.strokeStyle = 'rgba(210,150,255,0.28)'; fx.lineWidth = 10;
-    for (const r of [0.22, 0.42, 0.62, 0.82]) { fx.beginPath(); fx.arc(mid, mid, r * mid, 0, Math.PI * 2); fx.stroke(); }
+    const fs = 1024, fc = document.createElement('canvas'); fc.width = fc.height = fs; const fx = fc.getContext('2d');
+    const paintId = ++raceFloorPaint;
+    paintRaceFloor(fx, fs, raceFloorLogo);
     const ft = new THREE.CanvasTexture(fc); ft.colorSpace = THREE.SRGBColorSpace; ft.generateMipmaps = false; ft.minFilter = THREE.LinearFilter; ft.magFilter = THREE.LinearFilter; ft.anisotropy = aniso;
     floorMat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.82 });
+    if (!raceFloorLogo) raceFloorLogoImg().then(img => {
+      if (!img || paintId !== raceFloorPaint || floorMesh?.material?.map !== ft) return;
+      paintRaceFloor(fx, fs, img);
+      ft.needsUpdate = true;
+    });
     const wc = document.createElement('canvas'); wc.width = 1024; wc.height = 128; const wx = wc.getContext('2d');
     const vg = wx.createLinearGradient(0, 0, 0, 128); vg.addColorStop(0, '#e0b8f0'); vg.addColorStop(1, '#7a3aa8');
     wx.fillStyle = vg; wx.fillRect(0, 0, 1024, 128);
@@ -478,6 +509,8 @@ function setupRaceChrome() {
       profile.hidden = false;
       $('#profileConnect').onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
       $('#profileDisconnect').onclick = () => clearWalletUi();
+      profileFoldChrome(profile.classList.contains('folded'));
+      $('#profileFold')?.addEventListener('click', () => setProfileFolded(!profile.classList.contains('folded')));
       restoreWallet().then(a => {
         // #region agent log
         dbg('arena.js:restoreWallet', 'silent restore', { acct: a ? a.slice(0, 10) : null }, 'I');
@@ -784,6 +817,45 @@ function brainFoldChrome(folded) {
   b.title = `${folded ? 'Show' : 'Hide'} brain panel (])`;
   b.setAttribute('aria-expanded', String(!folded));
 }
+function profileFoldChrome(folded) {
+  const b = $('#profileFold'); if (!b) return;
+  b.textContent = folded ? '<' : '>';
+  b.title = `${folded ? 'Show' : 'Hide'} profile`;
+  b.setAttribute('aria-expanded', String(!folded));
+}
+function peekProfileWidth(folded) {
+  const profile = $('#profile');
+  const was = profile.classList.contains('folded');
+  profile.classList.toggle('folded', folded);
+  const w = profile.getBoundingClientRect().width;
+  profile.classList.toggle('folded', was);
+  return w;
+}
+function setProfileFolded(folded, { instant = false } = {}) {
+  const profile = $('#profile');
+  if (!profile || profile.classList.contains('folded') === folded) return;
+  profileFoldChrome(folded);
+  if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    profile.style.width = '';
+    profile.style.transition = '';
+    profile.classList.toggle('folded', folded);
+    return;
+  }
+  const fromW = profile.getBoundingClientRect().width;
+  const toW = peekProfileWidth(folded);
+  const ease = 'cubic-bezier(0.34, 1.2, 0.64, 1)';
+  profile.style.transition = `width .35s ${ease}`;
+  profile.style.minWidth = '0';
+  profile.style.width = `${fromW}px`;
+  profile.classList.toggle('folded', folded);
+  requestAnimationFrame(() => { profile.style.width = `${toW}px`; });
+  profile.addEventListener('transitionend', (e) => {
+    if (e.propertyName !== 'width') return;
+    profile.style.width = '';
+    profile.style.minWidth = '';
+    profile.style.transition = '';
+  }, { once: true });
+}
 function setRaceBrainFolded(folded, { user = false, instant = false } = {}) {
   if (!isRace) return;
   if (user) { raceBrainTouched = true; clearTimeout(raceBrainTimer); raceBrainTimer = null; }
@@ -828,11 +900,12 @@ function scheduleRaceBrainFold() {
     setRaceBrainFolded(true);
   }, 3000);
 }
-function showRaceOverlayCard(card, { flyColor } = {}) {
+function showRaceOverlayCard(card, { flyColor, enter = true } = {}) {
   const overlay = $('#raceOverlay');
   card.style.removeProperty('--fly');
   if (flyColor) card.style.setProperty('--fly', flyColor);
   overlay.hidden = false;
+  if (!enter && overlay.classList.contains('show')) return;
   overlay.classList.remove('show');
   void overlay.offsetWidth;
   overlay.classList.add('show');
@@ -881,7 +954,7 @@ function dbg(location, message, data, hypothesisId = 'C') {
 setDebugSink(dbg);
 // #endregion
 function shortAddr(a) {
-  return a ? a.slice(0, 6) + '…' + a.slice(-4) : 'Connect';
+  return a ? a.slice(0, 4) + '...' + a.slice(-4) : 'Connect';
 }
 function matchWhen(id) {
   const n = Number(id);
@@ -975,9 +1048,13 @@ async function paintResultActions(id) {
   }
   injectResultActions(id);
 }
+function selectBetFly(id, card = $('#raceCard')) {
+  betFlyId = id;
+  card?.querySelectorAll('.bet-fly').forEach(b => b.classList.toggle('on', +b.dataset.fly === id));
+}
 function wireLobbyCard(card) {
   card.querySelectorAll('.bet-fly').forEach(b => {
-    b.onclick = () => { betFlyId = +b.dataset.fly; paintLobbyOverlay(true); };
+    b.onclick = () => selectBetFly(+b.dataset.fly, card);
   });
   const connect = card.querySelector('#betConnect');
   if (connect) connect.onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
@@ -989,7 +1066,7 @@ function wireLobbyCard(card) {
     const fly = betFlyId ?? flies[0]?.id;
     if (fly == null) throw new Error('Pick a fly');
     await placeBet(matchId, fly, amt);
-    lastPoolRead = 0; await refreshPoolSnap(); paintLobbyOverlay(true); await refreshProfile();
+    lastPoolRead = 0; await refreshPoolSnap(); paintLobbyOverlay(); await refreshProfile();
   });
 }
 async function runBetTx(fn) {
@@ -1009,6 +1086,15 @@ async function runBetTx(fn) {
     // #endregion
     if (note) note.textContent = e.shortMessage || e.message || String(e);
   }
+}
+function ticketStatus(r) {
+  if (r.outcome === 'unclaimed') return { label: 'Won', kind: 'won' };
+  if (r.outcome === 'won') return { label: 'Claimed', kind: 'claimed' };
+  if (r.outcome === 'void') return { label: 'Void', kind: 'void' };
+  if (r.outcome === 'refunded') return { label: 'Refunded', kind: 'refunded' };
+  if (r.outcome === 'open') return { label: 'Open', kind: 'open' };
+  if (r.outcome === 'lost') return { label: 'Lost', kind: 'lost' };
+  return { label: r.outcome, kind: r.outcome };
 }
 async function refreshProfile() {
   const el = $('#profile');
@@ -1046,10 +1132,11 @@ async function refreshProfile() {
     if (bal) bal.textContent = `${Number(chips).toFixed(1)} CHIP` + (stake && stake > 0n ? ` · this race ${Number(chipFmt(stake)).toFixed(1)}` : '');
     if (list) {
       list.innerHTML = hist.slice(0, 8).map(r => {
-        const act = r.outcome === 'unclaimed' ? `<button type="button" data-claim="${r.matchId}">Claim</button>`
-          : (r.outcome === 'void' ? `<button type="button" data-refund="${r.matchId}">Refund</button>` : '');
+        const st = ticketStatus(r);
+        const act = r.outcome === 'unclaimed' ? `<button type="button" class="tk-claim" data-claim="${r.matchId}">Claim</button>`
+          : (r.outcome === 'void' ? `<button type="button" class="tk-refund" data-refund="${r.matchId}">Refund</button>` : '');
         const win = r.payout != null && Number(r.payout) > 0 && r.outcome !== 'lost' ? ` +${Number(r.payout).toFixed(1)}` : '';
-        return `<li><b>${matchWhen(r.matchId)}</b>${flyTag(r.flyId, r.matchId)}<span>${Number(r.amount).toFixed(1)}</span><i>${r.outcome}${win}</i>${act}</li>`;
+        return `<li><b>${matchWhen(r.matchId)}</b>${flyTag(r.flyId, r.matchId)}<span class="tk-amt">${Number(r.amount).toFixed(1)}</span><i class="tk-status tk-${st.kind}">${st.label}${win}</i><span class="tk-act">${act}</span></li>`;
       }).join('') || '<li>No tickets yet</li>';
       list.querySelectorAll('[data-claim]').forEach(b => { b.onclick = () => runBetTx(() => claimRace(+b.dataset.claim)); });
       list.querySelectorAll('[data-refund]').forEach(b => { b.onclick = () => runBetTx(() => refundRace(+b.dataset.refund)); });
@@ -1085,6 +1172,9 @@ function paintLobbyOverlay(force = false) {
   lastPoolKey = poolSnap.map(p => p.id + ':' + (p.display || '0')).join('|');
   card.dataset.kind = 'lobby';
   rememberRaceFlies();
+  const overlay = $('#raceOverlay');
+  const overlayWasHidden = !overlay || overlay.hidden || !overlay.classList.contains('show');
+  const prevAmt = card.querySelector('#betAmt')?.value;
   if (isWatch) {
     // Unknown status with a running clock means no operator is reporting: let them try anyway.
     const open = !chainConfigured() || poolStatus === 1 || (poolStatus == null && betClosesAt != null);
@@ -1093,10 +1183,14 @@ function paintLobbyOverlay(force = false) {
     card.innerHTML = `<h1>Odor race</h1><p>Winner pool — first to the vinegar</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       ${poolRowsHtml()}
-      <div class="bet-stake"><input id="betAmt" type="number" min="1" value="10"><span>CHIP</span>
+      <div class="bet-stake">
+        <div class="bet-stake-row"><input id="betAmt" type="number" min="1" value="10"><span>CHIP</span>
+          <button id="betPlace" class="primary" type="button"${open ? '' : ' disabled'}>Bet</button></div>
+      </div>
+      <div class="bet-wallet">
         <button id="betConnect" type="button">${shortAddr(acct)}</button>
         ${acct ? '<button id="betDisconnect" class="danger" type="button">Disconnect</button>' : ''}
-        <button id="betPlace" class="primary" type="button"${open ? '' : ' disabled'}>Bet</button></div>
+      </div>
       <p id="betNote" class="flyt">${note}</p>`;
   } else {
     card.innerHTML = `<h1>Odor race</h1><p>First to the vinegar wins!</p>
@@ -1104,8 +1198,9 @@ function paintLobbyOverlay(force = false) {
       <p class="flyt">Race starts itself — no GO</p>
       ${poolRowsHtml()}${raceHistoryHtml(loadRaceHistory())}`;
   }
-  showRaceOverlayCard(card);
+  showRaceOverlayCard(card, { enter: overlayWasHidden });
   wireLobbyCard(card);
+  if (prevAmt) { const inp = card.querySelector('#betAmt'); if (inp) inp.value = prevAmt; }
   maybeLobbyTick();
   if (isWatch) refreshProfile();
   card.onpointerdown = e => {

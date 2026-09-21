@@ -72,6 +72,7 @@ a { color: var(--acc); }
 .race-card .race-hist li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; color: inherit; }
 .race-card .race-hist i { width: 10px; height: 10px; border-radius: 50%; display: block; }
 .race-card .race-hist span { font-variant-numeric: tabular-nums; color: var(--dim); }
+body.race .race-card .race-hist b { font-family: var(--race-title); font-weight: 400; font-size: 16px; }
 
 .fly-label { pointer-events: auto; cursor: pointer; display: inline-block; outline: none; }
 .fly-label-chip {
@@ -96,6 +97,8 @@ a { color: var(--acc); }
 body.race {
   --race-title: "Luckiest Guy", ui-rounded, system-ui, sans-serif;
   --race-outline: #9aa3b2;
+  --race-fold-ease: cubic-bezier(0.34, 1.2, 0.64, 1);
+  --race-fold-duration: .35s;
 }
 body.race #scoreboard,
 body.race #brainpanel,
@@ -135,7 +138,7 @@ body.race #raceHud:not([hidden]) {
 body.race #scoreboard {
   position: static; width: auto; max-height: none; overflow: visible; padding-bottom: 8px;
 }
-body.race #brainpanel { bottom: auto; max-height: calc(100vh - 24px); overflow: auto; transform-origin: top right; transition: width .35s cubic-bezier(0.34, 1.2, 0.64, 1); }
+body.race #brainpanel { bottom: auto; max-height: calc(100vh - 24px); overflow: auto; transform-origin: top right; transition: width var(--race-fold-duration) var(--race-fold-ease); }
 body.race #brainpanel.folded { width: 220px; max-height: none; overflow: hidden; }
 body.race #brainpanel.folded #bpBody { display: block; padding: 8px 10px 10px; overflow: hidden; }
 body.race #brainpanel.folded #groups,
@@ -173,6 +176,23 @@ body.race #bpHint[hidden] { display: none; animation: none; }
   100% { transform: scale(1); opacity: 0; }
 }
 body.race #bpBody { flex: none; }
+/* 12 named groups; show about half so the panel stays shorter */
+body.race #groups {
+  max-height: calc(6 * 34px);
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.4) rgba(255,255,255,.08);
+}
+body.race #groups::-webkit-scrollbar { width: 8px; }
+body.race #groups::-webkit-scrollbar-track {
+  background: rgba(255,255,255,.08);
+  border-radius: 8px;
+}
+body.race #groups::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.35);
+  border-radius: 8px;
+}
 body.race #scoreboard h1,
 body.race .race-card h1,
 body.race #brainpanel h2,
@@ -181,7 +201,7 @@ body.race .race-card h2.hist {
   font-family: var(--race-title);
   font-weight: 400;
 }
-body.race #scoreboard h1 { font-size: 22px; }
+body.race #scoreboard h1 { font-size: 22px; color: #fff; }
 body.race .race-card h1 { font-size: 34px; line-height: 1.1; color: var(--fly, inherit); }
 body.race #brainpanel h2 { font-size: 16px; }
 body.race #scoreboard h2,
@@ -190,7 +210,17 @@ body.race .race-card h2.hist {
   text-transform: none;
   letter-spacing: 0;
 }
-body.race .race-card { padding: 30px 34px; }
+body.race .race-card {
+  width: min(462px, calc(100vw - 24px));
+  max-width: 462px;
+  padding: 30px 34px;
+  box-sizing: border-box;
+}
+body.race .race-card #lobbyClock {
+  min-height: 2.4em;
+  line-height: 1.2;
+  overflow: hidden;
+}
 body.race .race-card button {
   min-width: 160px;
   padding: 12px 28px;
@@ -207,22 +237,53 @@ body.race .race-card button.primary {
 body.race .race-card .bet-rows,
 body.race .race-card .bet-stake,
 body.race .race-card .bet-actions { text-align: left; }
-body.race .race-card .bet-rows { display: grid; gap: 8px; margin: 0 0 16px; }
+body.race .race-card .bet-rows { display: grid; gap: 12px; width: 90%; margin: 0 auto 22px; }
 body.race .race-card button.bet-fly {
   min-width: 0; width: 100%; padding: 8px 12px; display: grid;
-  grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+  grid-template-columns: minmax(0, 1fr) 7.2em 3.6em; gap: 8px; align-items: center;
   font: 600 13px/1.2 ui-sans-serif, system-ui, sans-serif; border-radius: 10px;
   border-color: color-mix(in srgb, var(--fly) 70%, var(--race-outline));
   background: color-mix(in srgb, var(--fly) 16%, transparent);
+  outline: none;
+  box-shadow: none;
+  transition: transform .15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow .12s ease;
 }
-body.race .race-card button.bet-fly.on { outline: 2px solid var(--fly); }
-body.race .race-card button.bet-fly i { font-style: normal; color: var(--dim); font-variant-numeric: tabular-nums; }
+body.race .race-card button.bet-fly b {
+  font-family: var(--race-title); font-weight: 400; font-size: 16px; color: #fff;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+}
+body.race .race-card button.bet-fly span {
+  font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; color: var(--fg);
+}
+body.race .race-card button.bet-fly i {
+  font-style: normal; color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap;
+}
+body.race .race-card button.bet-fly:active { transform: scale(1.06); }
+body.race .race-card button.bet-fly.on {
+  box-shadow: 0 0 0 2px #0c0f18, 0 0 0 5px #fff;
+  transform: scale(1.04);
+}
 body.race .race-card .bet-stake {
-  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 0 0 12px;
+  display: flex; flex-direction: column; gap: 8px; align-items: center; margin: 0;
+}
+body.race .race-card .bet-stake-row {
+  display: flex; gap: 8px; align-items: center; justify-content: center;
+}
+body.race .race-card .bet-wallet {
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  margin: 14px 0 12px;
 }
 body.race .race-card .bet-stake input { width: 72px; }
 body.race .race-card .bet-stake button,
+body.race .race-card .bet-wallet button,
 body.race .race-card .bet-actions button { min-width: 0; padding: 8px 14px; font-size: 16px; }
+body.race .race-card #betPlace { min-width: 96px; }
+body.race .race-card #betConnect,
+body.race .race-card #betDisconnect {
+  min-width: 0; padding: 6px 14px; white-space: nowrap;
+}
+body.race .race-card #betConnect { font: 400 13px/1.2 ui-sans-serif, system-ui, sans-serif; }
+body.race .race-card #betDisconnect { font: 400 16px/1.1 var(--race-title); }
 body.race .race-card button[disabled] { opacity: 0.45; cursor: not-allowed; }
 body.race .race-card button.danger,
 body.race #profileDisconnect {
@@ -230,30 +291,81 @@ body.race #profileDisconnect {
   color: #fff;
   border-color: #7a1b12;
 }
-body.race #profileDisconnect { padding: 4px 10px; font-size: 12px; min-width: 0; }
 body.race #profileDisconnect[hidden] { display: none; }
 body.race .race-card .bet-actions { display: flex; gap: 8px; justify-content: center; margin: 0 0 12px; }
 body.race #profile {
-  position: fixed; right: 12px; bottom: 12px; z-index: 4; width: 260px;
+  position: fixed; right: 12px; bottom: 12px; z-index: 4;
+  width: max-content; min-width: min(420px, calc(100vw - 24px));
+  max-width: min(520px, calc(100vw - 24px));
   padding: 12px 14px; background: var(--panel); border: 4px solid var(--race-outline);
-  border-radius: 18px; pointer-events: auto;
+  border-radius: 18px; pointer-events: auto; overflow: hidden;
+  transform-origin: bottom right;
+  transition: width var(--race-fold-duration) var(--race-fold-ease);
 }
 body.race #profile[hidden] { display: none; }
-body.race #profile header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-body.race #profile h2 { margin: 0; flex: 1; font-family: var(--race-title); font-weight: 400; font-size: 18px; }
-body.race #profile #profileBal { margin: 0 0 8px; font-variant-numeric: tabular-nums; }
-body.race #profile #profileNote { margin: 0 0 8px; color: var(--dim); font-size: 12px; min-height: 1em; }
-body.race #profile #profileTickets { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; }
-body.race #profile #profileTickets li {
-  display: grid; grid-template-columns: auto 1fr auto auto; gap: 6px; align-items: center;
-  font-size: 12px; margin: 4px 0;
+body.race #profile header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; white-space: nowrap; }
+body.race #profile h2 { margin: 0; flex: none; font-family: var(--race-title); font-weight: 400; font-size: 28px; line-height: 1; }
+body.race #profile .profile-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+body.race #profile:not(.folded) .profile-actions { margin-left: auto; }
+body.race #profileFold {
+  font-family: var(--race-title); font-weight: 400; font-size: 15px; line-height: 1;
+  padding: 0 8px; min-width: 28px; min-height: 0; height: 24px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  transition: font-size var(--race-fold-duration) var(--race-fold-ease),
+    padding var(--race-fold-duration) var(--race-fold-ease),
+    height var(--race-fold-duration) var(--race-fold-ease),
+    min-width var(--race-fold-duration) var(--race-fold-ease);
 }
-body.race #profile #profileTickets button { padding: 2px 8px; font-size: 11px; }
-body.race #profile #profileTickets b { font-weight: 600; color: var(--dim); white-space: nowrap; }
-body.race #profile #profileTickets .tk-fly { color: var(--fly); font-weight: 600; }
+body.race #profile.folded {
+  width: auto; min-width: 0; max-width: none; overflow: hidden;
+}
+body.race #profile.folded header { margin-bottom: 0; }
+body.race #profile.folded .profile-actions { margin-left: 0; }
+body.race #profile.folded #profileFold {
+  font-size: 28px; padding: 6px 12px; height: auto; border-radius: 10px;
+}
+body.race #profile.folded #profileBody,
+body.race #profile.folded #profileConnect,
+body.race #profile.folded #profileDisconnect { display: none; }
+body.race #profile #profileConnect,
+body.race #profile #profileDisconnect {
+  min-width: 0; padding: 4px 10px; font-size: 12px; line-height: 1.2; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 24px; box-sizing: border-box;
+}
+body.race #profile #profileBal { margin: 0 0 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+body.race #profile #profileNote { margin: 0 0 8px; color: var(--dim); font-size: 12px; min-height: 1em; }
+body.race #profile #profileTickets { list-style: none; margin: 0; padding: 0; overflow: visible; }
+body.race #profile #profileTickets li {
+  display: flex; flex-wrap: nowrap; gap: 8px; align-items: center;
+  font-size: 12px; margin: 6px 0; white-space: nowrap;
+}
+body.race #profile #profileTickets b { font-weight: 600; color: var(--dim); }
+body.race #profile #profileTickets .tk-fly {
+  font-family: var(--race-title); font-weight: 400; font-size: 14px; color: var(--fly);
+}
 body.race #profile #profileTickets .tk-fly::before {
   content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px;
   border-radius: 50%; background: var(--fly); vertical-align: 1px;
+}
+body.race #profile #profileTickets .tk-amt { font-variant-numeric: tabular-nums; color: var(--fg); }
+body.race #profile #profileTickets .tk-status {
+  font-family: var(--race-title); font-weight: 400; font-style: normal; font-size: 13px; color: #fff;
+}
+body.race #profile #profileTickets .tk-act {
+  flex: none; width: 5.6em; min-height: 1.5em;
+  display: inline-flex; align-items: center; justify-content: flex-end;
+}
+body.race #profile #profileTickets .tk-claim,
+body.race #profile #profileTickets .tk-refund {
+  padding: 3px 12px; font: 400 13px/1 var(--race-title); border-radius: 999px;
+  min-width: 5.6em; width: 100%; box-sizing: border-box;
+}
+body.race #profile #profileTickets .tk-claim {
+  background: #2f9e44; color: #fff; border: 3px solid #1e7a32;
+}
+body.race #profile #profileTickets .tk-refund {
+  background: #b42318; color: #fff; border: 3px solid #7a1b12;
 }
 body.admin { overflow: auto; height: auto; min-height: 100%; }
 html:has(body.admin) { overflow: auto; height: auto; }
@@ -270,9 +382,10 @@ body.race .race-card button.primary:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   body.race #raceOverlay.show .race-card,
-  body.race .race-card button.primary { animation: none; }
+  body.race .race-card button.primary,
+  body.race .race-card button.bet-fly { animation: none; transform: none; }
 }
-body.race #scoreboard .race-clock b { font-family: var(--race-title); font-weight: 400; font-size: 32px; }
+body.race #scoreboard .race-clock b { font-family: var(--race-title); font-weight: 400; font-size: 32px; color: #fff; }
 body.race #bpFold { font-family: var(--race-title); font-weight: 400; font-size: 28px; line-height: 1; padding: 6px 12px; }
 body.race .fly-label { position: relative; display: inline-block; }
 body.race .fly-label-chip { font-family: var(--race-title); font-weight: 400; }
@@ -375,6 +488,7 @@ body.race #brainpanel .fold { border-radius: 8px; }
     margin: 0 auto;
     border-top: 1px solid var(--line);
   }
+  body.race #groups { max-height: calc(6 * 28px); }
   body.race #groups .g { grid-template-columns: 1fr auto; }
   body.race #groups canvas { display: none; }
   body.race #groups .v { font-size: 10px; }
@@ -382,8 +496,8 @@ body.race #brainpanel .fold { border-radius: 8px; }
 
   body.race .race-card {
     min-width: 0;
-    width: min(340px, calc(100% - 24px));
-    max-width: 340px;
+    width: min(374px, calc(100% - 24px));
+    max-width: 374px;
     min-height: 0;
     max-height: min(88dvh, 640px);
     overflow: auto;
@@ -404,10 +518,20 @@ body.race #brainpanel .fold { border-radius: 8px; }
   }
   body.race .race-card button.bet-fly { min-width: 0; align-self: stretch; }
   body.race #profile {
-    width: min(260px, calc(100% - 24px));
+    width: max-content;
+    min-width: min(320px, calc(100% - 24px));
+    max-width: min(520px, calc(100% - 24px));
     right: 12px; bottom: auto; top: 12px;
-    max-height: 36vh; overflow: auto;
+    max-height: none;
+    transform-origin: top right;
   }
+  body.race #profile h2 { font-size: 24px; }
+  body.race #profile:not(.folded) #profileConnect,
+  body.race #profile:not(.folded) #profileDisconnect,
+  body.race #profile:not(.folded) #profileFold {
+    min-height: 44px;
+  }
+  body.race #profile.folded #profileFold { font-size: 20px; padding: 6px 12px; min-height: 44px; min-width: 44px; }
   body.race .fly-label-info { width: min(280px, 80vw); }
   body.race .fly-label-chip { font-size: 14px; padding: 5px 10px; }
 }

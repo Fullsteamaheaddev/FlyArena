@@ -73,10 +73,12 @@
 <div id="raceVitals"></div>
 </div>
 <aside id="profile" hidden>
-  <header><h2>You</h2><button type="button" id="profileConnect">Connect</button><button type="button" id="profileDisconnect" class="danger" hidden>Disconnect</button></header>
-  <p id="profileBal">Connect a wallet</p>
-  <p id="profileNote"></p>
-  <ul id="profileTickets"></ul>
+  <header><h2>You</h2><div class="profile-actions"><button type="button" id="profileConnect">Connect</button><button type="button" id="profileDisconnect" class="danger" hidden>Disconnect</button><button id="profileFold" class="fold" type="button" title="Hide profile" aria-expanded="true">›</button></div></header>
+  <div id="profileBody">
+    <p id="profileBal">Connect a wallet</p>
+    <p id="profileNote"></p>
+    <ul id="profileTickets"></ul>
+  </div>
 </aside>
 <div id="raceOverlay" hidden>
   <div class="race-card" id="raceCard"></div>
