@@ -20,12 +20,12 @@ npm run deploy:robinhood-testnet # PlayChip + RacePool on Robinhood testnet (466
 
 | URL | App |
 |---|---|
-| `/` | Live spectator + bets (`watch.html`); `/watch` redirects here |
+| `/` | Live spectator + bets (`index.html` → `src/arena.js`); `/watch` redirects here |
 | `/arena.html` | Embodied arena (`src/arena.js`) |
 | `/arena.html?gpu=0` | Force WASM brain (no WebGPU) |
 | `/arena.html?env=courtship` | Preset (`foraging` default; see `PRESETS` in `src/sim/world.js`) |
 | `/arena.html?env=race` | Odor race (this machine runs it) |
-| `/brain` | Connectome viewer (`index.html` → `src/main.js`) |
+| `/brain` | Connectome viewer (`brain.html` → `src/main.js`) |
 | `/admin` | Race pool owner (token, window, operator, mint); UI only after owner wallet connects |
 | `/fly.html` | Anatomy / Blender fly (`src/fly.js`) |
 | `/structures.html` | Algorithmic structures (`src/structures.js`) |
@@ -62,7 +62,7 @@ Worker bursts ≤8 sim-ms / 8 CPU-ms (race: 16/16); poses to main ≤30 Hz. Grou
 
 | Path | Role |
 |---|---|
-| `src/arena.js`, `arena.html` | Main-thread UI, workers, render, presets, `?env=` / `?gpu=` |
+| `src/arena.js`, `arena.html`, `index.html` | Main-thread UI, workers, render, presets, `?env=` / `?gpu=` |
 | `src/match.js`, `scripts/match-relay.mjs` | Live match snapshots; host publishes, watchers subscribe |
 | `src/arena-batches.js`, `src/render-resolution.js`, `src/wing-blur.js` | Arena draw batching / DPR / wing blur |
 | `src/sim/fly.js` | Closed-loop agent |

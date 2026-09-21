@@ -1,5 +1,6 @@
 export function isWatchPath() {
-  const p = location.pathname.replace(/\/+$/, '');
+  const p = location.pathname.replace(/\/+$/, '') || '/';
+  if (p === '/' || p.endsWith('/index.html')) return true;
   return /(?:^|\/)watch(?:\.html)?$/.test(p);
 }
 

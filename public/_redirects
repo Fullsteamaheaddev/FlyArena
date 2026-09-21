@@ -1,4 +1,6 @@
-/watch  /watch.html  200
-/watch/ /watch.html  200
+/watch  /  301
+/watch/ /  301
+/brain  /brain.html  200
+/brain/ /brain.html  200
 /admin  /admin.html  200
 /admin/ /admin.html  200

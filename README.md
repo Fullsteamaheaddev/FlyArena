@@ -51,7 +51,8 @@ outside the graph? The second list turned out to be as interesting as the first.
 
 | path | contents |
 |---|---|
-| `index.html`, `src/main.js` | connectome viewer |
+| `index.html`, `src/arena.js` | race spectator |
+| `brain.html`, `src/main.js` | connectome viewer |
 | `arena.html`, `src/arena.js` | embodied arena |
 | `structures.html`, `src/structures.js` | algorithmic-structure visualisation |
 | `textbook/`, `src/textbook.js` | ebook reader for `docs/textbook/` |

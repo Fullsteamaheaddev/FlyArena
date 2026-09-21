@@ -1,6 +1,6 @@
 # 4. Connectome viewer
 
-`index.html` renders every traced neuron and runs the calibrated brain model live.
+`brain.html` renders every traced neuron and runs the calibrated brain model live.
 
 ## Features
 - 3D skeletons of all 165,122 neurons, one tree each (5.3 M vertices), drawn as line segments in Three.js.

@@ -1,6 +1,6 @@
 # The four apps
 
-**`index.html`, the connectome viewer.** Every neuron's 3D skeleton. Pick a cell type,
+**`brain.html`, the connectome viewer.** Every neuron's 3D skeleton. Pick a cell type,
 stimulate it, and watch activity spread through the brain. Details in
 [connectome viewer](../04-connectome-viewer.md).
 

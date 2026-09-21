@@ -17,7 +17,7 @@ which covers the structural analysis and the model ensembles.
 
 ### Data
 3. [Connectome data pipeline](03-data-pipeline.md): downloading and preprocessing male CNS v1.0
-4. [Connectome viewer](04-connectome-viewer.md): the `index.html` brain viewer
+4. [Connectome viewer](04-connectome-viewer.md): the `brain.html` brain viewer
 
 ### Brain
 5. [Brain model](05-brain-model.md): conductance-based LIF and its physiological additions
@@ -63,7 +63,8 @@ which covers the structural analysis and the model ensembles.
 
 | Path | Contents |
 |---|---|
-| `index.html`, `src/main.js` | Connectome viewer |
+| `index.html`, `src/arena.js` | race spectator |
+| `brain.html`, `src/main.js` | connectome viewer |
 | `arena.html`, `src/arena.js` | Embodied arena |
 | `structures.html`, `src/structures.js` | Algorithmic-structure visualisation ([doc 28](28-algorithmic-structures.md)) |
 | `src/sim/` | Fly agent, world, senses, vision, motor, endogenous behaviour, neuromodulation, flight, worker |
