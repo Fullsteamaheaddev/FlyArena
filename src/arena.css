@@ -116,7 +116,6 @@ body.race #enterGate {
   padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   background: rgba(8, 6, 14, .72);
   box-sizing: border-box;
-  cursor: pointer;
 }
 body.race #enterGate .enter-card {
   width: 80vw; height: 80vh;
@@ -128,7 +127,9 @@ body.race #enterGate .enter-card {
   background: var(--panel); backdrop-filter: blur(12px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
   overflow: auto;
-  cursor: pointer;
+  transform-origin: center center;
+  animation: raceCardEnter .45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    raceCardIdle 2.6s ease-in-out .45s infinite;
 }
 body.race #enterGate .enter-logo {
   display: block; width: min(520px, 70%); height: auto; max-height: 46%;
@@ -141,12 +142,21 @@ body.race #enterGate h1 {
 body.race #enterGate p {
   margin: 0 0 8px; max-width: 28em; color: var(--dim); font-size: clamp(14px, 1.6vw, 18px);
 }
-body.race #enterGate button {
+body.race #enterGate #enterBtn {
   min-width: 200px; padding: 14px 32px;
   font: 400 22px/1.1 var(--race-title);
   border: 4px solid var(--race-outline); border-radius: 999px;
   background: var(--acc); color: #fff;
 }
+body.race #enterGate .enter-token {
+  font: 12px/1.3 ui-monospace, ui-sans-serif, monospace;
+  min-width: 0; max-width: min(28em, 100%);
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(255,255,255,.07); color: var(--dim);
+  border: 2px solid var(--race-outline);
+  cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+body.race #enterGate .enter-token[hidden] { display: none; }
 body.race .race-card {
   transform-origin: center center;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
@@ -421,6 +431,7 @@ body.race .race-card button.primary:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   body.race #raceOverlay.show .race-card,
+  body.race #enterGate .enter-card,
   body.race .race-card button.primary,
   body.race .race-card button.bet-fly { animation: none; transform: none; }
 }
@@ -568,30 +579,26 @@ body.race #brainpanel .fold { border-radius: 8px; }
   body.race #enterGate .enter-logo { width: min(280px, 100%); max-height: 36dvh; }
   body.race #enterGate h1 { font-size: 28px; }
   body.race #enterGate p { font-size: 15px; margin-bottom: 4px; }
-  body.race #enterGate button { min-width: 160px; min-height: 44px; font-size: 20px; padding: 12px 24px; }
+  body.race #enterGate #enterBtn { min-width: 160px; min-height: 44px; font-size: 20px; padding: 12px 24px; }
+  body.race #enterGate .enter-token { min-height: 44px; font-size: 12px; }
   body.race #profile {
-    right: max(8px, env(safe-area-inset-right));
-    bottom: auto;
-    max-height: none;
-  }
-  body.race #profile.folded {
     top: max(8px, env(safe-area-inset-top));
-    left: auto;
-    width: auto;
-    min-width: 0;
-    max-width: none;
-    transform-origin: top right;
-  }
-  body.race #profile:not(.folded) {
-    left: max(8px, env(safe-area-inset-left));
     right: max(8px, env(safe-area-inset-right));
-    top: calc(max(8px, env(safe-area-inset-top)) + 88px);
-    width: auto;
+    left: auto;
+    bottom: auto;
+    width: min(280px, calc(100vw - 24px));
     min-width: 0;
-    max-width: none;
+    max-width: min(280px, calc(100vw - 24px));
     max-height: 40dvh;
     overflow: auto;
-    transform-origin: top center;
+    transform-origin: top right;
+  }
+  body.race #profile.folded {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: none;
+    overflow: hidden;
   }
   body.race #profile:not(.folded) #profileTickets {
     overflow: auto;

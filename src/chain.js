@@ -7,7 +7,9 @@ export const DEFAULT_WINDOW = 45;
 export const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || 46630);
 const known = Number(deployed46630.chainId) === CHAIN_ID ? deployed46630 : {};
 export const POOL_ADDR = import.meta.env.VITE_POOL || known.pool || '';
-export const CHIP_ADDR = import.meta.env.VITE_CHIP || known.chip || '';
+export const FALLBACK_CHIP_ADDR = import.meta.env.VITE_CHIP || known.chip || '';
+export let CHIP_ADDR = FALLBACK_CHIP_ADDR;
+let chipMeta = { address: FALLBACK_CHIP_ADDR, symbol: 'CHIP', name: '' };
 const RPC_BY_CHAIN = {
   31337: 'http://127.0.0.1:8545',
   46630: 'https://rpc.testnet.chain.robinhood.com',
@@ -16,7 +18,9 @@ const RPC_BY_CHAIN = {
 };
 const RPC = import.meta.env.VITE_RPC || RPC_BY_CHAIN[CHAIN_ID] || 'https://rpc.testnet.chain.robinhood.com';
 
-export function chainConfigured() { return !!(POOL_ADDR && CHIP_ADDR); }
+export function chainConfigured() { return !!(POOL_ADDR && (CHIP_ADDR || FALLBACK_CHIP_ADDR)); }
+export function chipSymbol() { return chipMeta.symbol || 'CHIP'; }
+export function getChipMeta() { return chipMeta; }
 
 // #region agent log
 let dbgSink = null;
@@ -96,8 +100,31 @@ export function poolContract(write = false) {
   return new Contract(POOL_ADDR, poolAbi, write ? signer : readProv());
 }
 export function chipContract(write = false) {
-  if (!CHIP_ADDR) throw new Error('VITE_CHIP missing');
-  return new Contract(CHIP_ADDR, chipAbi, write ? signer : readProv());
+  const addr = CHIP_ADDR || FALLBACK_CHIP_ADDR;
+  if (!addr) throw new Error('Stake token not configured');
+  return new Contract(addr, chipAbi, write ? signer : readProv());
+}
+
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+export async function resolveChip() {
+  if (POOL_ADDR) {
+    try {
+      const addr = await poolContract().token();
+      if (addr && /^0x[0-9a-fA-F]{40}$/.test(addr) && addr.toLowerCase() !== ZERO_ADDR) {
+        if (addr.toLowerCase() === (CHIP_ADDR || '').toLowerCase() && chipMeta.address && chipMeta.symbol) return chipMeta;
+        CHIP_ADDR = addr;
+      }
+    } catch { /* keep fallback */ }
+  }
+  const addr = CHIP_ADDR || FALLBACK_CHIP_ADDR;
+  if (!addr) return chipMeta;
+  try {
+    const c = new Contract(addr, chipAbi, readProv());
+    chipMeta = { address: addr, symbol: await c.symbol(), name: await c.name() };
+  } catch {
+    chipMeta = { address: addr, symbol: chipMeta.symbol || 'CHIP', name: chipMeta.name || '' };
+  }
+  return chipMeta;
 }
 
 const CHAIN_META = {
@@ -193,8 +220,7 @@ export async function readPools(matchId, flyIds) {
 }
 
 export async function readChipMeta() {
-  const c = chipContract();
-  return { symbol: await c.symbol(), name: await c.name(), address: CHIP_ADDR };
+  return resolveChip();
 }
 
 export async function readBalance(addr) {
@@ -250,7 +276,7 @@ export async function placeBet(matchId, flyId, chips) {
   dbg('chain.js:placeBet', 'bet attempt', { matchId, flyId, chips, status, account, block, chip: bal == null ? null : chipFmt(bal) }, 'G');
   // #endregion
   if (status !== 1) throw new Error(status === 0 ? 'Race not open on-chain yet' : 'Betting closed');
-  if (bal != null && bal < amount) throw new Error(`Only ${Number(chipFmt(bal)).toFixed(1)} CHIP — ask the host to mint more`);
+  if (bal != null && bal < amount) throw new Error(`Only ${Number(chipFmt(bal)).toFixed(1)} ${chipSymbol()} — ask the host to mint more`);
   await approveIfNeeded(amount);
   // #region agent log
   let tx;

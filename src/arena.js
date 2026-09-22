@@ -20,6 +20,7 @@ import {
   DEFAULT_WINDOW, chainConfigured, connectWallet, disconnectWallet, ensureWallet, restoreWallet, switchAccount, onWalletChange, getAccount, readWindow, readPools,
   openRace, lockRace, settleRace, voidRace, placeBet, claimRace, refundRace,
   readBalance, loadHistory, userTotal, userStake, isClaimed, readRace, chipFmt, setDebugSink,
+  resolveChip, chipSymbol, getChipMeta,
 } from './chain.js';
 const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pages
 
@@ -502,6 +503,7 @@ function setupRaceChrome() {
   const note = $('#bpBody .note');
   if (note) note.textContent = 'What this fly sees.';
   raceAudio = createRaceAudio(`${BASE}yipee.wav`, `${BASE}gong.wav`);
+  armWatchAudio();
   document.addEventListener('visibilitychange', () => {
     raceAudio.setMuted(document.hidden);
     if (isHost && document.hidden) raceAudio.unlock().then(() => raceAudio.hold(true));
@@ -509,7 +511,6 @@ function setupRaceChrome() {
     kickHostSim();
   });
   if (isHost) {
-    raceAudio.unlock().then(() => raceAudio.hold(true));
     setInterval(() => {
       if (matchPhase === 'lobby') tickLobby();
       else if (matchPhase === 'live' && running) {
@@ -522,7 +523,6 @@ function setupRaceChrome() {
     }, 1000);
   }
   if (isWatch) {
-    armWatchAudio();
     const profile = $('#profile');
     if (profile) {
       profile.hidden = false;
@@ -558,6 +558,53 @@ function setupRaceChrome() {
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
   addEventListener('resize', positionBpHint);
   setupEnterGate();
+  resolveChip().then(() => {
+    paintEnterToken();
+    if (matchPhase === 'lobby') paintLobbyOverlay(true);
+    refreshProfile();
+  }).catch(() => {});
+}
+function shortToken(addr) {
+  if (!addr) return '';
+  return addr.slice(0, 6) + '…' + addr.slice(-4);
+}
+function paintEnterToken() {
+  const btn = $('#enterToken');
+  if (!btn) return;
+  const addr = getChipMeta()?.address;
+  if (!addr) { btn.hidden = true; return; }
+  btn.hidden = false;
+  btn.dataset.addr = addr;
+  const shown = btn.dataset.copied === '1' ? 'Copied' : shortToken(addr);
+  btn.textContent = shown;
+  btn.title = 'Copy token address';
+}
+function copyEnterToken(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const btn = $('#enterToken');
+  const addr = btn?.dataset.addr;
+  if (!addr) return;
+  const done = () => {
+    btn.dataset.copied = '1';
+    paintEnterToken();
+    setTimeout(() => { if (btn.dataset) { btn.dataset.copied = ''; paintEnterToken(); } }, 1200);
+  };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(addr).then(done).catch(() => fallbackCopy(addr, done));
+  else fallbackCopy(addr, done);
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.left = '-9999px';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch {}
+  ta.remove();
+}
+function unlockRaceAudio() {
+  return raceAudio?.unlock().then(() => {
+    if (isHost) raceAudio.hold(true);
+    else playWatchBed();
+  });
 }
 function setupEnterGate() {
   let entered = false;
@@ -568,24 +615,25 @@ function setupEnterGate() {
   el.innerHTML = `<div class="enter-card" role="dialog" aria-labelledby="enterTitle" aria-modal="true">
     <img class="enter-logo" src="${BASE}FruitFlyText.png" alt="Fruit Fly" />
     <h1 id="enterTitle">Welcome to Fruit Fly</h1>
-    <p>Watch a live odor race, pick a fly, and bet on who reaches the vinegar.</p>
+    <p>Three of us, three brains — 165,122 neurons each — racing for a drop of vinegar. Pick a fly. Cheer. Bet. Don't get eaten by a fruit bowl.</p>
+    <button type="button" class="enter-token" id="enterToken" hidden></button>
     <button type="button" class="primary" id="enterBtn">Press to enter</button>
   </div>`;
   document.body.appendChild(el);
+  paintEnterToken();
   const dismiss = () => {
     if (!el.isConnected) return;
     try { sessionStorage.setItem(ENTER_GATE_KEY, '1'); } catch {}
     el.remove();
     removeEventListener('keydown', onKey);
-    raceAudio?.unlock().then(() => {
-      if (isHost) raceAudio.hold(true);
-      else playWatchBed();
-    });
+    unlockRaceAudio();
   };
   const onKey = e => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dismiss(); }
   };
-  el.addEventListener('click', dismiss);
+  $('#enterBtn')?.addEventListener('pointerdown', e => { e.stopPropagation(); unlockRaceAudio(); });
+  $('#enterBtn')?.addEventListener('click', e => { e.stopPropagation(); dismiss(); });
+  $('#enterToken')?.addEventListener('click', copyEnterToken);
   addEventListener('keydown', onKey);
 }
 function settleNote() {
@@ -673,9 +721,9 @@ function playWatchBed() {
   raceAudio?.playBed(watchOverlayPhase === 'live' ? 'race' : 'menu');
 }
 function armWatchAudio() {
-  const unlock = () => raceAudio.unlock().then(playWatchBed);
-  unlock();
+  const unlock = () => unlockRaceAudio();
   addEventListener('pointerdown', unlock);
+  addEventListener('touchstart', unlock, { passive: true });
   addEventListener('keydown', unlock);
 }
 function showWatchWaiting(msg) {
@@ -927,8 +975,9 @@ function setProfileFolded(folded, { instant = false } = {}) {
   const profile = $('#profile');
   if (!profile || profile.classList.contains('folded') === folded) return;
   profileFoldChrome(folded);
-  if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  if (instant || raceMobile() || matchMedia('(prefers-reduced-motion: reduce)').matches) {
     profile.style.width = '';
+    profile.style.minWidth = '';
     profile.style.transition = '';
     profile.classList.toggle('folded', folded);
     return;
@@ -1028,14 +1077,22 @@ function poolRowsHtml(list = flies) {
     const amt = p ? Number(p.display || 0) : 0;
     const odds = amt > 0 && total > 0 ? (total / amt).toFixed(2) + '×' : '—';
     const on = betFlyId === f.id ? ' on' : '';
-    return `<button type="button" class="bet-fly${on}" data-fly="${f.id}" style="--fly:${f.color}"><b>${f.name}</b><span>${amt} CHIP</span><i>${odds}</i></button>`;
+    return `<button type="button" class="bet-fly${on}" data-fly="${f.id}" style="--fly:${f.color}"><b>${f.name}</b><span>${amt} ${chipSymbol()}</span><i>${odds}</i></button>`;
   }).join('')}</div>`;
 }
 async function refreshPoolSnap() {
   if (!chainConfigured() || !matchId || Date.now() - lastPoolRead < 2000) return;
   lastPoolRead = Date.now();
-  try { poolSnap = await readPools(matchId, flies.map(f => f.id)); }
-  catch { /* offline pool */ }
+  try {
+    const prev = getChipMeta()?.address;
+    await resolveChip();
+    poolSnap = await readPools(matchId, flies.map(f => f.id));
+    if (getChipMeta()?.address !== prev) {
+      paintEnterToken();
+      if (matchPhase === 'lobby') paintLobbyOverlay(true);
+      refreshProfile();
+    }
+  } catch { /* offline pool */ }
 }
 // #region agent log
 function dbg(location, message, data, hypothesisId = 'C') {
@@ -1221,7 +1278,7 @@ async function refreshProfile() {
       matchId ? userTotal(matchId, acct) : 0n,
     ]);
     if (seq !== profileSeq) return;    // a newer refresh already owns the panel
-    if (bal) bal.textContent = `${Number(chips).toFixed(1)} CHIP` + (stake && stake > 0n ? ` · this race ${Number(chipFmt(stake)).toFixed(1)}` : '');
+    if (bal) bal.textContent = `${Number(chips).toFixed(1)} ${chipSymbol()}` + (stake && stake > 0n ? ` · this race ${Number(chipFmt(stake)).toFixed(1)}` : '');
     if (list) {
       list.innerHTML = hist.slice(0, 8).map(r => {
         const st = ticketStatus(r);
@@ -1276,7 +1333,7 @@ function paintLobbyOverlay(force = false) {
       <p class="sub" id="lobbyClock">${clock}</p>
       ${poolRowsHtml()}
       <div class="bet-stake">
-        <div class="bet-stake-row"><input id="betAmt" type="number" min="1" value="10"><span>CHIP</span>
+        <div class="bet-stake-row"><input id="betAmt" type="number" min="1" value="10"><span>${chipSymbol()}</span>
           <button id="betPlace" class="primary" type="button"${open ? '' : ' disabled'}>Bet</button></div>
       </div>
       <div class="bet-wallet">

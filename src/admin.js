@@ -1,6 +1,6 @@
 import {
   CHAIN_ID, chainConfigured, connectWallet, getAccount, poolContract,
-  adminSetToken, adminSetWindow, adminSetOperator, adminMint, readChipMeta,
+  adminSetToken, adminSetWindow, adminSetOperator, adminMint, readChipMeta, chipSymbol,
 } from './chain.js';
 
 const $ = s => document.querySelector(s);
@@ -45,6 +45,8 @@ async function refresh() {
   $('#adminWindow').value = windowSec;
   $('#adminToken').value = token;
   $('#adminOp').value = op;
+  const mint = $('#adminMint');
+  if (mint) mint.textContent = `Mint ${meta.symbol || chipSymbol()}`;
 }
 
 $('#adminConnect').onclick = async () => {
