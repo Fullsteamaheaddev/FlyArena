@@ -113,6 +113,14 @@ async function mainWatch() {
   setRaceBrainFolded(raceMobile(), { instant: true });
   setupWatchBrainPanel();
   $('#loading').remove();
+  const profile = $('#profile');
+  if (profile) {
+    profile.hidden = false;
+    if (raceMobile()) setProfileFolded(true, { instant: true });
+    syncProfileScrim();
+    refreshProfile();
+    syncBpHint();
+  }
   window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, rebuildEnv, startRaceFollow, stopRaceFollow, announceRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; } };
   animate();
 }
@@ -525,7 +533,6 @@ function setupRaceChrome() {
   if (isWatch) {
     const profile = $('#profile');
     if (profile) {
-      profile.hidden = false;
       profile.classList.toggle('guest', !getAccount());
       $('#profileConnect').onclick = e => {
         if (getAccount()) copyProfileAddress(e);
@@ -535,8 +542,6 @@ function setupRaceChrome() {
       profileFoldChrome(profile.classList.contains('folded'));
       $('#profileFold')?.addEventListener('click', () => setProfileFolded(!profile.classList.contains('folded')));
       $('#profileScrim')?.addEventListener('click', () => setProfileFolded(true));
-      if (raceMobile()) setProfileFolded(true, { instant: true });
-      syncProfileScrim();
       restoreWallet().then(a => {
         // #region agent log
         dbg('arena.js:restoreWallet', 'silent restore', { acct: a ? a.slice(0, 10) : null }, 'I');
@@ -564,6 +569,7 @@ function setupRaceChrome() {
   setupRaceAnnounce();
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
   addEventListener('resize', () => { positionBpHint(); syncProfileScrim(); });
+  setupWalletPick();
   setupEnterGate();
   resolveChip().then(() => {
     paintEnterToken();
@@ -657,6 +663,7 @@ function setupEnterGate() {
     el.remove();
     removeEventListener('keydown', onKey);
     unlockRaceAudio();
+    syncBpHint();
   };
   const onKey = e => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dismiss(); }
@@ -947,11 +954,27 @@ function syncBrainInset() {
   brainCam.updateProjectionMatrix();
 }
 function positionBpHint() {
-  const panel = $('#brainpanel'), hint = $('#bpHint');
-  if (!panel || !hint || hint.hidden) return;
-  const r = panel.getBoundingClientRect();
-  hint.style.top = `${r.bottom + 8}px`;
-  hint.style.left = `${r.left + (r.width - hint.offsetWidth) / 2}px`;
+  const hint = $('#bpHint');
+  const profile = $('#profile');
+  if (!hint || hint.hidden || !profile || profile.hidden) return;
+  const r = profile.getBoundingClientRect();
+  if (raceMobile()) {
+    hint.style.top = `${r.bottom + 8}px`;
+    hint.style.left = `${Math.max(8, r.right - hint.offsetWidth)}px`;
+  } else {
+    hint.style.top = `${Math.max(8, r.top - hint.offsetHeight - 8)}px`;
+    hint.style.left = `${r.left + (r.width - hint.offsetWidth) / 2}px`;
+  }
+  hint.style.right = 'auto';
+  hint.style.bottom = 'auto';
+}
+function syncBpHint() {
+  const hint = $('#bpHint');
+  if (!hint) return;
+  const show = isWatch && isRace && !getAccount() && !$('#loading') && !$('#enterGate')
+    && $('#profile') && !$('#profile').hidden;
+  hint.hidden = !show;
+  if (show) requestAnimationFrame(() => requestAnimationFrame(positionBpHint));
 }
 function setupRaceAnnounce() {
   if (raceAnnounce || !scene) return;
@@ -1017,6 +1040,7 @@ function setProfileFolded(folded, { instant = false } = {}) {
     profile.style.transition = '';
     profile.classList.toggle('folded', folded);
     syncProfileScrim();
+    syncBpHint();
     return;
   }
   const fromW = profile.getBoundingClientRect().width;
@@ -1027,6 +1051,7 @@ function setProfileFolded(folded, { instant = false } = {}) {
   profile.style.width = `${fromW}px`;
   profile.classList.toggle('folded', folded);
   syncProfileScrim();
+  syncBpHint();
   requestAnimationFrame(() => { profile.style.width = `${toW}px`; });
   profile.addEventListener('transitionend', (e) => {
     if (e.propertyName !== 'width') return;
@@ -1034,27 +1059,17 @@ function setProfileFolded(folded, { instant = false } = {}) {
     profile.style.minWidth = '';
     profile.style.transition = '';
     syncProfileScrim();
+    syncBpHint();
   }, { once: true });
 }
 function setRaceBrainFolded(folded, { user = false, instant = false } = {}) {
   if (!isRace) return;
   if (user) { raceBrainTouched = true; clearTimeout(raceBrainTimer); raceBrainTimer = null; }
-  const panel = $('#brainpanel'), hint = $('#bpHint');
+  const panel = $('#brainpanel');
   if (!panel) return;
   panel.classList.toggle('folded', folded);
   brainFoldChrome(folded);
-  if (hint) {
-    if (raceMobile()) hint.hidden = true;
-    else {
-      hint.hidden = !folded;
-      if (folded) {
-        const placeHint = () => requestAnimationFrame(() => requestAnimationFrame(positionBpHint));
-        placeHint();
-        panel.addEventListener('transitionend', e => { if (e.propertyName === 'width') positionBpHint(); }, { once: true });
-        setTimeout(positionBpHint, 400);
-      }
-    }
-  }
+  syncBpHint();
   if (!folded) requestAnimationFrame(() => requestAnimationFrame(syncBrainInset));
   if (folded) {
     const f = flies.find(x => x.id === selected);
@@ -1171,6 +1186,10 @@ function flyTag(flyId, id = matchId) {
   return `<span class="tk-fly" style="--fly:${color}">${name}</span>`;
 }
 async function connectFromUi(fn = connectWallet) {
+  if (!window.ethereum && needsMobileWalletPick()) {
+    showWalletPick();
+    return;
+  }
   const note = $('#betNote') || $('#profileNote');
   try {
     if (note) note.textContent = 'Check your wallet…';
@@ -1185,6 +1204,41 @@ async function connectFromUi(fn = connectWallet) {
     // #endregion
     if (note) note.textContent = e.shortMessage || e.message || String(e);
   }
+}
+function needsMobileWalletPick() {
+  return raceMobile() || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+function walletDappUrl() {
+  return `${location.host}${location.pathname}${location.search}${location.hash}`;
+}
+function metamaskDappLink() {
+  return `https://metamask.app.link/dapp/${walletDappUrl()}`;
+}
+function rabbyDappLink() {
+  return `https://rabbymobile.page.link/?apn=com.debank.rabbymobile&ibi=com.debank.rabbymobile&isi=6476580990&link=${encodeURIComponent(location.href)}`;
+}
+function showWalletPick() {
+  const el = $('#walletPick');
+  if (!el) return;
+  el.hidden = false;
+}
+function hideWalletPick() {
+  const el = $('#walletPick');
+  if (el) el.hidden = true;
+}
+function setupWalletPick() {
+  const el = $('#walletPick');
+  if (!el) return;
+  $('#walletMetaMask')?.addEventListener('click', e => {
+    e.preventDefault();
+    location.href = metamaskDappLink();
+  });
+  $('#walletRabby')?.addEventListener('click', e => {
+    e.preventDefault();
+    location.href = rabbyDappLink();
+  });
+  el.addEventListener('click', e => { if (e.target === el) hideWalletPick(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !el.hidden) hideWalletPick(); });
 }
 function clearWalletUi() {
   disconnectWallet();
@@ -1245,7 +1299,10 @@ function wireLobbyCard(card) {
     b.onclick = () => selectBetFly(+b.dataset.fly, card);
   });
   const connect = card.querySelector('#betConnect');
-  if (connect) connect.onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
+  if (connect) {
+    connect.classList.toggle('connect-btn', !getAccount());
+    connect.onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
+  }
   const disc = card.querySelector('#betDisconnect');
   if (disc) disc.onclick = () => clearWalletUi();
   const bet = card.querySelector('#betPlace');
@@ -1292,11 +1349,14 @@ async function refreshProfile() {
   const disc = $('#profileDisconnect');
   const acct = getAccount();
   el.classList.toggle('guest', !acct);
+  if (acct) hideWalletPick();
   if (connect) {
     connect.textContent = connect.dataset.copied === '1' ? 'Copied' : shortAddr(acct);
     connect.title = acct ? 'Copy address' : 'Connect wallet';
+    connect.classList.toggle('connect-btn', !acct);
   }
   if (disc) disc.hidden = !acct;
+  syncBpHint();
   const bal = $('#profileBal'), list = $('#profileTickets');
   if (!chainConfigured()) {
     if (bal) bal.textContent = 'Pool not configured';
