@@ -29,7 +29,7 @@ export const PRESETS = {
   courtship: { label: 'Courtship: a male and a female', env: () => ({ ...structuredClone(DEFAULT_ENV), obstacles: [], hazards: [], bitterPatches: [], food: [], odors: [] }),
     flySpots: [{ pos: [-0.6, 0], yaw: 0, sex: 'm' }, { pos: [0.4, 0.3], yaw: 2.4, sex: 'f' }] },
   race: {
-    label: 'Odor race',
+    label: 'Fruit Fly',
     flies: 3,
     maxFlies: 3,
     flySpots: [0, 1, 2].map(i => {

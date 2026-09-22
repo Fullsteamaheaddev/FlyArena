@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-/// Play-money chip for the odor-race pool. Owner mints (admin faucet).
+/// Play-money chip for the Fruit Fly pool. Owner mints (admin faucet).
 contract PlayChip is ERC20, Ownable {
     constructor() ERC20("FlyArena Chip", "CHIP") Ownable(msg.sender) {}
 

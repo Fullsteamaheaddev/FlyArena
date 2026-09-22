@@ -31,7 +31,7 @@ File: `src/sim/senses.js`. Rates are recomputed every millisecond and set as Poi
   glomerular pattern — the odour's identity — survives while the overall level is bounded. Stands in for
   GABA_B presynaptic inhibition of receptor terminals.
 - **Wind.** Uniform `env.wind = [wx, wy]` is the arena slider. Optional `env.windRadial` (cm/s) adds flow
-  **toward the origin**, used by the odor race so every rim start has the same inward cue. `windAt(p, env)`
+  **toward the origin**, used by Fruit Fly so every rim start has the same inward cue. `windAt(p, env)`
   combines both; Johnston's organ uses the local air speed. With radial flow, flies surge *with* the wind
   toward the source; with only uniform wind they surge classic upwind (against the flow).
 - **Pheromone.** Each other fly carries a short-range cVA-like plume (`FLY_ODOR`, σ = 0.28 cm) into DA1,

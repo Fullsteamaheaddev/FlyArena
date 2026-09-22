@@ -4,8 +4,12 @@ export function createRaceAudio(yipeeUrl, gongUrl) {
   let currentBed = null, lastStep = 0, muted = false, keepOsc = null;
 
   async function unlock() {
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    // #region agent log
+    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'ios-audio',hypothesisId:'D',location:'race-audio.js:unlock:enter',message:'unlock enter',data:{hadCtx:!!ctx,state:ctx?.state||null,hasCtor:!!Ctor,hasWebkit:!!window.webkitAudioContext,ios:/iPhone|iPad|iPod/i.test(navigator.userAgent)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!ctx) {
-      ctx = new AudioContext();
+      ctx = new Ctor();
       master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
       duckGain = ctx.createGain(); duckGain.gain.value = 1; duckGain.connect(master);
       musicGain = ctx.createGain(); musicGain.gain.value = 0.1; musicGain.connect(duckGain);
@@ -14,7 +18,11 @@ export function createRaceAudio(yipeeUrl, gongUrl) {
       menuBuf = makeMenuMusicBuffer(ctx);
       startBuzz();
     }
-    if (ctx.state === 'suspended') await ctx.resume();
+    const before = ctx.state;
+    if (ctx.state === 'suspended' || ctx.state === 'interrupted') await ctx.resume();
+    // #region agent log
+    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'ios-audio',hypothesisId:'A',location:'race-audio.js:unlock:resume',message:'after resume',data:{before,after:ctx.state,muted,hidden:document.hidden},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!yipeeBuf) {
       try {
         const raw = await (await fetch(yipeeUrl)).arrayBuffer();
@@ -40,8 +48,11 @@ export function createRaceAudio(yipeeUrl, gongUrl) {
     noise.connect(nbp); nbp.connect(ng); ng.connect(buzzGain); noise.start();
   }
   function playBed(kind) {
-    if (!ctx || ctx.state !== 'running') return;
     const buf = kind === 'menu' ? menuBuf : musicBuf;
+    // #region agent log
+    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'ios-audio',hypothesisId:'B',location:'race-audio.js:playBed',message:'playBed',data:{kind,state:ctx?.state||null,hasBuf:!!buf,same:(currentBed===kind&&!!musicSrc),muted,hidden:document.hidden},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (!ctx || ctx.state !== 'running') return;
     if (!buf || (currentBed === kind && musicSrc)) return;
     const now = ctx.currentTime, fade = 0.25;
     if (musicSrc && bedGain) {

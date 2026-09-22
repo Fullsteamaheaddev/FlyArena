@@ -17,7 +17,7 @@ neurons directly. Change wind and light. Follow a fly and watch its brain in the
 per-eye visual columns, and firing rates of the smell, taste, looming, giant-fibre,
 walking, steering, grooming, courtship and feeding neurons. Zoom in for the full scan,
 setae, eye facets and wing interference. `[` and `]` fold the side panels. Seven presets
-define the standard assays, plus a game-style odor race (`arena.html?env=race`; winner time is wall-clock, fly-time smaller; last 3 winners and Start-unlocked audio). Everything about it is in [arena app](../15-arena.md).
+define the standard assays, plus a game-style Fruit Fly race (`arena.html?env=race`; winner time is wall-clock, fly-time smaller; last 3 winners and Start-unlocked audio). Everything about it is in [arena app](../15-arena.md).
 
 **`fly.html`, the 3D fly.** An interactive fly with Blender-subdivided geometry, baked
 Cycles lighting, live eye reflections, setae, sex comb, abdominal bands and wing

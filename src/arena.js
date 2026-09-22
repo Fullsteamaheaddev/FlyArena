@@ -494,7 +494,7 @@ function setupRaceChrome() {
   document.body.classList.add('race');
   $('#panel').hidden = true;
   $('#raceHud').hidden = false;
-  document.title = 'Odor race';
+  document.title = 'Fruit Fly';
   $('#follow').checked = false;
   const capL = $('#eyeL')?.closest('figure')?.querySelector('figcaption');
   const capR = $('#eyeR')?.closest('figure')?.querySelector('figcaption');
@@ -526,10 +526,13 @@ function setupRaceChrome() {
     const profile = $('#profile');
     if (profile) {
       profile.hidden = false;
+      profile.classList.toggle('guest', !getAccount());
       $('#profileConnect').onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
       $('#profileDisconnect').onclick = () => clearWalletUi();
       profileFoldChrome(profile.classList.contains('folded'));
       $('#profileFold')?.addEventListener('click', () => setProfileFolded(!profile.classList.contains('folded')));
+      $('#profileScrim')?.addEventListener('click', () => setProfileFolded(true));
+      syncProfileScrim();
       restoreWallet().then(a => {
         // #region agent log
         dbg('arena.js:restoreWallet', 'silent restore', { acct: a ? a.slice(0, 10) : null }, 'I');
@@ -556,7 +559,7 @@ function setupRaceChrome() {
   });
   setupRaceAnnounce();
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
-  addEventListener('resize', positionBpHint);
+  addEventListener('resize', () => { positionBpHint(); syncProfileScrim(); });
   setupEnterGate();
   resolveChip().then(() => {
     paintEnterToken();
@@ -600,7 +603,11 @@ function fallbackCopy(text, done) {
   try { document.execCommand('copy'); done(); } catch {}
   ta.remove();
 }
-function unlockRaceAudio() {
+function unlockRaceAudio(ev) {
+  const src = ev?.type || 'direct';
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'ios-audio',hypothesisId:'C',location:'arena.js:unlockRaceAudio',message:'unlock call',data:{src,trusted:!!ev?.isTrusted,ios:/iPhone|iPad|iPod/i.test(navigator.userAgent),gate:!!$('#enterGate'),hidden:document.hidden,phase:watchOverlayPhase||matchPhase},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   return raceAudio?.unlock().then(() => {
     if (isHost) raceAudio.hold(true);
     else playWatchBed();
@@ -618,6 +625,11 @@ function setupEnterGate() {
     <p>Three of us, three brains — 165,122 neurons each — racing for a drop of vinegar. Pick a fly. Cheer. Bet. Don't get eaten by a fruit bowl.</p>
     <button type="button" class="enter-token" id="enterToken" hidden></button>
     <button type="button" class="primary" id="enterBtn">Press to enter</button>
+    <div class="enter-socials">
+      <a class="enter-social enter-social-x" href="https://x.com/SugarRunFun" target="_blank" rel="noopener noreferrer" aria-label="X">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      </a>
+    </div>
   </div>`;
   document.body.appendChild(el);
   paintEnterToken();
@@ -631,7 +643,7 @@ function setupEnterGate() {
   const onKey = e => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dismiss(); }
   };
-  $('#enterBtn')?.addEventListener('pointerdown', e => { e.stopPropagation(); unlockRaceAudio(); });
+  $('#enterBtn')?.addEventListener('pointerdown', e => { e.stopPropagation(); unlockRaceAudio(e); });
   $('#enterBtn')?.addEventListener('click', e => { e.stopPropagation(); dismiss(); });
   $('#enterToken')?.addEventListener('click', copyEnterToken);
   addEventListener('keydown', onKey);
@@ -721,7 +733,7 @@ function playWatchBed() {
   raceAudio?.playBed(watchOverlayPhase === 'live' ? 'race' : 'menu');
 }
 function armWatchAudio() {
-  const unlock = () => unlockRaceAudio();
+  const unlock = (e) => unlockRaceAudio(e);
   addEventListener('pointerdown', unlock);
   addEventListener('touchstart', unlock, { passive: true });
   addEventListener('keydown', unlock);
@@ -731,7 +743,7 @@ function showWatchWaiting(msg) {
   lastLobbyKind = '';
   lastPoolKey = '';
   if (card) card.dataset.kind = '';
-  card.innerHTML = `<h1>Odor race</h1><p>${msg}</p>`;
+  card.innerHTML = `<h1>Fruit Fly</h1><p>${msg}</p>`;
   if (watchOverlayPhase !== 'wait') showRaceOverlayCard(card);
   else { const overlay = $('#raceOverlay'); overlay.hidden = false; }
   watchOverlayPhase = 'wait';
@@ -963,6 +975,12 @@ function profileFoldChrome(folded) {
   b.title = `${folded ? 'Show' : 'Hide'} profile`;
   b.setAttribute('aria-expanded', String(!folded));
 }
+function syncProfileScrim() {
+  const scrim = $('#profileScrim');
+  const profile = $('#profile');
+  if (!scrim || !profile) return;
+  scrim.hidden = !(raceMobile() && !profile.hidden && !profile.classList.contains('folded'));
+}
 function peekProfileWidth(folded) {
   const profile = $('#profile');
   const was = profile.classList.contains('folded');
@@ -980,6 +998,7 @@ function setProfileFolded(folded, { instant = false } = {}) {
     profile.style.minWidth = '';
     profile.style.transition = '';
     profile.classList.toggle('folded', folded);
+    syncProfileScrim();
     return;
   }
   const fromW = profile.getBoundingClientRect().width;
@@ -989,12 +1008,14 @@ function setProfileFolded(folded, { instant = false } = {}) {
   profile.style.minWidth = '0';
   profile.style.width = `${fromW}px`;
   profile.classList.toggle('folded', folded);
+  syncProfileScrim();
   requestAnimationFrame(() => { profile.style.width = `${toW}px`; });
   profile.addEventListener('transitionend', (e) => {
     if (e.propertyName !== 'width') return;
     profile.style.width = '';
     profile.style.minWidth = '';
     profile.style.transition = '';
+    syncProfileScrim();
   }, { once: true });
 }
 function setRaceBrainFolded(folded, { user = false, instant = false } = {}) {
@@ -1252,6 +1273,7 @@ async function refreshProfile() {
   const connect = $('#profileConnect');
   const disc = $('#profileDisconnect');
   const acct = getAccount();
+  el.classList.toggle('guest', !acct);
   if (connect) connect.textContent = shortAddr(acct);
   if (disc) disc.hidden = !acct;
   const bal = $('#profileBal'), list = $('#profileTickets');
@@ -1329,7 +1351,7 @@ function paintLobbyOverlay(force = false) {
     const open = !chainConfigured() || poolStatus === 1 || (poolStatus == null && betClosesAt != null);
     const note = !chainConfigured() ? 'Pool not configured (set VITE_POOL).'
       : (open ? 'Pick a fly, then Bet.' : 'Opening the race on-chain…');
-    card.innerHTML = `<h1>Odor race</h1><p>Winner pool — first to the vinegar</p>
+    card.innerHTML = `<h1>Fruit Fly</h1><p>Winner pool — first to the vinegar</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       ${poolRowsHtml()}
       <div class="bet-stake">
@@ -1342,7 +1364,7 @@ function paintLobbyOverlay(force = false) {
       </div>
       <p id="betNote" class="flyt">${note}</p>`;
   } else {
-    card.innerHTML = `<h1>Odor race</h1><p>First to the vinegar wins!</p>
+    card.innerHTML = `<h1>Fruit Fly</h1><p>First to the vinegar wins!</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       <p class="flyt">Race starts itself — no GO</p>
       ${poolRowsHtml()}${raceHistoryHtml(loadRaceHistory())}`;
