@@ -54,6 +54,7 @@ const RACE_PLUME_TOP = 0.20, RACE_CHASE_BACK = 2.6, RACE_CHASE_Z = 1.15;
 const RACE_LABEL_Z = 1.05, RACE_LABEL_Z_CHASE = 0.28;
 const RACE_HISTORY_KEY = 'odorRaceResults';
 const RACE_FLIES_KEY = 'odorRaceFlies';
+const ENTER_GATE_KEY = 'fruitFlyEntered';
 let lastRaceFliesKey = '';
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
@@ -556,6 +557,36 @@ function setupRaceChrome() {
   setupRaceAnnounce();
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
   addEventListener('resize', positionBpHint);
+  setupEnterGate();
+}
+function setupEnterGate() {
+  let entered = false;
+  try { entered = sessionStorage.getItem(ENTER_GATE_KEY) === '1'; } catch {}
+  if (entered) return;
+  const el = document.createElement('div');
+  el.id = 'enterGate';
+  el.innerHTML = `<div class="enter-card" role="dialog" aria-labelledby="enterTitle" aria-modal="true">
+    <img class="enter-logo" src="${BASE}FruitFlyText.png" alt="Fruit Fly" />
+    <h1 id="enterTitle">Welcome to Fruit Fly</h1>
+    <p>Watch a live odor race, pick a fly, and bet on who reaches the vinegar.</p>
+    <button type="button" class="primary" id="enterBtn">Press to enter</button>
+  </div>`;
+  document.body.appendChild(el);
+  const dismiss = () => {
+    if (!el.isConnected) return;
+    try { sessionStorage.setItem(ENTER_GATE_KEY, '1'); } catch {}
+    el.remove();
+    removeEventListener('keydown', onKey);
+    raceAudio?.unlock().then(() => {
+      if (isHost) raceAudio.hold(true);
+      else playWatchBed();
+    });
+  };
+  const onKey = e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dismiss(); }
+  };
+  el.addEventListener('click', dismiss);
+  addEventListener('keydown', onKey);
 }
 function settleNote() {
   if (!chainConfigured()) return 'Next race starting…';

@@ -102,13 +102,51 @@ body.race {
 }
 body.race #scoreboard,
 body.race #brainpanel,
-body.race .race-card {
+body.race .race-card,
+body.race #enterGate .enter-card {
   border: 4px solid var(--race-outline);
   border-radius: 18px;
 }
 body.race #scoreboard,
 body.race #brainpanel { box-shadow: none; }
 body.race #raceOverlay { background: rgba(8, 6, 14, .42); }
+body.race #enterGate {
+  position: fixed; inset: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgba(8, 6, 14, .72);
+  box-sizing: border-box;
+  cursor: pointer;
+}
+body.race #enterGate .enter-card {
+  width: 80vw; height: 80vh;
+  max-width: 80vw; max-height: 80vh;
+  box-sizing: border-box;
+  padding: 36px 40px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 12px;
+  background: var(--panel); backdrop-filter: blur(12px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
+  overflow: auto;
+  cursor: pointer;
+}
+body.race #enterGate .enter-logo {
+  display: block; width: min(520px, 70%); height: auto; max-height: 46%;
+  object-fit: contain; pointer-events: none;
+}
+body.race #enterGate h1 {
+  margin: 4px 0 0; font-family: var(--race-title); font-weight: 400;
+  font-size: clamp(28px, 4vw, 48px); line-height: 1.05; color: #fff;
+}
+body.race #enterGate p {
+  margin: 0 0 8px; max-width: 28em; color: var(--dim); font-size: clamp(14px, 1.6vw, 18px);
+}
+body.race #enterGate button {
+  min-width: 200px; padding: 14px 32px;
+  font: 400 22px/1.1 var(--race-title);
+  border: 4px solid var(--race-outline); border-radius: 999px;
+  background: var(--acc); color: #fff;
+}
 body.race .race-card {
   transform-origin: center center;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
@@ -462,7 +500,7 @@ body.race #brainpanel .fold { border-radius: 8px; }
   body.race #brainpanel:not(.folded) {
     display: flex;
     flex-direction: column;
-    max-height: 55vh;
+    max-height: 42dvh;
     overflow: auto;
   }
   body.race #brainpanel:not(.folded) header {
@@ -518,19 +556,56 @@ body.race #brainpanel .fold { border-radius: 8px; }
     align-self: center;
   }
   body.race .race-card button.bet-fly { min-width: 0; align-self: stretch; }
+  body.race #enterGate {
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+  body.race #enterGate .enter-card {
+    width: calc(100% - 24px); height: auto;
+    max-width: none; max-height: 90dvh;
+    padding: 24px 16px;
+    gap: 10px;
+  }
+  body.race #enterGate .enter-logo { width: min(280px, 100%); max-height: 36dvh; }
+  body.race #enterGate h1 { font-size: 28px; }
+  body.race #enterGate p { font-size: 15px; margin-bottom: 4px; }
+  body.race #enterGate button { min-width: 160px; min-height: 44px; font-size: 20px; padding: 12px 24px; }
   body.race #profile {
-    width: max-content;
-    min-width: min(320px, calc(100% - 24px));
-    max-width: min(520px, calc(100% - 24px));
-    right: 12px; bottom: auto; top: 12px;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: auto;
     max-height: none;
+  }
+  body.race #profile.folded {
+    top: max(8px, env(safe-area-inset-top));
+    left: auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
     transform-origin: top right;
+  }
+  body.race #profile:not(.folded) {
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    top: calc(max(8px, env(safe-area-inset-top)) + 88px);
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: 40dvh;
+    overflow: auto;
+    transform-origin: top center;
+  }
+  body.race #profile:not(.folded) #profileTickets {
+    overflow: auto;
+    max-height: 24dvh;
   }
   body.race #profile h2 { font-size: 24px; }
   body.race #profile:not(.folded) #profileConnect,
   body.race #profile:not(.folded) #profileDisconnect,
   body.race #profile:not(.folded) #profileFold {
     min-height: 44px;
+  }
+  body.race #profile:not(.folded) #profileConnect,
+  body.race #profile:not(.folded) #profileDisconnect {
+    height: 44px; padding: 8px 14px; font-size: 14px;
   }
   body.race #profile.folded #profileFold { font-size: 20px; padding: 6px 12px; min-height: 44px; min-width: 44px; }
   body.race .fly-label-info { width: min(280px, 80vw); }
