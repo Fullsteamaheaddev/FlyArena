@@ -527,11 +527,15 @@ function setupRaceChrome() {
     if (profile) {
       profile.hidden = false;
       profile.classList.toggle('guest', !getAccount());
-      $('#profileConnect').onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
+      $('#profileConnect').onclick = e => {
+        if (getAccount()) copyProfileAddress(e);
+        else connectFromUi(connectWallet);
+      };
       $('#profileDisconnect').onclick = () => clearWalletUi();
       profileFoldChrome(profile.classList.contains('folded'));
       $('#profileFold')?.addEventListener('click', () => setProfileFolded(!profile.classList.contains('folded')));
       $('#profileScrim')?.addEventListener('click', () => setProfileFolded(true));
+      if (raceMobile()) setProfileFolded(true, { instant: true });
       syncProfileScrim();
       restoreWallet().then(a => {
         // #region agent log
@@ -569,7 +573,7 @@ function setupRaceChrome() {
 }
 function shortToken(addr) {
   if (!addr) return '';
-  return addr.slice(0, 6) + '…' + addr.slice(-4);
+  return addr.slice(0, 10) + '…' + addr.slice(-6);
 }
 function paintEnterToken() {
   const btn = $('#enterToken');
@@ -602,6 +606,20 @@ function fallbackCopy(text, done) {
   document.body.appendChild(ta); ta.select();
   try { document.execCommand('copy'); done(); } catch {}
   ta.remove();
+}
+function copyProfileAddress(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const btn = $('#profileConnect');
+  const acct = getAccount();
+  if (!btn || !acct) return;
+  const done = () => {
+    btn.dataset.copied = '1';
+    refreshProfile();
+    setTimeout(() => { if (btn.dataset) { btn.dataset.copied = ''; refreshProfile(); } }, 1200);
+  };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(acct).then(done).catch(() => fallbackCopy(acct, done));
+  else fallbackCopy(acct, done);
 }
 function unlockRaceAudio(ev) {
   const src = ev?.type || 'direct';
@@ -1274,7 +1292,10 @@ async function refreshProfile() {
   const disc = $('#profileDisconnect');
   const acct = getAccount();
   el.classList.toggle('guest', !acct);
-  if (connect) connect.textContent = shortAddr(acct);
+  if (connect) {
+    connect.textContent = connect.dataset.copied === '1' ? 'Copied' : shortAddr(acct);
+    connect.title = acct ? 'Copy address' : 'Connect wallet';
+  }
   if (disc) disc.hidden = !acct;
   const bal = $('#profileBal'), list = $('#profileTickets');
   if (!chainConfigured()) {
