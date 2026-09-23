@@ -592,17 +592,26 @@ function paintEnterToken() {
   btn.textContent = shown;
   btn.title = 'Copy token address';
 }
+function popCopied(btn, after) {
+  btn.classList.remove('copied');
+  void btn.offsetWidth;
+  btn.dataset.copied = '1';
+  btn.classList.add('copied');
+  after?.();
+  setTimeout(() => {
+    if (!btn.dataset) return;
+    btn.dataset.copied = '';
+    btn.classList.remove('copied');
+    after?.();
+  }, 1200);
+}
 function copyEnterToken(e) {
   e.preventDefault();
   e.stopPropagation();
   const btn = $('#enterToken');
   const addr = btn?.dataset.addr;
   if (!addr) return;
-  const done = () => {
-    btn.dataset.copied = '1';
-    paintEnterToken();
-    setTimeout(() => { if (btn.dataset) { btn.dataset.copied = ''; paintEnterToken(); } }, 1200);
-  };
+  const done = () => popCopied(btn, paintEnterToken);
   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(addr).then(done).catch(() => fallbackCopy(addr, done));
   else fallbackCopy(addr, done);
 }
@@ -619,11 +628,7 @@ function copyProfileAddress(e) {
   const btn = $('#profileConnect');
   const acct = getAccount();
   if (!btn || !acct) return;
-  const done = () => {
-    btn.dataset.copied = '1';
-    refreshProfile();
-    setTimeout(() => { if (btn.dataset) { btn.dataset.copied = ''; refreshProfile(); } }, 1200);
-  };
+  const done = () => popCopied(btn, refreshProfile);
   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(acct).then(done).catch(() => fallbackCopy(acct, done));
   else fallbackCopy(acct, done);
 }

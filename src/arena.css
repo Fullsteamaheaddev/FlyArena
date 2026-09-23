@@ -194,6 +194,15 @@ body.race #enterGate .enter-token {
   cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 body.race #enterGate .enter-token[hidden] { display: none; }
+@keyframes copiedPop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+body.race #enterGate .enter-token.copied,
+body.race #profile #profileConnect.copied {
+  animation: copiedPop .45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 body.race .race-card {
   transform-origin: center center;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
@@ -510,6 +519,8 @@ body.race .race-card button.primary:focus-visible {
   body.race #enterGate .enter-card,
   body.race .race-card button.primary,
   body.race .race-card button.bet-fly { animation: none; transform: none; }
+  body.race #enterGate .enter-token.copied,
+  body.race #profile #profileConnect.copied { animation: none; transform: none; }
   body.race #profile { transition: none; }
 }
 body.race #scoreboard .race-clock b { font-family: var(--race-title); font-weight: 400; font-size: 32px; color: #fff; }
