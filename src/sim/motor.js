@@ -37,8 +37,8 @@ function gaitCycle(p, phi) {
 }
 
 export class Motor {
-  constructor(mj, model, data, bodymap, typeOf, sideOf, gait, mode = 'descending') {
-    this.model = model; this.data = data; this.mode = mode; this.gait = gait;
+  constructor(mj, model, data, bodymap, typeOf, sideOf, gait, mode = 'descending', opts = {}) {
+    this.model = model; this.data = data; this.mode = mode; this.gait = gait; this.forage = !!opts.forage;
     this.act = {}; for (let i = 0; i < model.nu; i++) this.act[model.actuator(i).name] = i;
     this.range = {}; const cr = model.actuator_ctrlrange; for (let i = 0; i < model.nu; i++) this.range[model.actuator(i).name] = [cr[2 * i], cr[2 * i + 1]];
     const byType = (t, s) => { const o = []; for (let i = 0; i < typeOf.length; i++) if (typeOf[i] === t && (s === undefined || sideOf[i] === s)) o.push(i); return o; };
@@ -101,7 +101,7 @@ export class Motor {
       const speedN = pivot ? PIVOT.amp : Math.min(1, Math.abs(v));
       this.ampF = (this.ampF || 0) + dtMs / GAIT_AMP_TAU * (ampT - (this.ampF || 0));
       const amp = this.ampF;
-      const freq = g.freq * (0.5 + 0.5 * speedN);
+      const freq = g.freq * (this.forage ? 1.4 : 1) * (0.5 + 0.5 * speedN);
       const duty = Math.min(0.8, Math.max(0.3, g.duty * (1.08 - 0.16 * speedN)));
       this.stepAmp = amp > 0.05 ? Math.min(1, amp * 2) : 0; this.pivot = pivot;
       if (amp > 0.05) this.phase += (pivot ? 1 : Math.sign(v)) * 2 * Math.PI * freq * dtMs / 1000;

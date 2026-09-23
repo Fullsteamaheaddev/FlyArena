@@ -44,9 +44,10 @@ export class FlyAgent {
     // vision: flyvis optic-lobe model driving the male-CNS optic lobe (if provided), else the simple photoreceptor eye
     this.fv = vision && flyvis ? new FlyVisionFV(mj, M, this.mjd, bodymap, flyvis.map, flyvis.eyes, this.bid.head, this.bid.thorax, flyvis.gain ?? 150) : null;
     this.eye = vision && !this.fv ? new CompoundEye(mj, M, this.mjd, bodymap, this.bid.head, this.bid.thorax) : null;
-    this.motor = new Motor(mj, M, this.mjd, bodymap, typeOf, sideOf, gait, mode);
-    this.intrinsic = intrinsic ? new Intrinsic(typeOf, sideOf, id + 1 + (seed || 0), bodymap.feeding, { forage: !!env.hungryForage }) : null;
-    this.flight = new Flight({ mj, model: M, data: this.mjd, thorax: this.bid.thorax, jointAdr: this.jointAdr, act: this.motor.act, range: this.motor.range, rand: this.intrinsic?.rand });
+    const forage = !!env.hungryForage;
+    this.motor = new Motor(mj, M, this.mjd, bodymap, typeOf, sideOf, gait, mode, { forage });
+    this.intrinsic = intrinsic ? new Intrinsic(typeOf, sideOf, id + 1 + (seed || 0), bodymap.feeding, { forage }) : null;
+    this.flight = new Flight({ mj, model: M, data: this.mjd, thorax: this.bid.thorax, jointAdr: this.jointAdr, act: this.motor.act, range: this.motor.range, rand: this.intrinsic?.rand, forage });
     this.flights = 0;
     this.driven = new Int32Array(0);
     // physiology

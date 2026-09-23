@@ -38,8 +38,8 @@ const LEG_JOINTS = ['coxa', 'coxa_abduct', 'coxa_twist', 'femur', 'femur_twist',
 export const FLIGHT_LEGS = { T1: { femur: -0.5, tibia: 0.6 }, T2: { femur: -0.5, tibia: 0.6 }, T3: { femur: -0.4, tibia: 0.6 } };
 
 export class Flight {
-  constructor({ mj, model, data, thorax, jointAdr, act, range, rand = Math.random }) {
-    this.mj = mj; this.M = model; this.d = data; this.th = thorax; this.act = act; this.range = range; this.rand = rand;
+  constructor({ mj, model, data, thorax, jointAdr, act, range, rand = Math.random, forage = false }) {
+    this.mj = mj; this.M = model; this.d = data; this.th = thorax; this.act = act; this.range = range; this.rand = rand; this.forage = !!forage;
     this.mass = model.body_subtreemass[thorax];
     this.bodies = []; for (let b = 1; b < model.nbody; b++) { let p = b; while (p > 0 && p !== thorax) p = model.body_parentid[p]; if (p === thorax) this.bodies.push(b); }
     // The stroke is sampled kinematically for calibration and rendering; the actuators
@@ -121,7 +121,7 @@ export class Flight {
     this.active = true; this.phase = 'climb'; this.t0 = tMs; this.cause = cause;
     this.dur = 1000 * F.duration[0] * Math.exp(F.duration[1] * this.gauss());
     this.alt = F.alt[0] + (F.alt[1] - F.alt[0]) * this.rand();
-    this.speed = F.speed * Math.max(0.4, 1 + F.speedJitter * this.gauss());
+    this.speed = F.speed * (this.forage ? 1.4 : 1) * Math.max(0.4, 1 + F.speedJitter * this.gauss());
     this.escape = null;
     if (awayFrom) {   // escape: bank away from the looming object for the first moments of flight
       const R = this.R(), yaw = Math.atan2(R[3], R[0]), p = this.com();

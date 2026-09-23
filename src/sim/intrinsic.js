@@ -199,7 +199,8 @@ export class Intrinsic {
       this.sacc = { t: 0, dur: 150 + 100 * this.rand(), dir, strong: true }; this.lastDir = this.avoidDir = dir; this.sinceSacc = 0;
     }
     if (this.sacc?.strong && a && a.center < P.avoidAhead) this.lastAvoid = t;
-    if (!this.sacc && this.sinceSacc > 200 && this.rand() < P.flightSaccadeRate / 1000 * dtMs) {
+    const saccRate = this.forage ? 0.2 : P.flightSaccadeRate;
+    if (!this.sacc && this.sinceSacc > 200 && this.rand() < saccRate / 1000 * dtMs) {
       const dir = this.rand() < 0.6 ? -this.lastDir : this.lastDir; this.lastDir = dir;
       this.sacc = { t: 0, dur: P.flightSaccadeMs[0] + (P.flightSaccadeMs[1] - P.flightSaccadeMs[0]) * this.rand(), dir }; this.sinceSacc = 0;
     }
