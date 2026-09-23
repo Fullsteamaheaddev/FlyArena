@@ -2,6 +2,7 @@ const { ethers } = require("hardhat");
 const assert = require("node:assert/strict");
 
 const chips = n => ethers.parseUnits(String(n), 18);
+const DEAD = "0x000000000000000000000000000000000000dEaD";
 
 async function reverts(promise, reason) {
   try {
@@ -39,7 +40,8 @@ describe("RacePool", function () {
     await pool.connect(op).settle(1, 0);
     const before = await chip.balanceOf(a.address);
     await pool.connect(a).claim(1);
-    assert.equal(await chip.balanceOf(a.address) - before, chips(40));
+    // 40 pot less the default 5% fee.
+    assert.equal(await chip.balanceOf(a.address) - before, chips(38));
 
     await pool.connect(op).openRace(2, [0, 1]);
     await pool.connect(a).bet(2, 0, chips(5));
@@ -105,9 +107,9 @@ describe("RacePool", function () {
     const beforeB = await chip.balanceOf(b.address);
     await pool.connect(a).claim(30);
     await pool.connect(b).claim(30);
-    // 60 total over a 40 winning pool: 1.5x the winning stake.
-    assert.equal(await chip.balanceOf(a.address) - beforeA, chips(30));
-    assert.equal(await chip.balanceOf(b.address) - beforeB, chips(30));
+    // 60 pot less the 5% fee is 57, over a 40 winning pool: 1.425x the winning stake.
+    assert.equal(await chip.balanceOf(a.address) - beforeA, chips(28.5));
+    assert.equal(await chip.balanceOf(b.address) - beforeB, chips(28.5));
     assert.equal(await chip.balanceOf(poolAddr), 0n);
     await reverts(pool.connect(c).claim(30), "no win");
     await reverts(pool.connect(a).claim(30), "claimed");
@@ -183,6 +185,88 @@ describe("RacePool", function () {
     await reverts(pool.connect(op).openRace(80, [0, 1, 2]), "not operator");
     await pool.connect(b).openRace(80, [0, 1, 2]);
     assert.equal(Number((await pool.raceInfo(80)).status), 1);
+  });
+
+  it("sends the settle fee to the recipient and pays out the rest", async function () {
+    const { owner, op, a, b, c, chip, pool, poolAddr } = await deploy();
+    assert.equal(Number(await pool.feeBps()), 500);
+    assert.equal(await pool.feeRecipient(), DEAD);
+    await pool.connect(owner).setFeeRecipient(c.address);
+
+    await pool.connect(op).openRace(90, [0, 1]);
+    await pool.connect(a).bet(90, 0, chips(10));
+    await pool.connect(b).bet(90, 1, chips(30));
+    await pool.connect(op).lockRace(90);
+    const feeBefore = await chip.balanceOf(c.address);
+    await pool.connect(op).settle(90, 1);
+    assert.equal(await chip.balanceOf(c.address) - feeBefore, chips(2));
+    assert.equal(await pool.payoutTotal(90), chips(38));
+    assert.equal(await pool.total(90), chips(40));    // the gross pot is still reported
+
+    const before = await chip.balanceOf(b.address);
+    await pool.connect(b).claim(90);
+    assert.equal(await chip.balanceOf(b.address) - before, chips(38));
+    assert.equal(await chip.balanceOf(poolAddr), 0n);
+  });
+
+  it("never taxes a void or a race whose winner drew no bets", async function () {
+    const { owner, op, a, b, c, chip, pool, poolAddr } = await deploy();
+    await pool.connect(owner).setFeeRecipient(c.address);
+    const feeBefore = await chip.balanceOf(c.address);
+
+    await pool.connect(op).openRace(91, [0, 1, 2]);
+    await pool.connect(a).bet(91, 0, chips(10));
+    await pool.connect(op).voidRace(91);
+    await pool.connect(a).refund(91);
+
+    await pool.connect(op).openRace(92, [0, 1, 2]);
+    await pool.connect(a).bet(92, 0, chips(10));
+    await pool.connect(b).bet(92, 1, chips(6));
+    await pool.connect(op).lockRace(92);
+    await pool.connect(op).settle(92, 2);             // nobody backed fly 2
+    assert.equal(await pool.payoutTotal(92), chips(16));
+    const mid = await chip.balanceOf(a.address);
+    await pool.connect(a).refund(92);
+    await pool.connect(b).refund(92);
+    assert.equal(await chip.balanceOf(a.address) - mid, chips(10));
+    assert.equal(await chip.balanceOf(c.address), feeBefore);
+    assert.equal(await chip.balanceOf(poolAddr), 0n);
+  });
+
+  it("guards the fee settings and honours a zero fee", async function () {
+    const { owner, op, a, b, chip, pool, poolAddr } = await deploy();
+    await reverts(pool.connect(a).setFeeBps(100), "OwnableUnauthorizedAccount");
+    await reverts(pool.connect(a).setFeeRecipient(a.address), "OwnableUnauthorizedAccount");
+    await reverts(pool.connect(owner).setFeeBps(1001), "fee");
+    await reverts(pool.connect(owner).setFeeRecipient(ethers.ZeroAddress), "recipient");
+    await pool.connect(owner).setFeeBps(1000);
+    assert.equal(Number(await pool.feeBps()), 1000);
+
+    await pool.connect(owner).setFeeBps(0);
+    await pool.connect(op).openRace(93, [0, 1]);
+    await pool.connect(a).bet(93, 0, chips(10));
+    await pool.connect(b).bet(93, 1, chips(10));
+    await pool.connect(op).lockRace(93);
+    await pool.connect(op).settle(93, 0);
+    assert.equal(await pool.payoutTotal(93), chips(20));
+    const before = await chip.balanceOf(a.address);
+    await pool.connect(a).claim(93);
+    assert.equal(await chip.balanceOf(a.address) - before, chips(20));
+    assert.equal(await chip.balanceOf(poolAddr), 0n);
+  });
+
+  it("keeps a settled race on the fee it was settled with", async function () {
+    const { owner, op, a, b, chip, pool, poolAddr } = await deploy();
+    await pool.connect(op).openRace(94, [0, 1]);
+    await pool.connect(a).bet(94, 0, chips(10));
+    await pool.connect(b).bet(94, 1, chips(10));
+    await pool.connect(op).lockRace(94);
+    await pool.connect(op).settle(94, 0);             // 5%: 1 fee, 19 payable
+    await pool.connect(owner).setFeeBps(1000);        // raising it later must not touch this race
+    const before = await chip.balanceOf(a.address);
+    await pool.connect(a).claim(94);
+    assert.equal(await chip.balanceOf(a.address) - before, chips(19));
+    assert.equal(await chip.balanceOf(poolAddr), 0n);
   });
 
   it("keeps races independent so a fresh match id is always bettable", async function () {

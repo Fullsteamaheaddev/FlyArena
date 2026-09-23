@@ -311,6 +311,14 @@ export async function adminSetOperator(addr) {
   const tx = await poolContract(true).setOperator(addr);
   await tx.wait();
 }
+export async function adminSetFeeBps(bps) {
+  const tx = await poolContract(true).setFeeBps(bps);
+  await tx.wait();
+}
+export async function adminSetFeeRecipient(addr) {
+  const tx = await poolContract(true).setFeeRecipient(addr);
+  await tx.wait();
+}
 export async function adminMint(to, chips) {
   const tx = await chipContract(true).mint(to, chipAmount(chips));
   await tx.wait();

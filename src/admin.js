@@ -1,6 +1,7 @@
 import {
   CHAIN_ID, chainConfigured, connectWallet, getAccount, poolContract,
-  adminSetToken, adminSetWindow, adminSetOperator, adminMint, readChipMeta, chipSymbol,
+  adminSetToken, adminSetWindow, adminSetOperator, adminSetFeeBps, adminSetFeeRecipient,
+  adminMint, readChipMeta, chipSymbol,
 } from './chain.js';
 
 const $ = s => document.querySelector(s);
@@ -34,6 +35,8 @@ async function refresh() {
   const op = await p.operator();
   const windowSec = await p.windowSeconds();
   const owner = await p.owner();
+  const feeBps = Number(await p.feeBps());
+  const feeTo = await p.feeRecipient();
   let meta = { symbol: 'CHIP' };
   try { meta = await readChipMeta(); } catch {}
   $('#adminInfo').innerHTML = `<span>chain</span><span>${CHAIN_ID}</span>
@@ -41,10 +44,14 @@ async function refresh() {
     <span>token</span><span>${token} (${meta.symbol})</span>
     <span>operator</span><span>${op}</span>
     <span>owner</span><span>${owner}</span>
-    <span>window</span><span>${windowSec} s</span>`;
+    <span>window</span><span>${windowSec} s</span>
+    <span>fee</span><span>${feeBps / 100}% (${feeBps} bps)</span>
+    <span>fee wallet</span><span>${feeTo}</span>`;
   $('#adminWindow').value = windowSec;
   $('#adminToken').value = token;
   $('#adminOp').value = op;
+  $('#adminFee').value = feeBps / 100;
+  $('#adminFeeTo').value = feeTo;
   const mint = $('#adminMint');
   if (mint) mint.textContent = `Mint ${meta.symbol || chipSymbol()}`;
 }
@@ -73,6 +80,20 @@ $('#adminSetToken').onclick = async () => {
 };
 $('#adminSetOp').onclick = async () => {
   try { if (!(await authorize())) return; await adminSetOperator($('#adminOp').value.trim()); status('Operator saved.'); await refresh(); }
+  catch (e) { status(e.message || String(e)); }
+};
+$('#adminSetFee').onclick = async () => {
+  try {
+    if (!(await authorize())) return;
+    const bps = Math.round((Number($('#adminFee').value) || 0) * 100);
+    if (bps < 0 || bps > 1000) { status('Fee must be between 0 and 10 percent.'); return; }
+    await adminSetFeeBps(bps);
+    status('Fee saved.');
+    await refresh();
+  } catch (e) { status(e.message || String(e)); }
+};
+$('#adminSetFeeTo').onclick = async () => {
+  try { if (!(await authorize())) return; await adminSetFeeRecipient($('#adminFeeTo').value.trim()); status('Fee wallet saved.'); await refresh(); }
   catch (e) { status(e.message || String(e)); }
 };
 $('#adminMint').onclick = async () => {

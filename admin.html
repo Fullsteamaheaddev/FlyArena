@@ -10,7 +10,7 @@
 <body class="race admin">
 <main id="admin">
   <h1>Fruit Fly pool</h1>
-  <p class="sub">Connect the owner wallet to set chip token, betting window, operator, and mint faucet chips.</p>
+  <p class="sub">Connect the owner wallet to set chip token, betting window, pool fee, operator, and mint faucet chips.</p>
   <p id="adminStatus">Connect the owner wallet.</p>
   <div class="row"><button id="adminConnect" class="primary">Connect</button></div>
   <div id="adminPanel" hidden>
@@ -25,6 +25,12 @@
     <section>
       <h2>Stake token</h2>
       <div class="row"><input id="adminToken" type="text" placeholder="0x…" style="width:28em"><button id="adminSetToken">Set token</button></div>
+    </section>
+    <section>
+      <h2>Pool fee</h2>
+      <p class="note">Taken from the pot when a race settles with a winning bet. Voided or refunded pots are untaxed.</p>
+      <div class="row"><input id="adminFee" type="number" min="0" max="10" step="0.01" value="5"><span class="note">percent (max 10)</span><button id="adminSetFee">Save fee</button></div>
+      <div class="row"><input id="adminFeeTo" type="text" placeholder="0x…" style="width:28em"><button id="adminSetFeeTo">Set fee wallet</button></div>
     </section>
     <section>
       <h2>Operator</h2>

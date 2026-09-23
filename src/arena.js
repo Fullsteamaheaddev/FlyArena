@@ -568,7 +568,7 @@ function setupRaceChrome() {
   });
   setupRaceAnnounce();
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
-  addEventListener('resize', () => { positionBpHint(); syncProfileScrim(); });
+  addEventListener('resize', () => { positionBpHint(null, { instant: true }); syncProfileScrim(); });
   setupWalletPick();
   setupEnterGate();
   resolveChip().then(() => {
@@ -958,29 +958,6 @@ function syncBrainInset() {
   brainCam.aspect = bw / bh;
   brainCam.updateProjectionMatrix();
 }
-function positionBpHint() {
-  const hint = $('#bpHint');
-  const profile = $('#profile');
-  if (!hint || hint.hidden || !profile || profile.hidden) return;
-  const r = profile.getBoundingClientRect();
-  if (raceMobile()) {
-    hint.style.top = `${r.bottom + 8}px`;
-    hint.style.left = `${Math.max(8, r.right - hint.offsetWidth)}px`;
-  } else {
-    hint.style.top = `${Math.max(8, r.top - hint.offsetHeight - 8)}px`;
-    hint.style.left = `${r.left + (r.width - hint.offsetWidth) / 2}px`;
-  }
-  hint.style.right = 'auto';
-  hint.style.bottom = 'auto';
-}
-function syncBpHint() {
-  const hint = $('#bpHint');
-  if (!hint) return;
-  const show = isWatch && isRace && !getAccount() && !$('#loading') && !$('#enterGate')
-    && $('#profile') && !$('#profile').hidden;
-  hint.hidden = !show;
-  if (show) requestAnimationFrame(() => requestAnimationFrame(positionBpHint));
-}
 function setupRaceAnnounce() {
   if (raceAnnounce || !scene) return;
   const el = document.createElement('div');
@@ -1027,44 +1004,100 @@ function syncProfileScrim() {
   if (!scrim || !profile) return;
   scrim.hidden = !(raceMobile() && !profile.hidden && !profile.classList.contains('folded'));
 }
-function peekProfileWidth(folded) {
+function peekProfileRect(folded) {
   const profile = $('#profile');
   const was = profile.classList.contains('folded');
+  const prev = { width: profile.style.width, minWidth: profile.style.minWidth, transition: profile.style.transition };
+  profile.style.transition = 'none';
+  profile.style.width = '';
+  profile.style.minWidth = '';
   profile.classList.toggle('folded', folded);
-  const w = profile.getBoundingClientRect().width;
+  const r = profile.getBoundingClientRect();
   profile.classList.toggle('folded', was);
-  return w;
+  profile.style.width = prev.width;
+  profile.style.minWidth = prev.minWidth;
+  profile.style.transition = prev.transition;
+  return r;
+}
+function positionBpHint(rect = null, { instant = false } = {}) {
+  const hint = $('#bpHint');
+  const profile = $('#profile');
+  if (!hint || hint.hidden || !profile || profile.hidden) return;
+  const r = rect || profile.getBoundingClientRect();
+  const top = raceMobile()
+    ? `${r.bottom + 8}px`
+    : `${Math.max(8, r.top - hint.offsetHeight - 8)}px`;
+  const left = raceMobile()
+    ? `${Math.max(8, r.right - hint.offsetWidth)}px`
+    : `${r.left + (r.width - hint.offsetWidth) / 2}px`;
+  const skip = instant || !hint.dataset.placed || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (skip) {
+    hint.style.transition = 'none';
+    hint.style.top = top;
+    hint.style.left = left;
+    hint.style.right = 'auto';
+    hint.style.bottom = 'auto';
+    void hint.offsetWidth;
+    hint.style.transition = '';
+    hint.dataset.placed = '1';
+    return;
+  }
+  hint.style.top = top;
+  hint.style.left = left;
+  hint.style.right = 'auto';
+  hint.style.bottom = 'auto';
+}
+function syncBpHint() {
+  const hint = $('#bpHint');
+  if (!hint) return;
+  const show = isWatch && isRace && !getAccount() && !$('#loading') && !$('#enterGate')
+    && $('#profile') && !$('#profile').hidden;
+  if (!show) {
+    hint.hidden = true;
+    delete hint.dataset.placed;
+    return;
+  }
+  hint.hidden = false;
+  requestAnimationFrame(() => requestAnimationFrame(() => positionBpHint(null, { instant: !hint.dataset.placed })));
+}
+function followBpHint(rect, { instant = false } = {}) {
+  const hint = $('#bpHint');
+  if (!hint || hint.hidden) {
+    syncBpHint();
+    return;
+  }
+  positionBpHint(rect, { instant: instant || !hint.dataset.placed });
 }
 function setProfileFolded(folded, { instant = false } = {}) {
   const profile = $('#profile');
   if (!profile || profile.classList.contains('folded') === folded) return;
   profileFoldChrome(folded);
-  if (instant || raceMobile() || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const dest = peekProfileRect(folded);
+  const snap = instant || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (snap || raceMobile()) {
     profile.style.width = '';
     profile.style.minWidth = '';
     profile.style.transition = '';
     profile.classList.toggle('folded', folded);
     syncProfileScrim();
-    syncBpHint();
+    followBpHint(dest, { instant: snap });
     return;
   }
   const fromW = profile.getBoundingClientRect().width;
-  const toW = peekProfileWidth(folded);
   const ease = 'cubic-bezier(0.34, 1.2, 0.64, 1)';
   profile.style.transition = `width .35s ${ease}`;
   profile.style.minWidth = '0';
   profile.style.width = `${fromW}px`;
   profile.classList.toggle('folded', folded);
   syncProfileScrim();
-  syncBpHint();
-  requestAnimationFrame(() => { profile.style.width = `${toW}px`; });
+  followBpHint(dest);
+  requestAnimationFrame(() => { profile.style.width = `${dest.width}px`; });
   profile.addEventListener('transitionend', (e) => {
     if (e.propertyName !== 'width') return;
     profile.style.width = '';
     profile.style.minWidth = '';
     profile.style.transition = '';
     syncProfileScrim();
-    syncBpHint();
   }, { once: true });
 }
 function setRaceBrainFolded(folded, { user = false, instant = false } = {}) {

@@ -30,13 +30,16 @@ contract RacePool is Ownable {
     address public operator;
     uint32 public windowSeconds = 45;
     uint32 public voidTimeout = 30 minutes;
-    uint16 public rakeBps = 0;
+    uint16 public feeBps = 500;
+    address public feeRecipient = 0x000000000000000000000000000000000000dEaD;
 
     mapping(uint256 => Status) public status;
     mapping(uint256 => uint64) public openedAt;
     mapping(uint256 => uint32) public winnerFly;
     mapping(uint256 => uint256) public total;
     mapping(uint256 => uint256) public winningPool;
+    /// Pot minus the fee, snapshotted at settle so a later setFeeBps cannot move a pending claim.
+    mapping(uint256 => uint256) public payoutTotal;
     mapping(uint256 => uint32[]) private _flyIds;
     mapping(uint256 => mapping(uint32 => bool)) public isFly;
     mapping(uint256 => mapping(uint32 => uint256)) public poolByFly;
@@ -47,6 +50,9 @@ contract RacePool is Ownable {
     event TokenSet(address token);
     event WindowSet(uint32 seconds_);
     event OperatorSet(address operator);
+    event FeeBpsSet(uint16 bps);
+    event FeeRecipientSet(address recipient);
+    event FeeTaken(uint256 indexed matchId, address indexed recipient, uint256 amount);
     event RaceOpened(uint256 indexed matchId, uint32[] flyIds);
     event BetPlaced(uint256 indexed matchId, address indexed user, uint32 flyId, uint256 amount);
     event RaceLocked(uint256 indexed matchId);
@@ -85,6 +91,18 @@ contract RacePool is Ownable {
 
     function setVoidTimeout(uint32 seconds_) external onlyOwner {
         voidTimeout = seconds_;
+    }
+
+    function setFeeBps(uint16 bps) external onlyOwner {
+        require(bps <= 1000, "fee");
+        feeBps = bps;
+        emit FeeBpsSet(bps);
+    }
+
+    function setFeeRecipient(address recipient) external onlyOwner {
+        require(recipient != address(0), "recipient");
+        feeRecipient = recipient;
+        emit FeeRecipientSet(recipient);
     }
 
     function flyIds(uint256 matchId) external view returns (uint32[] memory) {
@@ -139,7 +157,18 @@ contract RacePool is Ownable {
         status[matchId] = Status.Settled;
         winnerFly[matchId] = winnerFlyId;
         winningPool[matchId] = poolByFly[matchId][winnerFlyId];
-        emit Settled(matchId, winnerFlyId, total[matchId], winningPool[matchId]);
+        uint256 pot = total[matchId];
+        uint256 fee = 0;
+        // No winning stake means everyone refunds in full, so the pot is never taxed.
+        if (winningPool[matchId] > 0 && feeBps > 0) {
+            fee = pot * feeBps / 10000;
+            if (fee > 0) {
+                token.safeTransfer(feeRecipient, fee);
+                emit FeeTaken(matchId, feeRecipient, fee);
+            }
+        }
+        payoutTotal[matchId] = pot - fee;
+        emit Settled(matchId, winnerFlyId, pot, winningPool[matchId]);
     }
 
     function voidRace(uint256 matchId) external {
@@ -158,7 +187,7 @@ contract RacePool is Ownable {
         uint256 s = stake[matchId][msg.sender][winnerFly[matchId]];
         require(s > 0, "no win");
         claimed[matchId][msg.sender] = true;
-        uint256 payout = s * total[matchId] * (10000 - rakeBps) / 10000 / winningPool[matchId];
+        uint256 payout = s * payoutTotal[matchId] / winningPool[matchId];
         token.safeTransfer(msg.sender, payout);
         emit Claimed(matchId, msg.sender, payout);
     }
