@@ -196,6 +196,8 @@ function paintRaceFloor(fx, fs, logo) {
   fx.restore();
 }
 function paintRaceWall(wx, ww, wh, logo) {
+  wx.imageSmoothingEnabled = true;
+  wx.imageSmoothingQuality = 'high';
   const vg = wx.createLinearGradient(0, 0, 0, wh);
   vg.addColorStop(0, '#e0b8f0'); vg.addColorStop(1, '#7a3aa8');
   wx.fillStyle = vg; wx.fillRect(0, 0, ww, wh);
@@ -203,8 +205,15 @@ function paintRaceWall(wx, ww, wh, logo) {
   for (let k = 0; k < 12; k++) { wx.fillStyle = pastels[k % pastels.length]; wx.fillRect(k * ww / 12, 0, ww / 12 + 1, wh); }
   wx.globalAlpha = 1;
   if (!logo) return;
-  const n = 10, bandH = wh * 0.58, bandW = bandH * (logo.width / logo.height), slot = ww / n, y = (wh - bandH) / 2;
-  for (let i = 0; i < n; i++) wx.drawImage(logo, i * slot + (slot - bandW) / 2, y, bandW, bandH);
+  const n = 10, bandH = wh * 0.38, bandW = bandH * (logo.width / logo.height), slot = ww / n;
+  for (let i = 0; i < n; i++) {
+    const cx = i * slot + slot / 2, cy = wh / 2;
+    wx.save();
+    wx.translate(cx, cy);
+    wx.scale(-1, 1);
+    wx.drawImage(logo, -bandW / 2, -bandH / 2, bandW, bandH);
+    wx.restore();
+  }
 }
 function buildScene(data) {
   renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
@@ -303,10 +312,11 @@ function rebuildEnv() {
       paintRaceFloor(fx, fs, img);
       ft.needsUpdate = true;
     });
-    const ww = 4096, wh = 256, wc = document.createElement('canvas'); wc.width = ww; wc.height = wh; const wx = wc.getContext('2d');
+    const ww = 8192, wh = 512, wc = document.createElement('canvas'); wc.width = ww; wc.height = wh; const wx = wc.getContext('2d');
     const wallPaintId = ++raceWallPaint;
     paintRaceWall(wx, ww, wh, raceWallLogo);
     const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
+    wt.generateMipmaps = false; wt.minFilter = THREE.LinearFilter; wt.magFilter = THREE.LinearFilter; wt.anisotropy = aniso;
     wallMat = new THREE.MeshStandardMaterial({ map: wt, side: THREE.BackSide, roughness: 0.62 });
     if (!raceWallLogo) raceWallLogoImg().then(img => {
       if (!img || wallPaintId !== raceWallPaint || wallMesh?.material?.map !== wt) return;
