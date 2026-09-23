@@ -1215,7 +1215,8 @@ function metamaskDappLink() {
   return `https://metamask.app.link/dapp/${walletDappUrl()}`;
 }
 function rabbyDappLink() {
-  return `https://rabbymobile.page.link/?apn=com.debank.rabbymobile&ibi=com.debank.rabbymobile&isi=6476580990&link=${encodeURIComponent(location.href)}`;
+  const dapp = encodeURIComponent(location.href);
+  return `https://go.rabby.io/mobile/?_cmd=open-dapp&dapp=${dapp}`;
 }
 function showWalletPick() {
   const el = $('#walletPick');
