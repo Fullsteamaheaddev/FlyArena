@@ -101,7 +101,7 @@ export class Motor {
       const speedN = pivot ? PIVOT.amp : Math.min(1, Math.abs(v));
       this.ampF = (this.ampF || 0) + dtMs / GAIT_AMP_TAU * (ampT - (this.ampF || 0));
       const amp = this.ampF;
-      const freq = g.freq * (this.forage ? 1.4 : 1) * (0.5 + 0.5 * speedN);
+      const freq = g.freq * (this.forage ? 2 : 1) * (0.5 + 0.5 * speedN);
       const duty = Math.min(0.8, Math.max(0.3, g.duty * (1.08 - 0.16 * speedN)));
       this.stepAmp = amp > 0.05 ? Math.min(1, amp * 2) : 0; this.pivot = pivot;
       if (amp > 0.05) this.phase += (pivot ? 1 : Math.sign(v)) * 2 * Math.PI * freq * dtMs / 1000;
