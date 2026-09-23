@@ -27,9 +27,6 @@ export function createMatchLink({ role, onState, onStatus, onPool }) {
   function connect() {
     if (!alive) return;
     const url = matchUrl();
-    // #region agent log
-    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'D',location:'match.js:connect',message:'match ws connect',data:{role,url,href:typeof location!=='undefined'?location.href:null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     try { ws = new WebSocket(url); }
     catch {
       onStatus?.('offline'); timer = setTimeout(connect, 1500); return;
@@ -37,34 +34,19 @@ export function createMatchLink({ role, onState, onStatus, onPool }) {
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: 'hello', role }));
       onStatus?.('live');
-      // #region agent log
-      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'D',location:'match.js:onopen',message:'match ws open',data:{role,url},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     };
     ws.onmessage = e => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       if (msg.type === 'state') {
-        // #region agent log
-        if (!createMatchLink._st || Date.now() - createMatchLink._st > 2000) {
-          createMatchLink._st = Date.now();
-          fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'C',location:'match.js:onmessage',message:'got state',data:{role,phase:msg.phase,flyN:msg.flies?.length??0,matchId:msg.matchId??null},timestamp:Date.now()})}).catch(()=>{});
-        }
-        // #endregion
         onState?.(msg);
       }
       if (msg.type === 'pool') onPool?.(msg);
       if (msg.type === 'error') {
-        // #region agent log
-        fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'B',location:'match.js:onmessage',message:'match error',data:{role,error:msg.error},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         onStatus?.(msg.error);
       }
     };
     ws.onclose = () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'D',location:'match.js:onclose',message:'match ws close',data:{role,url},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       onStatus?.('offline');
       if (alive) timer = setTimeout(connect, 1500);
     };
@@ -76,13 +58,6 @@ export function createMatchLink({ role, onState, onStatus, onPool }) {
       if (ws?.readyState !== 1) return;
       ws.send(JSON.stringify(state));
     },
-    // #region agent log
-    sendLog(payload) {
-      if (ws?.readyState !== 1) return false;
-      ws.send(JSON.stringify({ type: 'log', ...payload }));
-      return true;
-    },
-    // #endregion
     close() {
       alive = false;
       clearTimeout(timer);

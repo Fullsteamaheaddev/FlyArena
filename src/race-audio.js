@@ -5,9 +5,6 @@ export function createRaceAudio(yipeeUrl, gongUrl) {
 
   async function unlock() {
     const Ctor = window.AudioContext || window.webkitAudioContext;
-    // #region agent log
-    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'ios-audio',hypothesisId:'D',location:'race-audio.js:unlock:enter',message:'unlock enter',data:{hadCtx:!!ctx,state:ctx?.state||null,hasCtor:!!Ctor,hasWebkit:!!window.webkitAudioContext,ios:/iPhone|iPad|iPod/i.test(navigator.userAgent)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!ctx) {
       ctx = new Ctor();
       master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
@@ -18,11 +15,7 @@ export function createRaceAudio(yipeeUrl, gongUrl) {
       menuBuf = makeMenuMusicBuffer(ctx);
       startBuzz();
     }
-    const before = ctx.state;
     if (ctx.state === 'suspended' || ctx.state === 'interrupted') await ctx.resume();
-    // #region agent log
-    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'ios-audio',hypothesisId:'A',location:'race-audio.js:unlock:resume',message:'after resume',data:{before,after:ctx.state,muted,hidden:document.hidden},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!yipeeBuf) {
       try {
         const raw = await (await fetch(yipeeUrl)).arrayBuffer();
@@ -49,9 +42,6 @@ export function createRaceAudio(yipeeUrl, gongUrl) {
   }
   function playBed(kind) {
     const buf = kind === 'menu' ? menuBuf : musicBuf;
-    // #region agent log
-    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'ios-audio',hypothesisId:'B',location:'race-audio.js:playBed',message:'playBed',data:{kind,state:ctx?.state||null,hasBuf:!!buf,same:(currentBed===kind&&!!musicSrc),muted,hidden:document.hidden},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!ctx || ctx.state !== 'running') return;
     if (!buf || (currentBed === kind && musicSrc)) return;
     const now = ctx.currentTime, fade = 0.25;

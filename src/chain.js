@@ -22,15 +22,6 @@ export function chainConfigured() { return !!(POOL_ADDR && (CHIP_ADDR || FALLBAC
 export function chipSymbol() { return chipMeta.symbol || 'CHIP'; }
 export function getChipMeta() { return chipMeta; }
 
-// #region agent log
-let dbgSink = null;
-export function setDebugSink(fn) { dbgSink = fn; }
-function dbg(location, message, data, hypothesisId) {
-  if (dbgSink?.(location, message, data, hypothesisId)) return;
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',runId:'post-fix',location,message,data,hypothesisId,timestamp:Date.now()})}).catch(()=>{});
-}
-// #endregion
-
 let browser, signer, account, walletHooked = false, walletCb = null;
 
 export function getAccount() { return account || null; }
@@ -44,14 +35,10 @@ function clearLocalWallet() {
 }
 
 export async function disconnectWallet() {
-  const had = account;
   clearLocalWallet();
   try {
     await window.ethereum?.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
   } catch { /* wallet may not support revoke */ }
-  // #region agent log
-  dbg('chain.js:disconnectWallet', 'revoke', { had: had ? had.slice(0, 10) : null }, 'F');
-  // #endregion
 }
 
 async function applyAccounts(accs) {
@@ -67,9 +54,6 @@ export function onWalletChange(cb) {
   if (!window.ethereum || walletHooked) return;
   walletHooked = true;
   window.ethereum.on('accountsChanged', async accs => {
-    // #region agent log
-    dbg('chain.js:accountsChanged', 'mm accountsChanged', { n: (accs || []).length, next: accs?.[0] ? String(accs[0]).slice(0, 10) : null, cached: account ? account.slice(0, 10) : null }, 'B');
-    // #endregion
     try {
       await applyAccounts(accs);
       walletCb?.(account);
@@ -185,9 +169,6 @@ export async function connectWallet() {
   }
   signer = await browser.getSigner();
   account = await signer.getAddress();
-  // #region agent log
-  dbg('chain.js:connectWallet', 'wallet connected', { account, chainId: CHAIN_ID, net: Number(net.chainId) }, 'A');
-  // #endregion
   return account;
 }
 
@@ -241,9 +222,6 @@ export async function isClaimed(matchId, addr) {
 
 export async function approveIfNeeded(amount) {
   const a = await chipContract().allowance(account, POOL_ADDR);
-  // #region agent log
-  dbg('chain.js:approveIfNeeded', 'allowance', { allowance: a >= amount ? 'enough' : chipFmt(a), need: chipFmt(amount) }, 'L');
-  // #endregion
   if (a >= amount) return;
   // One generous allowance, so later bets are a single wallet prompt instead of approve + bet.
   const tx = await chipContract(true).approve(POOL_ADDR, MaxUint256);
@@ -271,23 +249,10 @@ export async function placeBet(matchId, flyId, chips) {
   let status = null, bal = null;
   try { status = Number((await poolContract().raceInfo(matchId)).status); } catch { status = 'err'; }
   try { bal = await chipContract().balanceOf(account); } catch { /* read failed */ }
-  // #region agent log
-  const block = await readProv().getBlockNumber().catch(() => null);
-  dbg('chain.js:placeBet', 'bet attempt', { matchId, flyId, chips, status, account, block, chip: bal == null ? null : chipFmt(bal) }, 'G');
-  // #endregion
   if (status !== 1) throw new Error(status === 0 ? 'Race not open on-chain yet' : 'Betting closed');
   if (bal != null && bal < amount) throw new Error(`Only ${Number(chipFmt(bal)).toFixed(1)} ${chipSymbol()} — ask the host to mint more`);
   await approveIfNeeded(amount);
-  // #region agent log
-  let tx;
-  try {
-    tx = await poolContract(true).bet(matchId, flyId, amount);
-  } catch (e) {
-    dbg('chain.js:placeBet', 'bet send failed', { matchId, flyId, status, err: String(e?.shortMessage || e?.message || e).slice(0, 160) }, 'K');
-    throw e;
-  }
-  dbg('chain.js:placeBet', 'bet sent', { matchId, flyId, hash: tx.hash?.slice(0, 12) }, 'K');
-  // #endregion
+  const tx = await poolContract(true).bet(matchId, flyId, amount);
   await tx.wait();
 }
 export async function claimRace(matchId) {

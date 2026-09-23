@@ -47,16 +47,6 @@ const wss = new WebSocketServer({ host: '0.0.0.0', port: PORT });
 let host = null, lastState = idle();
 let poolBusy = false, poolWant = null, poolState = null;
 
-function dbg(location, message, data, hypothesisId = 'C') {
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6b97f7' },
-    body: JSON.stringify({ sessionId: '6b97f7', runId: 'post-fix', location, message, data, timestamp: Date.now(), hypothesisId }),
-  }).catch(() => {});
-  // #endregion
-}
-
 function send(ws, msg) {
   if (ws.readyState === 1) ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
 }
@@ -76,21 +66,14 @@ function publishPool(matchId, status, winnerFly = null) {
   if (poolState && poolState.matchId === matchId && poolState.status === status) return;
   poolState = { type: 'pool', matchId, status, winnerFly };
   broadcast(poolState);
-  dbg('match-relay:publishPool', 'pool status', { matchId, status, winnerFly }, 'H');
 }
 
 // Explicit gas limits skip an eth_estimateGas round trip on every operator call.
 const GAS = { open: 500000, lock: 120000, settle: 200000 };
 
 async function poolTx(label, matchId, call) {
-  const t0 = Date.now();
   const tx = await call();
-  const sent = Date.now();
-  const rec = await tx.wait();
-  dbg(`match-relay:${label}`, 'tx done', {
-    matchId, sendMs: sent - t0, mineMs: Date.now() - sent, block: rec.blockNumber, hash: rec.hash.slice(0, 12),
-  }, 'J');
-  return rec;
+  return await tx.wait();
 }
 
 async function syncPool(st) {
@@ -99,10 +82,8 @@ async function syncPool(st) {
   // Our own published status is the cache: without it every host snapshot cost an RPC read.
   let status = poolState?.matchId === st.matchId ? poolState.status : null;
   if (status == null) {
-    const t0 = Date.now();
     const info = await pool.raceInfo(st.matchId);
     status = Number(info.status);
-    dbg('match-relay:read', 'raceInfo', { matchId: st.matchId, status, ms: Date.now() - t0 }, 'J');
     publishPool(st.matchId, status, Number(info.winnerFly));
   }
   if (st.phase === 'lobby') {
@@ -140,7 +121,6 @@ async function kickPool() {
   poolWant = null;
   try { await syncPool(st); }
   catch (e) {
-    dbg('match-relay:syncPool', 'pool error', { phase: st?.phase, matchId: st?.matchId, err: e?.shortMessage || e?.reason || e?.message || String(e) });
     console.warn('pool', e?.shortMessage || e?.message || e);
   }
   finally {
@@ -171,12 +151,6 @@ wss.on('connection', ws => {
       if (poolState && poolState.matchId === lastState.matchId) send(ws, poolState);
       return;
     }
-    // #region agent log
-    if (msg.type === 'log') {
-      dbg(msg.location || 'client', msg.message || 'client log', { role: ws.role, ...msg.data }, msg.hypothesisId || 'C');
-      return;
-    }
-    // #endregion
     if (ws.role !== 'host' || msg.type !== 'state') return;
     lastState = msg;
     broadcast(msg, ws);
@@ -191,4 +165,3 @@ wss.on('connection', ws => {
 });
 
 console.log(`match relay ws://0.0.0.0:${PORT}` + (pool ? ' · pool operator on' : ' · pool operator off (no DEPLOYER_KEY)'));
-dbg('match-relay:boot', 'relay start', { port: PORT, operator: !!pool, pool: POOL ? String(POOL).slice(0, 10) : null });

@@ -19,7 +19,7 @@ import { matchRole, isWatchPath, isRaceHostPath, matchUrl, createMatchLink, buil
 import {
   DEFAULT_WINDOW, chainConfigured, connectWallet, disconnectWallet, ensureWallet, restoreWallet, switchAccount, onWalletChange, getAccount, readWindow, readPools,
   openRace, lockRace, settleRace, voidRace, placeBet, claimRace, refundRace,
-  readBalance, loadHistory, userTotal, userStake, isClaimed, readRace, chipFmt, setDebugSink,
+  readBalance, loadHistory, userTotal, userStake, isClaimed, readRace, chipFmt,
   resolveChip, chipSymbol, getChipMeta,
 } from './chain.js';
 const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pages
@@ -36,9 +36,6 @@ const isRace = presetKey === 'race' && PRESET === PRESETS.race;
 const raceRole = isRace ? (matchRole() || 'host') : null;
 const isWatch = raceRole === 'watch';
 const isHost = raceRole === 'host';
-// #region agent log
-fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'A',location:'arena.js:boot',message:'race role',data:{path:location.pathname,search:location.search,isWatch,isHost,isRace,presetKey,role:raceRole},timestamp:Date.now()})}).catch(()=>{});
-// #endregion
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
@@ -409,9 +406,6 @@ function buildFlyMesh(color, sex) {
 const blurMaterial = new THREE.MeshStandardMaterial({ color: '#c0c7ce', transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide, roughness: 0.35 });
 blurMaterial.forceSinglePass = true;
 function buildWingBlur(f, poses) {
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'A',location:'arena.js:buildWingBlur',message:'build wing blur',data:{flyId:f.id,isWatch,hasPoses:!!poses,leftN:poses?.left?.length??0,rightN:poses?.right?.length??0,filmLow:!!f.meshes.find(m=>m.name==='wing_left_membrane')?.userData?.low},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   if (!poses) return;
   const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(1, 1, 1);
   f.wingBlur = ['left', 'right'].map(sd => {
@@ -428,16 +422,6 @@ function ensureWingBlur(f) {
   buildWingBlur(f, watchWingPoses);
 }
 function updateWingBlur(f, s) {
-  // #region agent log
-  if (s?.flying || !f.wingBlur) {
-    const now = performance.now();
-    if (now - (updateWingBlur._at || 0) > 1500) {
-      updateWingBlur._at = now;
-      const w = f.wingBlur?.[0];
-      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'D',location:'arena.js:updateWingBlur',message:'wing blur tick',data:{flyId:f.id,isWatch,flying:!!s?.flying,hasBlur:!!f.wingBlur,srcVis:w?w.src.visible:null,blurVis:w?w.blur.visible:null},timestamp:Date.now()})}).catch(()=>{});
-    }
-  }
-  // #endregion
   if (!f.wingBlur) return;
   for (const w of f.wingBlur) if (w) { w.src.visible = !s.flying; w.blur.visible = !!s.flying; }
 }
@@ -492,9 +476,6 @@ function removeFly(f) {
 }
 function onWorker(f, m) {
   if (m.type === 'ready') {
-    // #region agent log
-    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'C',location:'arena.js:onWorker.ready',message:'worker ready wing poses',data:{flyId:f.id,isWatch,hasWingPoses:!!m.wingPoses,leftN:m.wingPoses?.left?.length??0},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null);
     if (m.wingPoses) { f.wingPoses = m.wingPoses; watchWingPoses = m.wingPoses; }
     buildWingBlur(f, m.wingPoses); f.onReady?.();
@@ -509,9 +490,6 @@ function onWorker(f, m) {
     broadcastOthers();
   } else if (m.type === 'activity') {
     const accept = f.id === selected && !m.eyesOnly && (f.activityTime !== m.t || histFly !== f.id);
-    // #region agent log
-    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'post-fix',hypothesisId:'B',location:'arena.js:onWorker.activity',message:'activity msg',data:{flyId:f.id,selected,accept,eyesOnly:!!m.eyesOnly,t:m.t,prevT:f.activityTime??null,running,phase:matchPhase,hidden:document.hidden,eyesN:m.eyes?.[0]?.length??null,groupsN:m.groups?.length??null,panelFolded:!!$('#brainpanel')?.classList.contains('folded')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (m.eyes || m.groups) { f.lastEyes = m.eyes || f.lastEyes; f.lastGroups = m.groups || f.lastGroups; }
     if (!accept) return;
     f.activityTime = m.t;
@@ -611,9 +589,6 @@ function setupRaceChrome() {
       $('#profileFold')?.addEventListener('click', () => setProfileFolded(!profile.classList.contains('folded')));
       $('#profileScrim')?.addEventListener('click', () => setProfileFolded(true));
       restoreWallet().then(a => {
-        // #region agent log
-        dbg('arena.js:restoreWallet', 'silent restore', { acct: a ? a.slice(0, 10) : null }, 'I');
-        // #endregion
         if (!a) return;
         refreshProfile();
         if (matchPhase === 'lobby') paintLobbyOverlay(true);
@@ -621,11 +596,6 @@ function setupRaceChrome() {
     }
     showWatchWaiting('Waiting for the next race');
     onWalletChange(() => { refreshProfile(); if (matchPhase === 'lobby') paintLobbyOverlay(true); if (matchPhase === 'results') paintResultActions(matchId); });
-    window.ethereum?.on?.('accountsChanged', accs => {
-      // #region agent log
-      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',location:'arena.js:accountsChanged',message:'mm accountsChanged',data:{accs:(accs||[]).map(a=>String(a).slice(0,10)),cached:getAccount()?.slice(0,10)},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-    });
   }
   setupMatchLink();
   $('#raceVitals').addEventListener('pointerdown', e => {
@@ -702,9 +672,6 @@ function copyProfileAddress(e) {
 }
 function unlockRaceAudio(ev) {
   const src = ev?.type || 'direct';
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'ios-audio',hypothesisId:'C',location:'arena.js:unlockRaceAudio',message:'unlock call',data:{src,trusted:!!ev?.isTrusted,ios:/iPhone|iPad|iPod/i.test(navigator.userAgent),gate:!!$('#enterGate'),hidden:document.hidden,phase:watchOverlayPhase||matchPhase},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return raceAudio?.unlock().then(() => {
     if (isHost) raceAudio.hold(true);
     else playWatchBed();
@@ -762,9 +729,6 @@ function applyPoolStatus(p) {
   const was = poolStatus;
   poolStatus = p.status;
   if ((poolStatus === 3 || poolStatus === 4) && !settledAt) settledAt = Date.now();
-  // #region agent log
-  dbg('arena.js:applyPoolStatus', 'pool status', { matchId, status: poolStatus, was, phase: matchPhase, sinceResults: resultsAt ? Date.now() - resultsAt : null }, 'H');
-  // #endregion
   if (isHost && poolStatus === 1 && matchPhase === 'lobby') armBetWindow();
   if (was === poolStatus) return;
   if (matchPhase === 'lobby') paintLobbyOverlay(true);
@@ -788,9 +752,6 @@ function setupMatchLink() {
     onState: isWatch ? applyWatchState : undefined,
     onPool: applyPoolStatus,
     onStatus: s => {
-      // #region agent log
-      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'A',location:'arena.js:setupMatchLink',message:'match status',data:{s,isWatch,isHost,href:location.href},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (isWatch && (s === 'offline' || s === 'host-taken')) showWatchWaiting('Waiting for the next race');
     },
   });
@@ -828,12 +789,6 @@ function publishMatchState(force = false) {
     betClosesAt,
     pools: poolSnap,
   }));
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'post-fix',hypothesisId:'A',location:'arena.js:publishMatchState',message:'host snapshot',data:{phase:matchPhase,selected,hidden:document.hidden,hasEyes:!!sel?.lastEyes,eye0Len:sel?.lastEyes?.[0]?.length??null,hasGroups:!!sel?.lastGroups,groupN:sel?.lastGroups?.length??null,running},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-  // #region agent log
-  if (Date.now() - (publishMatchState._eyeLog || 0) > 2000) { publishMatchState._eyeLog = Date.now(); const withEyes = flies.filter(f => f.lastEyes).map(f => f.id); fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'eyes-all',hypothesisId:'E',location:'arena.js:publishMatchState',message:'vision ids',data:{selected,flyIds:flies.map(f=>f.id),withEyes},timestamp:Date.now()})}).catch(()=>{}); }
-  // #endregion
 }
 let watchOverlayPhase = null, watchSawRest = false;
 function playWatchBed() {
@@ -882,9 +837,6 @@ function applyWatchOverlay(st) {
         <p id="raceReset">${reset}</p>`;
       showRaceOverlayCard(card, { flyColor: w.color });
       paintResultActions(st.matchId);
-      // #region agent log
-      dbg('arena.js:applyWatchOverlay', 'results card built', { matchId: st.matchId, acct: getAccount()?.slice(0, 10), poolStatus }, 'D');
-      // #endregion
     } else {
       card.style.setProperty('--fly', w.color);
       const el = card.querySelector('#raceReset');
@@ -898,9 +850,6 @@ function applyWatchOverlay(st) {
   if (watchOverlayPhase !== 'wait') showWatchWaiting('Waiting for the next race');
   watchOverlayPhase = 'wait';
   lastLobbyKind = '';
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'C',location:'arena.js:applyWatchOverlay',message:'overlay wait',data:{phase:st.phase,flyN:st.flies?.length??0,matchId:st.matchId??null},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 }
 function pushWatchPose(f, row, recvAt) {
   const buf = f.poseBuf || (f.poseBuf = []);
@@ -974,10 +923,6 @@ function addVisualFly(row, bodyNames) {
   f.label = new CSS2DObject(el);
   f.label.position.set(row.pos?.[0] || 0, row.pos?.[1] || 0, 1.1);
   scene.add(f.label);
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'A',location:'arena.js:addVisualFly',message:'watcher fly spawned',data:{flyId:f.id,isWatch,hasWingBlur:!!f.wingBlur,hasWorker:!!f.worker,bodyN:bodyNames?.length??0},timestamp:Date.now()})}).catch(()=>{});
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'post-fix',hypothesisId:'A',location:'arena.js:addVisualFly',message:'watcher fly blur',data:{flyId:f.id,isWatch,hasWingBlur:!!f.wingBlur,hasPoses:!!watchWingPoses,leftN:watchWingPoses?.left?.length??0},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return f;
 }
 function applyWatchFlyIdent(f, row) {
@@ -1020,12 +965,6 @@ function applyWatchState(st) {
     if (!f) continue;
     if (f.last && f.last.alive !== false && row.alive === false && !st.winner) raceAudio?.playOof();
     f.prev = f.last; f.last = row;
-    // #region agent log
-    if (row.flying && performance.now() - (applyWatchState._flyLog || 0) > 1500) {
-      applyWatchState._flyLog = performance.now();
-      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'B',location:'arena.js:applyWatchState',message:'watch flying pose',data:{flyId:row.id,flying:!!row.flying,hasWingBlur:!!f.wingBlur,phase:st.phase,xposN:row.xpos?.length??0},timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
     cueSelectedTakeoff(f);
     const received = performance.now();
     f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received - f.recvAt)) : 1000 / 30;
@@ -1073,14 +1012,6 @@ function applyWatchState(st) {
   }
   const f = flies.find(x => x.id === selected) || flies[0];
   const mine = f && (rows.some(r => r.id === f.id) || (!rows.length && payloadFly?.id === f.id));
-  // #region agent log
-  if (isWatch && st.selected != null && selected !== prevSelected) fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'watch-sel',hypothesisId:'A',location:'arena.js:applyWatchState',message:'selected overwrite',data:{prevSelected,stSelected:st.selected,selected,isWatch,phase:st.phase},timestamp:Date.now()})}).catch(()=>{});
-  if (isWatch && st.selected != null && st.selected !== selected && Date.now() - (applyWatchState._keptAt || 0) > 1500) { applyWatchState._keptAt = Date.now(); fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'post-fix-watch-sel',hypothesisId:'A',location:'arena.js:applyWatchState',message:'selected kept local',data:{localSelected:selected,stSelected:st.selected,phase:st.phase},timestamp:Date.now()})}).catch(()=>{}); }
-  if (isWatch && Date.now() - (applyWatchState._eyeLog || 0) > 2000) { applyWatchState._eyeLog = Date.now(); fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'eyes-all',hypothesisId:'E',location:'arena.js:applyWatchState',message:'watcher eyes',data:{selected,stSelected:st.selected??null,visionIds:rows.map(r=>r.id),mine:!!mine,eyeLen:f?.lastEyes?.[0]?.length??null},timestamp:Date.now()})}).catch(()=>{}); }
-  // #endregion
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'post-fix',hypothesisId:'C',location:'arena.js:applyWatchState',message:'watch snapshot',data:{phase:st.phase,isWatch,selected,stSelected:st.selected??null,hasEyes:!!st.eyes,eye0Len:st.eyes?.[0]?.length??(st.eyes?.[0]?Object.keys(st.eyes[0]).length:null),hasGroups:!!st.groups,groupN:st.groups?.length??null,groupsBuilt:groups.length,willPaint:!!(f&&(st.groups||st.eyes)&&groups.length)},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   if (mine && f && (f.lastGroups || f.lastEyes) && groups.length && performance.now() - (f.watchActAt || 0) > 110) {
     f.watchActAt = performance.now();
     onActivity(f, { groups: f.lastGroups || [], eyes: f.lastEyes, t: f.last?.t || 0 });
@@ -1331,14 +1262,6 @@ async function refreshPoolSnap() {
     }
   } catch { /* offline pool */ }
 }
-// #region agent log
-function dbg(location, message, data, hypothesisId = 'C') {
-  if (matchLink?.sendLog({ location, message, data, hypothesisId })) return true;
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',runId:'post-fix',location,message,data,hypothesisId,timestamp:Date.now()})}).catch(()=>{});
-  return true;
-}
-setDebugSink(dbg);
-// #endregion
 function shortAddr(a) {
   return a ? a.slice(0, 4) + '...' + a.slice(-4) : 'Connect';
 }
@@ -1382,9 +1305,6 @@ async function connectFromUi(fn = connectWallet) {
     if (matchPhase === 'results') paintResultActions(matchId);
     await refreshProfile();
   } catch (e) {
-    // #region agent log
-    dbg('arena.js:connectFromUi', 'connect failed', { err: e?.shortMessage || e?.message || String(e) }, 'A');
-    // #endregion
     if (note) note.textContent = e.shortMessage || e.message || String(e);
   }
 }
@@ -1426,9 +1346,6 @@ function setupWalletPick() {
 }
 function clearWalletUi() {
   disconnectWallet();
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',runId:'post-fix',location:'arena.js:clearWalletUi',message:'disconnect',data:{phase:matchPhase,acct:getAccount()},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   refreshProfile();
   if (matchPhase === 'lobby') paintLobbyOverlay(true);
   if (matchPhase === 'results') paintResultActions(matchId);
@@ -1468,9 +1385,6 @@ async function paintResultActions(id) {
     // The #raceReset line already says we are settling, so only speak up when there is money to take.
     const note = claim ? 'You won — claim your payout.' : (refund ? 'Race voided — take your refund.' : '');
     resultActions = { key, claim, refund, note };
-    // #region agent log
-    dbg('arena.js:paintResultActions', 'claim/refund visibility', { id, acct: acct ? acct.slice(0, 10) : null, status, claim, refund, stake: String(stakeAll) }, 'D');
-    // #endregion
   }
   injectResultActions(id);
 }
@@ -1503,16 +1417,10 @@ async function runBetTx(fn) {
   try {
     await ensureWallet();
     if (note) note.textContent = 'Confirm in wallet…';
-    // #region agent log
-    dbg('arena.js:runBetTx', 'tx start', { acct: getAccount()?.slice(0, 10), phase: matchPhase, matchId }, 'E');
-    // #endregion
     await fn();
     if (note) note.textContent = 'Done.';
     await refreshProfile();
   } catch (e) {
-    // #region agent log
-    dbg('arena.js:runBetTx', 'tx failed', { acct: getAccount()?.slice(0, 10), phase: matchPhase, matchId, err: e?.shortMessage || e?.reason || e?.message || String(e) }, 'G');
-    // #endregion
     if (note) note.textContent = e.shortMessage || e.message || String(e);
   }
 }
@@ -1589,9 +1497,6 @@ function paintLobbyOverlay(force = false) {
   const acct = getAccount();
   const kind = `${isWatch ? 'w' : 'h'}:${matchId}:${acct || '0'}:${poolStatus}:${flies.map(f => f.id).join(',')}`;
   const skip = !force && card.dataset.kind === 'lobby' && lastLobbyKind === kind && card.querySelector('#lobbyClock');
-  // #region agent log
-  if (force || !skip) fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',location:'arena.js:paintLobbyOverlay',message:'lobby paint',data:{force,skip,acct:acct?acct.slice(0,10):null,kind,btn:$('#betConnect')?.textContent},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   if (skip) {
     const el = card.querySelector('#lobbyClock'); if (el) el.textContent = clock;
     const key = poolSnap.map(p => p.id + ':' + (p.display || '0')).join('|');
@@ -1649,9 +1554,6 @@ function armBetWindow() {
   if (betWindowArmed || matchPhase !== 'lobby') return;
   betWindowArmed = true;
   betClosesAt = Date.now() + betWindowSec * 1000;
-  // #region agent log
-  dbg('arena.js:armBetWindow', 'bet window armed', { matchId, poolStatus, waited: Date.now() - lobbyStartedAt }, 'H');
-  // #endregion
   paintLobbyOverlay(true);
   publishMatchState(true);
 }
@@ -1676,9 +1578,6 @@ async function goLiveFromLobby() {
 }
 async function openHostRace() {
   if (!isHost || !chainConfigured() || !getAccount()) return;
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b97f7'},body:JSON.stringify({sessionId:'6b97f7',runId:'post-fix',location:'arena.js:openHostRace',message:'openRace',data:{matchId,flies:flies.map(f=>f.id),acct:getAccount()?.slice(0,10)},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
   await openRace(matchId, flies.map(f => f.id));
 }
 async function settleHostRace(winnerId) {
@@ -1791,9 +1690,6 @@ function announceRaceWinner(f, why) {
     publishMatchState();
     if (!readyForNextRace()) return;
     clearInterval(raceResetTimer); raceResetTimer = null;
-    // #region agent log
-    dbg('arena.js:announceRaceWinner', 'results -> next lobby', { poolStatus, settleMs: settledAt ? settledAt - resultsAt : null, heldMs: Date.now() - resultsAt }, 'I');
-    // #endregion
     resetRace();
   }, 1000);
 }
@@ -1852,9 +1748,6 @@ function chaseCam(f, outPos, outTarget) {
 const chasePos = new THREE.Vector3(), chaseTarget = new THREE.Vector3();
 function startRaceFollow(id) {
   const same = isRace && raceFollow === id;
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'watch-sel',hypothesisId:'A',location:'arena.js:startRaceFollow',message:'local pick',data:{id,prevSelected:selected,isWatch,isHost,raceFollow,same},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   selected = id;
   if (!isRace) { renderFlyList(); return; }
   if (!same) raceAudio?.playSelect(id);
@@ -1973,9 +1866,6 @@ function paintRaceVitals(force = false) {
   paintRaceVitals.at = now;
   const key = flies.map(f => `${f.id}:${f.name}:${f.color}`).join('|');
   if (el.dataset.ids !== key) {
-    // #region agent log
-    if (isWatch) fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'watch-sel',hypothesisId:'B',location:'arena.js:paintRaceVitals',message:'vitals rebuild',data:{key,prev:el.dataset.ids||null,selected},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     el.dataset.ids = key;
     el.innerHTML = flies.map(f => flyRowHtml(f, selected, true)).join('');
   }
@@ -2035,9 +1925,6 @@ function buildBrainPanel(data) {
   $('#brainpanel').hidden = false;
 }
 function onActivity(f, m) {
-  // #region agent log
-  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'D',location:'arena.js:onActivity',message:'paint panel',data:{flyId:f.id,g0:m.groups?.[0],g1:m.groups?.[1],hist0:hist[0]?.[0]?.length??0,eye0:m.eyes?.[0]?.[10]??m.eyes?.[0]?.['10']??null,nGroups:groups.length,cssHide:getComputedStyle(document.querySelector('#groups canvas')||document.body).display},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   if (histFly !== f.id) { histFly = f.id; hist = groups.map(() => [[], []]); $('#bpTitle').innerHTML = `Inside ${f.name} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${f.color}"></i>`; }
   const rows = $('#groups').children;
   groups.forEach((g, j) => {
