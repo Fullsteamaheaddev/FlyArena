@@ -78,8 +78,14 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
     parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${a.wallHeight / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${a.wallHeight / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
   }
   env.obstacles.forEach((o, k) => {
-    if (o.type === 'box') parts.push(`<geom name="obst${k}" type="box" size="${o.sx} ${o.sy} ${o.sz / 2}" pos="${o.x.toFixed(4)} ${o.y.toFixed(4)} ${o.sz / 2}" euler="0 0 ${(o.yaw || 0).toFixed(4)}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
-    else parts.push(`<geom name="obst${k}" type="cylinder" size="${o.r} ${o.sz / 2}" pos="${o.x} ${o.y} ${o.sz / 2}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+    const fric = a.wallFriction ?? 0.1, yaw = (o.yaw || 0).toFixed(4);
+    if (o.type === 'box') {
+      parts.push(`<geom name="obst${k}" type="box" size="${o.sx} ${o.sy} ${o.sz / 2}" pos="${o.x.toFixed(4)} ${o.y.toFixed(4)} ${o.sz / 2}" euler="0 0 ${yaw}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${fric}"/>`);
+      parts.push(`<geom name="obst${k}_top" type="box" size="${o.sx} ${o.sy} 0.002" pos="${o.x.toFixed(4)} ${o.y.toFixed(4)} ${o.sz}" euler="0 0 ${yaw}" rgba=".25 .3 .25 1" group="0" contype="1" conaffinity="1" friction="1"/>`);
+    } else {
+      parts.push(`<geom name="obst${k}" type="cylinder" size="${o.r} ${o.sz / 2}" pos="${o.x} ${o.y} ${o.sz / 2}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${fric}"/>`);
+      parts.push(`<geom name="obst${k}_top" type="cylinder" size="${o.r} 0.002" pos="${o.x} ${o.y} ${o.sz}" rgba=".25 .3 .25 1" group="0" contype="1" conaffinity="1" friction="1"/>`);
+    }
   });
   // food and patches are flat visual discs (no collision), seen by the eyes
   env.food.forEach((f, k) => parts.push(`<geom name="food${k}" type="cylinder" size="${f.r} 0.002" pos="${f.x} ${f.y} 0.002" rgba=".95 .8 .3 1" contype="0" conaffinity="0" group="0"/>`));
@@ -94,7 +100,7 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
   xml = xml.replace('<body name="thorax" childclass="body">', `<body name="thorax" childclass="body" pos="${flyPos.join(' ')}" quat="${q.map(v => v.toFixed(6)).join(' ')}">`);
   xml = xml.replace(/<size [^>]*\/>/, '<size njmax="600" nconmax="200" nkey="1"/>');
   // contact layers: fly body collides with floor (bit 1) and with walls/obstacles/other flies (bit 2); the adhesive
-  // claws and labella touch only the floor, so the fly cannot glue itself to vertical walls it cannot walk on
+  // claws and labella touch only the floor and obstacle top pads, so the fly cannot glue itself to vertical walls it cannot walk on
   xml = xml.replace('<geom type="capsule" contype="1" conaffinity="1" condim="1" group="4"', '<geom type="capsule" contype="3" conaffinity="3" condim="1" group="4"');
   xml = xml.replace('<geom friction="0.6" margin="0.0005" gap="0.0005" material="pink"/>', '<geom friction="0.6" margin="0.0005" gap="0.0005" material="pink" contype="1" conaffinity="1"/>');
   // legs (coxa..tarsus) also touch only the floor: the gait cannot walk up vertical faces, so legs slide along

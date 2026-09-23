@@ -209,14 +209,24 @@ export class CompoundEye {
   }
 }
 
+/** signed horizontal distance (cm) to an obstacle; negative = inside. Boxes use o.yaw. */
+export function obstacleDist(p, o) {
+  if (o.type === 'box') {
+    const yaw = o.yaw || 0, dx = p[0] - o.x, dy = p[1] - o.y, c = Math.cos(yaw), s = Math.sin(yaw);
+    const lx = dx * c + dy * s, ly = -dx * s + dy * c;
+    const qx = Math.abs(lx) - o.sx, qy = Math.abs(ly) - o.sy;
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0);
+  }
+  return Math.hypot(p[0] - o.x, p[1] - o.y) - o.r;
+}
+
 /** horizontal clearance (cm) from point p to the nearest wall, obstacle or other fly; negative = inside.
  *  With a height z, obstacles and flies that are not at that height are ignored. */
 export function clearance(p, env, others = [], z = null) {
   const [x, y] = p; let d = env.arena.radius - Math.hypot(x, y);
   for (const o of env.obstacles) {
     if (z !== null && z > o.sz + 0.05) continue;
-    if (o.type === 'box') { const qx = Math.abs(x - o.x) - o.sx, qy = Math.abs(y - o.y) - o.sy; d = Math.min(d, Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0)); }
-    else d = Math.min(d, Math.hypot(x - o.x, y - o.y) - o.r);
+    d = Math.min(d, obstacleDist([x, y], o));
   }
   for (const f of others) if (z === null || Math.abs(z - (f.z ?? 0.13)) < 0.15) d = Math.min(d, Math.hypot(x - f.x, y - f.y) - 0.1);
   return d;

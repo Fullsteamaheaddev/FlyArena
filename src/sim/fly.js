@@ -69,18 +69,22 @@ export class FlyAgent {
     st.proboscisOut = this.motor.proboscisOut(); st.stepping = this.motor.stepAmp || 0;
     for (const [k, b] of Object.entries(this.claw)) { st.claw[k] = P(b); st.touch[k] = sd[sa[`touch_claw_${k}`]]; const f = sa[`force_tarsus_${k}`]; st.load[k] = Math.hypot(sd[f], sd[f + 1], sd[f + 2]); }
     for (const [n, a] of Object.entries(this.jointAdr)) if (/^(tibia|coxa)_T/.test(n)) st.joint[n] = d.qpos[a];
-    // body contacts with anything other than the floor (walls, obstacles, other flies) -> bristles by side (every 10 ms)
-    if (this.t % 10 === 0) {
+    // body contacts with anything other than the floor (walls, obstacles, other flies) -> bristles by side.
+    // While flying, scan every ms so a dish-wall scrape can bounce the same step.
+    if (this.t % 10 === 0 || this.flight.active) {
       const Rt = d.xmat.slice(B.thorax * 9, B.thorax * 9 + 9); const bc = { left: false, right: false };
+      let rimHit = false;
       const cv = d.contact; const n = Math.min(d.ncon, cv.size());
       for (let c = 0; c < n; c++) { const con = cv.get(c); const k1 = this.geomKind[con.geom1], k2 = this.geomKind[con.geom2];
         if ((k1 === 'self') !== (k2 === 'self') && k1 !== 'floor' && k2 !== 'floor') {
           const p = con.pos; const rel = [p[0] - st.pos[0], p[1] - st.pos[1], p[2] - st.pos[2]]; const lat = Rt[1] * rel[0] + Rt[4] * rel[1] + Rt[7] * rel[2];
-          bc[lat > 0 ? 'left' : 'right'] = true; }
+          bc[lat > 0 ? 'left' : 'right'] = true;
+          if (k1 === 'wall' || k2 === 'wall') rimHit = true; }
         con.delete(); }
-      cv.delete(); this._bodyContact = bc;
+      cv.delete(); this._bodyContact = bc; this._rimHit = rimHit;
     }
     st.bodyContact = this._bodyContact || st.bodyContact;
+    st.rimHit = !!this._rimHit;
     // obstacle ahead: antenna tips (~0.2 mm in front of the antenna bases) or a front claw reach a wall, block
     // or fly. Both reach the brain as touch; antennal contact is what makes the fly turn away (st.antTouch)
     const fx = Rt9(d.xmat, B.thorax);
@@ -176,7 +180,7 @@ export class FlyAgent {
     }
     if (this.flight.active) {
       const legTouch = Object.values(st.touch).some(x => x > 0);
-      if (this.flight.update(this.t, 1, { turn: this.cmd.turn, env: this.env, others: this.others, legTouch }) === 'landed') this.motor.recoverUntil = this.t + 300;
+      if (this.flight.update(this.t, 1, { turn: this.cmd.turn, env: this.env, others: this.others, legTouch, rimHit: st.rimHit }) === 'landed') this.motor.recoverUntil = this.t + 300;
       this.cmd.flying = this.flight.active; this.cmd.flight = this.flight.label();
     }
     const dtSub = 1000 * M.opt.timestep;

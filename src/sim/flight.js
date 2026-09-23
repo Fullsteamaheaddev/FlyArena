@@ -2,7 +2,7 @@
 // stroke calibrates force per amplitude; a lumped stroke-plane/haltere controller
 // directs that mean force and stabilises attitude. MuJoCo integrates motion/contact.
 // This is an engineered flight motor, not a resolved unsteady-aerodynamics solver.
-import { clearance } from './senses.js';
+import { clearance, obstacleDist } from './senses.js';
 
 // wing yaw, roll, pitch joint angles (rad) over one stroke cycle: 50 samples of body/flysuite/wing_pattern_fmech.npy
 export const WING_CYCLE = [[-0.835, -0.102, 0.809], [-0.825, -0.113, 1.126], [-0.799, -0.112, 1.459], [-0.754, -0.095, 1.766], [-0.688, -0.061, 2.000], [-0.602, -0.013, 2.129], [-0.496, 0.042, 2.144], [-0.371, 0.092, 2.068], [-0.231, 0.131, 1.949], [-0.081, 0.151, 1.831], [0.074, 0.152, 1.743], [0.230, 0.135, 1.691], [0.383, 0.104, 1.667], [0.531, 0.066, 1.658], [0.671, 0.025, 1.657], [0.804, -0.016, 1.659], [0.928, -0.056, 1.656], [1.043, -0.092, 1.643], [1.145, -0.127, 1.615], [1.234, -0.161, 1.567], [1.307, -0.193, 1.494], [1.361, -0.225, 1.389], [1.397, -0.255, 1.243], [1.412, -0.282, 1.051], [1.407, -0.303, 0.815], [1.382, -0.316, 0.542], [1.339, -0.319, 0.248], [1.279, -0.311, -0.042], [1.204, -0.292, -0.294], [1.115, -0.265, -0.471], [1.015, -0.234, -0.553], [0.906, -0.202, -0.551], [0.791, -0.171, -0.502], [0.669, -0.141, -0.446], [0.544, -0.113, -0.406], [0.416, -0.087, -0.386], [0.286, -0.062, -0.377], [0.155, -0.040, -0.368], [0.026, -0.019, -0.353], [-0.100, -0.002, -0.329], [-0.221, 0.011, -0.296], [-0.333, 0.020, -0.253], [-0.435, 0.023, -0.204], [-0.526, 0.021, -0.150], [-0.606, 0.013, -0.095], [-0.674, 0.001, -0.034], [-0.730, -0.016, 0.042], [-0.775, -0.036, 0.146], [-0.808, -0.059, 0.298], [-0.828, -0.081, 0.507]];
@@ -18,7 +18,9 @@ export const FLIGHT = {
   fmax: 2.2,                     // peak aerodynamic force / body weight
   maxSpeed: 40,                  // cm/s, see the numerical guard in update()
   wallMargin: 0.45, wallPush: 25,   // centring near walls: cm, 1/s
-  landSpeed: 2, sink: 4, touchdownMs: 80,   // cm/s, cm/s, ms of weight transfer to the legs
+  landSpeed: 2.5, sink: 4, touchdownMs: 80,   // cm/s, cm/s, ms of weight transfer to the legs
+  landHangMs: 500,                  // abort or force touchdown if land never finds a surface
+  rimClear: 0.12, rimKick: 22, rimNudge: 1.0, rimBounceMs: 200,  // dish-wall bounce: cm, cm/s, cm, ms
   ampMin: 0.25, ampMax: 1.8,
 };
 const G = 981;   // cm/s^2
@@ -59,6 +61,7 @@ export class Flight {
       return { sp: dP >= dM ? 1 : -1 };
     });
     this.active = false; this.phase = null; this.wingPhase = 0; this.liftUnit = null;
+    this.tLand = 0; this.tRimBounce = -1e9;
   }
   /** blade-element point on wing s: wing-fluid geom centre + rEff * semi-span along the distal span axis */
   bladePoint(s) {
@@ -118,10 +121,10 @@ export class Flight {
   gauss() { let u = 0; while (!u) u = this.rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * this.rand()); }
   start(tMs, { cause = 'takeoff', awayFrom = null } = {}) {
     const F = FLIGHT;
-    this.active = true; this.phase = 'climb'; this.t0 = tMs; this.cause = cause;
+    this.active = true; this.phase = 'climb'; this.t0 = tMs; this.cause = cause; this.tLand = 0;
     this.dur = 1000 * F.duration[0] * Math.exp(F.duration[1] * this.gauss());
     this.alt = F.alt[0] + (F.alt[1] - F.alt[0]) * this.rand();
-    this.speed = F.speed * (this.forage ? 2 : 1) * Math.max(0.4, 1 + F.speedJitter * this.gauss());
+    this.speed = F.speed * (this.forage ? 2.5 : 1) * Math.max(0.4, 1 + F.speedJitter * this.gauss());
     this.escape = null;
     if (awayFrom) {   // escape: bank away from the looming object for the first moments of flight
       const R = this.R(), yaw = Math.atan2(R[3], R[0]), p = this.com();
@@ -144,7 +147,7 @@ export class Flight {
     }
     return I;
   }
-  /** one ms of flight. ctx: { turn: brain steering command, env, others, legTouch: any claw on a surface } */
+  /** one ms of flight. ctx: { turn, env, others, legTouch: any claw on a surface, rimHit: body on dish wall } */
   update(tMs, dtMs, ctx) {
     if (!this.active) return;
     if (this.liftUnit === null) this.calibrateLift();
@@ -155,9 +158,26 @@ export class Flight {
     // numerical guard: a takeoff pressed into a wall can make the contact solver fling the body; no fly does that
     const sp = Math.hypot(v[0], v[1], v[2]); if (sp > F.maxSpeed) { const k = F.maxSpeed / sp; for (let i = 0; i < 3; i++) { d.qvel[i] *= k; v[i] *= k; } }
     const wr = Math.hypot(w[0], w[1], w[2]); if (wr > 3000) { const k = 3000 / wr; for (let i = 3; i < 6; i++) { d.qvel[i] *= k; w[i - 3] *= k; } }   // contact kicks can fling the free body; a fly never spins at 3000 rad/s
+    // dish rim: bounce toward the origin so aero vs contact cannot glue the fly to the cylinder
+    const rad = Math.hypot(com[0], com[1]) || 1e-6;
+    const rim = ctx.env.arena.radius - rad;
+    if (tMs - this.tRimBounce > F.rimBounceMs && (ctx.rimHit || rim <= F.rimClear)) {
+      const nx = com[0] / rad, ny = com[1] / rad, vr = d.qvel[0] * nx + d.qvel[1] * ny;
+      if (vr > 0) { d.qvel[0] -= vr * nx; d.qvel[1] -= vr * ny; }
+      d.qvel[0] -= F.rimKick * nx; d.qvel[1] -= F.rimKick * ny;
+      d.qpos[0] -= F.rimNudge * nx; d.qpos[1] -= F.rimNudge * ny;
+      v[0] = d.qvel[0]; v[1] = d.qvel[1];
+      this.tRimBounce = tMs;
+      this.dur = Math.max(this.dur, age + 400);
+      if (this.phase === 'land' || this.phase === 'touchdown') this.phase = 'cruise';
+    }
     // --- phases: climb, cruise, land (descend onto the legs), touchdown (weight onto the legs) ---
     if (this.phase === 'climb' && age > F.climbMs) this.phase = 'cruise';
-    if (this.phase === 'cruise' && age > this.dur && !this.overObstacle(com, ctx.env)) this.phase = 'land';
+    if (this.phase === 'cruise' && age > this.dur && !this.overObstacle(com, ctx.env)) { this.phase = 'land'; this.tLand = tMs; }
+    if (this.phase === 'land' && tMs - this.tLand > F.landHangMs) {
+      if (ctx.legTouch || com[2] < 0.22 || this.overObstacle(com, ctx.env)) { this.phase = 'touchdown'; this.tTouch = tMs; }
+      else { this.phase = 'cruise'; this.dur = age + 400; }
+    }
     if ((this.phase === 'land' || (this.phase === 'cruise' && com[2] < 0.2)) && (ctx.legTouch || com[2] < 0.15)) { this.phase = 'touchdown'; this.tTouch = tMs; }
     if (this.phase === 'touchdown' && tMs - this.tTouch > F.touchdownMs) return this.end();
     const landing = this.phase === 'land' || this.phase === 'touchdown';
@@ -237,7 +257,7 @@ export class Flight {
     d.qpos.set(saved); mj.mj_kinematics(M, d);
     return out;
   }
-  overObstacle(p, env) { return env.obstacles.some(o => o.type === 'box' ? Math.abs(p[0] - o.x) < o.sx + 0.15 && Math.abs(p[1] - o.y) < o.sy + 0.15 : Math.hypot(p[0] - o.x, p[1] - o.y) < o.r + 0.15); }
+  overObstacle(p, env) { return env.obstacles.some(o => obstacleDist(p, o) < 0.15); }
   end() {
     const x = this.d.xfrc_applied; for (const b of [this.th, ...this.wingBody]) for (let k = 0; k < 6; k++) x[b * 6 + k] = 0;
     this.active = false; this.phase = null; return 'landed';
