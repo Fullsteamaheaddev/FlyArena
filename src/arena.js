@@ -43,7 +43,7 @@ const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
 let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0;
-let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null;
+let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null, watchWingPoses = null;
 let betClosesAt = null, poolSnap = [], lobbyTimer = null, lastPoolRead = 0, chainSettled = false, betFlyId = null, lastLobbyKind = '', lastPoolKey = '', lastLobbyTickSec = null;
 let poolStatus = null, betWindowSec = DEFAULT_WINDOW, betWindowArmed = false, lobbyStartedAt = 0, resultsAt = 0, settledAt = 0;
 let resultActions = { key: '', claim: false, refund: false, note: '' }, profileSeq = 0, profileAcct = null;
@@ -99,12 +99,14 @@ async function main() {
 
 async function mainWatch() {
   status('loading arena');
-  const [blender, levels, output, detail, fvm, data, bm] = await Promise.all([
+  const [blender, levels, output, detail, fvm, data, bm, wingPoses] = await Promise.all([
     loadBlenderFly(BASE, status), loadArenaDetail(BASE), blenderOutput(BASE), loadCuticleDetail(`${BASE}body/cuticle_detail.png`),
     fetch(`${BASE}vision/flyvis_map.json`).then(r => r.json()),
     loadNeurons(status),
-    fetch(`${BASE}data/bodymap.json`).then(r => r.json())]);
+    fetch(`${BASE}data/bodymap.json`).then(r => r.json()),
+    fetch(`${BASE}body/wing_poses.json`).then(r => r.ok ? r.json() : null).catch(() => null)]);
   visual = createBlenderFly(blender, detail, levels); outputPass = output;
+  if (wingPoses) watchWingPoses = wingPoses;
   flyvisMap = fvm; meta = data.meta; bodymap = bm;
   buildScene(data);
   buildBrainPanel(data);
@@ -406,6 +408,9 @@ function buildFlyMesh(color, sex) {
 const blurMaterial = new THREE.MeshStandardMaterial({ color: '#c0c7ce', transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide, roughness: 0.35 });
 blurMaterial.forceSinglePass = true;
 function buildWingBlur(f, poses) {
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'A',location:'arena.js:buildWingBlur',message:'build wing blur',data:{flyId:f.id,isWatch,hasPoses:!!poses,leftN:poses?.left?.length??0,rightN:poses?.right?.length??0,filmLow:!!f.meshes.find(m=>m.name==='wing_left_membrane')?.userData?.low},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!poses) return;
   const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3(1, 1, 1);
   f.wingBlur = ['left', 'right'].map(sd => {
@@ -417,7 +422,21 @@ function buildWingBlur(f, poses) {
     return { src, blur };
   });
 }
+function ensureWingBlur(f) {
+  if (f.wingBlur || !watchWingPoses) return;
+  buildWingBlur(f, watchWingPoses);
+}
 function updateWingBlur(f, s) {
+  // #region agent log
+  if (s?.flying || !f.wingBlur) {
+    const now = performance.now();
+    if (now - (updateWingBlur._at || 0) > 1500) {
+      updateWingBlur._at = now;
+      const w = f.wingBlur?.[0];
+      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'D',location:'arena.js:updateWingBlur',message:'wing blur tick',data:{flyId:f.id,isWatch,flying:!!s?.flying,hasBlur:!!f.wingBlur,srcVis:w?w.src.visible:null,blurVis:w?w.blur.visible:null},timestamp:Date.now()})}).catch(()=>{});
+    }
+  }
+  // #endregion
   if (!f.wingBlur) return;
   for (const w of f.wingBlur) if (w) { w.src.visible = !s.flying; w.blur.visible = !!s.flying; }
 }
@@ -471,7 +490,14 @@ function removeFly(f) {
   if (f.label) { scene.remove(f.label); f.label.element.remove(); }
 }
 function onWorker(f, m) {
-  if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
+  if (m.type === 'ready') {
+    // #region agent log
+    fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'C',location:'arena.js:onWorker.ready',message:'worker ready wing poses',data:{flyId:f.id,isWatch,hasWingPoses:!!m.wingPoses,leftN:m.wingPoses?.left?.length??0},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null);
+    if (m.wingPoses) { f.wingPoses = m.wingPoses; watchWingPoses = m.wingPoses; }
+    buildWingBlur(f, m.wingPoses); f.onReady?.();
+  }
   else if (m.type === 'pose') {
     f.prev = f.last; f.last = m; shadowDirty = true;
     f.onPose?.(); f.onPose = null;
@@ -761,6 +787,9 @@ function setupMatchLink() {
     onState: isWatch ? applyWatchState : undefined,
     onPool: applyPoolStatus,
     onStatus: s => {
+      // #region agent log
+      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'A',location:'arena.js:setupMatchLink',message:'match status',data:{s,isWatch,isHost,href:location.href},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (isWatch && (s === 'offline' || s === 'host-taken')) showWatchWaiting('Waiting for the next race');
     },
   });
@@ -779,6 +808,7 @@ function publishMatchState(force = false) {
     clock: { wall, fly: flySecs(), elapsed: raceStartWall != null ? now - raceStartWall : null },
     winner: raceWinner, why: raceWinnerWhy,
     bodyNames: flies.find(f => f.bodyNames)?.bodyNames || null,
+    wingPoses: flies.find(f => f.wingPoses)?.wingPoses || watchWingPoses,
     resetIn: matchResetIn,
     selected,
     eyes: sel?.lastEyes ? [Array.from(sel.lastEyes[0] || []), Array.from(sel.lastEyes[1] || [])] : null,
@@ -862,11 +892,15 @@ function applyWatchOverlay(st) {
   if (watchOverlayPhase !== 'wait') showWatchWaiting('Waiting for the next race');
   watchOverlayPhase = 'wait';
   lastLobbyKind = '';
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'C',location:'arena.js:applyWatchOverlay',message:'overlay wait',data:{phase:st.phase,flyN:st.flies?.length??0,matchId:st.matchId??null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 }
 function addVisualFly(row, bodyNames) {
   const f = { id: row.id, worker: null, color: row.color, sex: row.sex || 'm', name: row.name, ready: true, last: null, prev: null, stats: {}, ...buildFlyMesh(row.color, row.sex || 'm') };
   f.bodyNames = bodyNames;
   f.bodyGroups = bodyNames.map(n => f.bodies[n] || null);
+  ensureWingBlur(f);
   scene.add(f.group); flies.push(f); batches.add(f);
   const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color;
   el.innerHTML = `<span class="fly-label-chip">${f.name}</span><div class="fly-label-info"></div>`;
@@ -883,6 +917,10 @@ function addVisualFly(row, bodyNames) {
   f.label = new CSS2DObject(el);
   f.label.position.set(row.pos?.[0] || 0, row.pos?.[1] || 0, 1.1);
   scene.add(f.label);
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'A',location:'arena.js:addVisualFly',message:'watcher fly spawned',data:{flyId:f.id,isWatch,hasWingBlur:!!f.wingBlur,hasWorker:!!f.worker,bodyN:bodyNames?.length??0},timestamp:Date.now()})}).catch(()=>{});
+  fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'post-fix',hypothesisId:'A',location:'arena.js:addVisualFly',message:'watcher fly blur',data:{flyId:f.id,isWatch,hasWingBlur:!!f.wingBlur,hasPoses:!!watchWingPoses,leftN:watchWingPoses?.left?.length??0},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   return f;
 }
 function applyWatchFlyIdent(f, row) {
@@ -901,6 +939,7 @@ function applyWatchState(st) {
   const wasLive = watchOverlayPhase === 'live';
   matchPhase = st.phase || matchPhase;
   if (st.bodyNames) watchBodyNames = st.bodyNames;
+  if (st.wingPoses) watchWingPoses = st.wingPoses;
   if (st.matchId != null && st.matchId !== matchId) { matchId = st.matchId; poolStatus = null; }
   betClosesAt = st.betClosesAt ?? null;
   if (st.pools) poolSnap = st.pools;
@@ -910,7 +949,7 @@ function applyWatchState(st) {
       if (elapsed != null && raceStartWall == null) raceStartWall = performance.now() - elapsed;
     } else {
       raceStartWall = null;
-      paintRaceClock(st.clock.wall, st.clock.fly);
+      paintRaceClock(st.clock.wall);
     }
   }
   const names = watchBodyNames;
@@ -920,9 +959,16 @@ function applyWatchState(st) {
     let f = flies.find(x => x.id === row.id);
     if (!f && names) f = addVisualFly(row, names);
     else if (f && (f.name !== row.name || f.color !== row.color)) applyWatchFlyIdent(f, row);
+    if (f) ensureWingBlur(f);
     if (!f) continue;
     if (f.last && f.last.alive !== false && row.alive === false && !st.winner) raceAudio?.playOof();
     f.prev = f.last; f.last = row;
+    // #region agent log
+    if (row.flying && performance.now() - (applyWatchState._flyLog || 0) > 1500) {
+      applyWatchState._flyLog = performance.now();
+      fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'B',location:'arena.js:applyWatchState',message:'watch flying pose',data:{flyId:row.id,flying:!!row.flying,hasWingBlur:!!f.wingBlur,phase:st.phase,xposN:row.xpos?.length??0},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
     cueSelectedTakeoff(f);
     const received = performance.now();
     f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received - f.recvAt)) : 1000 / 30;
@@ -1636,18 +1682,17 @@ function parseWallMs(wall) {
 function flySecs(f = flies.find(x => x.last)) {
   return String(Math.floor((f?.last?.t || 0) / 1000));
 }
-function paintRaceClock(wall, fly) {
+function paintRaceClock(wall) {
   const el = $('#raceClock'); if (!el) return;
   el.hidden = false;
   $('#raceWall').textContent = wall;
-  $('#raceFly').textContent = fly + ' s fly time';
 }
 function startRace() {
   const overlay = $('#raceOverlay');
   overlay.classList.remove('show');
   overlay.hidden = true;
   raceStartWall = performance.now();
-  paintRaceClock('0 s', '0');
+  paintRaceClock('0 s');
   running = true;
   matchPhase = 'live';
   matchResetIn = null;
@@ -1668,7 +1713,7 @@ function announceRaceWinner(f, why) {
   settledAt = 0;
   const wall = formatWall(performance.now() - (raceStartWall || performance.now()));
   const fly = flySecs(f);
-  paintRaceClock(wall, fly);
+  paintRaceClock(wall);
   const hist = saveRaceResult({ name: f.name, color: f.color, wall, fly });
   raceAudio?.setMotion({ flying: false, walk: 0 });
   raceAudio?.playBed('menu');
@@ -1840,11 +1885,13 @@ function vitalsBehaviorLabel(behavior) {
   const base = behavior.replace(/ \(proboscis out\)$/, '');
   return VITALS_SHORT[base] || base;
 }
-function flyRowHtml(f, selectedId = selected) {
+function flyRowHtml(f, selectedId = selected, raceVitals = false) {
   const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
+  const gender = raceVitals ? '' : `${f.sex === 'f' ? '♀' : '♂'} `;
+  const timer = raceVitals ? '' : `<span class="fly-t" style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span>`;
   return `<div class="fly ${f.id === selectedId ? 'sel' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
-      <div>${f.sex === 'f' ? '♀' : '♂'} <span class="fly-name">${f.name}</span> <span class="fly-behavior" style="color:var(--acc)">${s.behavior || ''}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
-      <span class="fly-t" style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span></div>`;
+      <div>${gender}<span class="fly-name">${f.name}</span> <span class="fly-behavior" style="color:var(--acc)">${s.behavior || ''}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
+      ${timer}</div>`;
 }
 function flyKvHtml(f) {
   const s = f.last; if (!s) return '';
@@ -1871,7 +1918,7 @@ function paintRaceVitals(force = false) {
     if (isWatch) fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'watch-sel',hypothesisId:'B',location:'arena.js:paintRaceVitals',message:'vitals rebuild',data:{key,prev:el.dataset.ids||null,selected},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     el.dataset.ids = key;
-    el.innerHTML = flies.map(f => flyRowHtml(f)).join('');
+    el.innerHTML = flies.map(f => flyRowHtml(f, selected, true)).join('');
   }
   for (const f of flies) {
     const row = el.querySelector(`.fly[data-id="${f.id}"]`);
@@ -1884,8 +1931,6 @@ function paintRaceVitals(force = false) {
     if (eBar) eBar.style.width = `${(s.energy ?? 0) * 100}%`;
     const hBar = row.querySelector('.bar-health > i');
     if (hBar) hBar.style.width = `${(s.health ?? 1) * 100}%`;
-    const t = row.querySelector('.fly-t');
-    if (t) t.textContent = s.t ? (s.t / 1000).toFixed(1) + 's' : '…';
   }
 }
 function renderFlyList() {
@@ -2029,7 +2074,7 @@ function animate() {
       if (f.label && s) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
     }
   }
-  if (isRace && raceStartWall != null && !raceWinner) paintRaceClock(formatWall(now - raceStartWall), flySecs());
+  if (isRace && raceStartWall != null && !raceWinner) paintRaceClock(formatWall(now - raceStartWall));
   if (isRace && raceAudio && running && !raceWinner) {
     const s = sf?.last;
     raceAudio.setMotion({ flying: !!s?.flying, walk: s?.flying ? 0 : Math.abs(s?.cmd?.v || 0) });

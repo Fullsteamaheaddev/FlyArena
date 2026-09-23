@@ -25,7 +25,7 @@ export const INTRINSIC = {
   grazeTurnMs: [120, 260], grazeRefractory: 400,   // one-sided contact: turn away without stopping
   heatRefractory: 700,
   feedBout: [6, 0.5], satiety: 0.9, searchMs: 12000, searchTurns: 3,   // feeding stop, then local search
-  pTakeoff: 0.1, pTakeoffWall: 0.1, takeoffDrive: 20,   // chance a bout ends in a voluntary takeoff (more when hungry), via DNp02/DNp04
+  pTakeoff: 0.35, pTakeoffWall: 0.45, takeoffDrive: 20,   // chance a bout ends in a voluntary takeoff (more when hungry), via DNp02/DNp04
   flightSaccadeRate: 1.0, flightSaccadeMs: [80, 160], avoidAhead: 0.4, avoidDrive: 18,   // flight: avoid when the path 9 mm ahead (FlyAgent.state) comes within 4 mm of a surface
   // courtship: the connectome's pIP10 + DNp13 rate (ctx.court.level, see motor.js) tells the male a fly is
   // near; he chases it by steering on its bearing and sings with the wing on its side (Ewing & Bennet-Clark 1968)
@@ -126,7 +126,7 @@ export class Intrinsic {
     if (this.avoid) {
       const a = this.avoid; a.t += dtMs;
       if (a.t > P.avoidMs && !this.sacc) this.sacc = { t: 0, dur: a.turn, dir: a.dir };   // pivot away
-      if (a.t > P.avoidMs + a.turn) { if (a.fly && !forage) this.takeoffUntil = t + 80; this.avoid = null; this.lastDir = a.dir; this.sinceSacc = 0; this.state = 'walk'; this.left = Math.max(this.left, forage ? 2500 : 1000); }
+      if (a.t > P.avoidMs + a.turn) { if (a.fly) this.takeoffUntil = t + 80; this.avoid = null; this.lastDir = a.dir; this.sinceSacc = 0; this.state = 'walk'; this.left = Math.max(this.left, forage ? 2500 : 1000); }
     } else if (this.state === 'court' && court) {
       // chasing: no spontaneous saccades or bout transitions; steering is set from the target's bearing below
       const b = court.bearing;   // rad; >0 = target to the left
@@ -137,7 +137,7 @@ export class Intrinsic {
       this.left -= dtMs;
       if (this.left <= 0) {   // action selection at the end of a bout
         if (this.approach && this.state !== 'feed') { this.state = 'walk'; this.left = 600; } else
-        if (this.state !== 'feed' && this.state !== 'groom' && !forage && this.rand() < P.pTakeoff * (1 + 2 * arousal)) this.takeoffUntil = t + 80;   // leave by air
+        if (this.state !== 'feed' && this.state !== 'groom' && this.rand() < P.pTakeoff * (forage ? 4 : 1) * (1 + 2 * arousal)) this.takeoffUntil = t + 80;   // leave by air
         if (this.state === 'feed') { this.state = 'walk'; this.left = this.lognormal(P.walkBout); }
         else if (this.state === 'walk') { this.state = !forage && this.rand() < P.pGroom * (1 - arousal) ? 'groom' : 'stop'; this.left = this.lognormal(this.state === 'groom' ? P.groomBout : P.stopBout) * (1 - 0.6 * arousal) * (forage ? 0.05 : 1); }
         else { this.state = 'walk'; this.left = this.lognormal(P.walkBout) * (1 + 1.5 * arousal); }
