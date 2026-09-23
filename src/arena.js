@@ -205,7 +205,10 @@ function paintRaceWall(wx, ww, wh, logo) {
   for (let k = 0; k < 12; k++) { wx.fillStyle = pastels[k % pastels.length]; wx.fillRect(k * ww / 12, 0, ww / 12 + 1, wh); }
   wx.globalAlpha = 1;
   if (!logo) return;
-  const n = 10, bandH = wh * 0.38, bandW = bandH * (logo.width / logo.height), slot = ww / n;
+  const n = 10, slot = ww / n;
+  const s = Math.min(1, slot / logo.width, wh / logo.height);
+  wx.imageSmoothingEnabled = s < 1;
+  const bandW = logo.width * s, bandH = logo.height * s;
   for (let i = 0; i < n; i++) {
     const cx = i * slot + slot / 2, cy = wh / 2;
     wx.save();
@@ -312,7 +315,9 @@ function rebuildEnv() {
       paintRaceFloor(fx, fs, img);
       ft.needsUpdate = true;
     });
-    const ww = 8192, wh = 512, wc = document.createElement('canvas'); wc.width = ww; wc.height = wh; const wx = wc.getContext('2d');
+    const maxTex = renderer.capabilities.maxTextureSize;
+    const ww = Math.min(maxTex, 16384), wh = Math.min(maxTex, 1024);
+    const wc = document.createElement('canvas'); wc.width = ww; wc.height = wh; const wx = wc.getContext('2d');
     const wallPaintId = ++raceWallPaint;
     paintRaceWall(wx, ww, wh, raceWallLogo);
     const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
