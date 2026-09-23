@@ -1738,6 +1738,29 @@ function onClick(e) {
   if (tool === 'obstacle') { alert('Obstacles change the physics world; they apply to flies added after this point.'); env.obstacles.push({ type: 'box', x: p.x, y: p.y, sx: 0.2, sy: 0.2, sz: 0.3 }); }
   rebuildEnv(); syncEnv();
 }
+const VITALS_SHORT = {
+  'turning left': 'turn left',
+  'turning right': 'turn right',
+  'walking backward': 'walk back',
+  walking: 'walk',
+  standing: 'stand',
+  'taking off': 'takeoff',
+  'escape jump': 'escape',
+  'singing (courtship)': 'singing',
+  courting: 'court',
+  grooming: 'groom',
+  feeding: 'feed',
+  flying: 'fly',
+  landing: 'land',
+  righting: 'right',
+  dead: 'dead',
+  'proboscis extended': 'proboscis',
+};
+function vitalsBehaviorLabel(behavior) {
+  if (!behavior) return '';
+  const base = behavior.replace(/ \(proboscis out\)$/, '');
+  return VITALS_SHORT[base] || base;
+}
 function flyRowHtml(f, selectedId = selected) {
   const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
   return `<div class="fly ${f.id === selectedId ? 'sel' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
@@ -1777,7 +1800,7 @@ function paintRaceVitals(force = false) {
     row.classList.toggle('sel', f.id === selected);
     const s = f.last || {};
     const beh = row.querySelector('.fly-behavior');
-    if (beh) beh.textContent = s.behavior || '';
+    if (beh) beh.textContent = raceMobile() ? vitalsBehaviorLabel(s.behavior) : (s.behavior || '');
     const eBar = row.querySelector('.bar-energy > i');
     if (eBar) eBar.style.width = `${(s.energy ?? 0) * 100}%`;
     const hBar = row.querySelector('.bar-health > i');

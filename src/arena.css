@@ -184,9 +184,11 @@ body.race #enterGate .enter-social:focus-visible {
 }
 body.race #enterGate .enter-social svg { width: 20px; height: 20px; fill: currentColor; }
 body.race #enterGate .enter-token {
-  font: 12px/1.3 ui-monospace, ui-sans-serif, monospace;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font: 12px/1.4 ui-monospace, ui-sans-serif, monospace;
   min-width: 0; max-width: min(28em, 100%);
-  padding: 8px 14px; border-radius: 999px;
+  min-height: 48px; padding: 14px 20px; border-radius: 999px;
   background: rgba(255,255,255,.07); color: var(--dim);
   border: 2px solid var(--race-outline);
   cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -561,11 +563,21 @@ body.race #brainpanel .fold { border-radius: 8px; }
   body.race #raceVitals .fly {
     box-sizing: border-box;
     width: 100%;
+    min-height: 52px;
     padding: 8px 12px 10px;
     transform-origin: left center;
   }
   body.race #raceVitals .fly.sel { transform: scale(1.03); }
-  body.race #raceVitals .fly-name { font-size: 12px; }
+  body.race #raceVitals .fly-name { font-size: 11px; }
+  body.race #raceVitals .fly-behavior {
+    font-size: 10px;
+    max-width: 7.2em;
+    display: inline-block;
+    vertical-align: bottom;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   body.race #raceVitals .dot { width: 12px; height: 12px; }
   body.race #raceVitals .fly-t { display: none; }
   body.race #raceVitals .bar { height: 3px; margin-top: 1px; width: 85%; max-width: 144px; }
@@ -656,7 +668,7 @@ body.race #brainpanel .fold { border-radius: 8px; }
   body.race #enterGate h1 { font-size: 28px; }
   body.race #enterGate p { font-size: 15px; margin-bottom: 4px; }
   body.race #enterGate #enterBtn { min-width: 160px; min-height: 44px; font-size: 20px; padding: 12px 24px; }
-  body.race #enterGate .enter-token { min-height: 44px; font-size: 12px; }
+  body.race #enterGate .enter-token { min-height: 44px; padding: 8px 14px; font-size: 12px; }
   body.race #profile.folded {
     top: max(8px, env(safe-area-inset-top));
     right: max(8px, env(safe-area-inset-right));
