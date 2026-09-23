@@ -43,7 +43,8 @@ const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
 let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0;
-let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null, watchWingPoses = null;
+let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null, watchWingPoses = null, lastSentWingPoses = null;
+const WATCH_POSE_DELAY = 100, WATCH_POSE_EXTRAP = 40, WATCH_POSE_RING = 4;
 let betClosesAt = null, poolSnap = [], lobbyTimer = null, lastPoolRead = 0, chainSettled = false, betFlyId = null, lastLobbyKind = '', lastPoolKey = '', lastLobbyTickSec = null;
 let poolStatus = null, betWindowSec = DEFAULT_WINDOW, betWindowArmed = false, lobbyStartedAt = 0, resultsAt = 0, settledAt = 0;
 let resultActions = { key: '', claim: false, refund: false, note: '' }, profileSeq = 0, profileAcct = null;
@@ -808,7 +809,12 @@ function publishMatchState(force = false) {
     clock: { wall, fly: flySecs(), elapsed: raceStartWall != null ? now - raceStartWall : null },
     winner: raceWinner, why: raceWinnerWhy,
     bodyNames: flies.find(f => f.bodyNames)?.bodyNames || null,
-    wingPoses: flies.find(f => f.wingPoses)?.wingPoses || watchWingPoses,
+    wingPoses: (() => {
+      const wp = flies.find(f => f.wingPoses)?.wingPoses || watchWingPoses;
+      if (!wp || wp === lastSentWingPoses) return null;
+      lastSentWingPoses = wp;
+      return wp;
+    })(),
     resetIn: matchResetIn,
     selected,
     eyes: sel?.lastEyes ? [Array.from(sel.lastEyes[0] || []), Array.from(sel.lastEyes[1] || [])] : null,
@@ -896,6 +902,57 @@ function applyWatchOverlay(st) {
   fetch('http://127.0.0.1:7630/ingest/33e5d0c9-099a-4d90-97f9-50e752800b07',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'487c3c'},body:JSON.stringify({sessionId:'487c3c',runId:'pre-fix',hypothesisId:'C',location:'arena.js:applyWatchOverlay',message:'overlay wait',data:{phase:st.phase,flyN:st.flies?.length??0,matchId:st.matchId??null},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 }
+function pushWatchPose(f, row, recvAt) {
+  const buf = f.poseBuf || (f.poseBuf = []);
+  buf.push({ t: row.t, recvAt, xpos: row.xpos, xquat: row.xquat, pos: row.pos, flying: !!row.flying });
+  if (buf.length > WATCH_POSE_RING) buf.shift();
+}
+function sampleWatchPose(f, now) {
+  const buf = f.poseBuf;
+  if (!buf?.length) return null;
+  const renderAt = now - WATCH_POSE_DELAY;
+  let i = 0;
+  while (i + 1 < buf.length && buf[i + 1].recvAt <= renderAt) i++;
+  const a = buf[i], b = buf[i + 1];
+  if (b) {
+    const span = Math.max(1, b.recvAt - a.recvAt);
+    return { a, b, blend: Math.min(1, Math.max(0, (renderAt - a.recvAt) / span)), extra: 0 };
+  }
+  if (renderAt < a.recvAt) return { a, b: a, blend: 1, extra: 0 };
+  const prev = i > 0 ? buf[i - 1] : null;
+  return { a: prev || a, b: a, blend: 1, extra: prev ? Math.min(WATCH_POSE_EXTRAP, renderAt - a.recvAt) : 0 };
+}
+function flyDrawPos(f) { return f.drawPos || f.last?.pos; }
+function applyWatchBodies(f, a, b, blend, extra) {
+  const ax = a.xpos, bx = b.xpos, aq = a.xquat, bq = b.xquat;
+  if (!bx?.length) return;
+  let ex = 0, ey = 0, ez = 0;
+  if (extra > 0 && a !== b && a.pos && b.pos) {
+    const k = extra / Math.max(1, b.recvAt - a.recvAt);
+    ex = (b.pos[0] - a.pos[0]) * k; ey = (b.pos[1] - a.pos[1]) * k; ez = (b.pos[2] - a.pos[2]) * k;
+  }
+  const u = blend;
+  for (let bi = 1; bi < f.bodyGroups.length; bi++) {
+    const g = f.bodyGroups[bi]; if (!g) continue;
+    const i3 = bi * 3, i4 = bi * 4;
+    if (!ax || u >= 1 || a === b) {
+      g.position.set((bx[i3] || 0) + ex, (bx[i3 + 1] || 0) + ey, (bx[i3 + 2] || 0) + ez);
+      q.set(bq[i4 + 1], bq[i4 + 2], bq[i4 + 3], bq[i4]);
+    } else {
+      g.position.set(ax[i3] + (bx[i3] - ax[i3]) * u + ex, ax[i3 + 1] + (bx[i3 + 1] - ax[i3 + 1]) * u + ey, ax[i3 + 2] + (bx[i3 + 2] - ax[i3 + 2]) * u + ez);
+      previousQ.set(aq[i4 + 1], aq[i4 + 2], aq[i4 + 3], aq[i4]);
+      q.set(bq[i4 + 1], bq[i4 + 2], bq[i4 + 3], bq[i4]);
+      q.slerpQuaternions(previousQ, q, u);
+    }
+    g.quaternion.copy(q); g.updateMatrix();
+  }
+  const ap = a.pos || b.pos, bp = b.pos || ap;
+  const pos = [ap[0] + (bp[0] - ap[0]) * u + ex, ap[1] + (bp[1] - ap[1]) * u + ey, ap[2] + (bp[2] - ap[2]) * u + ez];
+  f.drawPos = pos;
+  f.ring.position.set(pos[0], pos[1], 0.003);
+  if (f.label) f.label.position.set(pos[0], pos[1], pos[2] + flyLabelZ(f));
+  updateWingBlur(f, { flying: u < 0.5 ? a.flying : b.flying });
+}
 function addVisualFly(row, bodyNames) {
   const f = { id: row.id, worker: null, color: row.color, sex: row.sex || 'm', name: row.name, ready: true, last: null, prev: null, stats: {}, ...buildFlyMesh(row.color, row.sex || 'm') };
   f.bodyNames = bodyNames;
@@ -973,6 +1030,7 @@ function applyWatchState(st) {
     const received = performance.now();
     f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received - f.recvAt)) : 1000 / 30;
     f.recvAt = received;
+    if (isWatch) pushWatchPose(f, row, received);
     paintFlyLabel(f);
   }
   for (let i = flies.length - 1; i >= 0; i--) if (!seen.has(flies[i].id)) { removeFly(flies[i]); flies.splice(i, 1); }
@@ -1787,7 +1845,7 @@ function flyLabelZ(f) {
   return RACE_LABEL_Z + (RACE_LABEL_Z_CHASE - RACE_LABEL_Z) * k;
 }
 function chaseCam(f, outPos, outTarget) {
-  const p = f.last.pos, yaw = f.last.yaw || 0;
+  const p = flyDrawPos(f) || f.last.pos, yaw = f.last.yaw || 0;
   outTarget.set(p[0], p[1], p[2]);
   outPos.set(p[0] - Math.cos(yaw) * RACE_CHASE_BACK, p[1] - Math.sin(yaw) * RACE_CHASE_BACK, p[2] + RACE_CHASE_Z);
 }
@@ -1842,7 +1900,8 @@ function tickRaceCamera(dt) {
   if (raceFollow != null) {
     const f = flies.find(x => x.id === raceFollow);
     if (f?.last) {
-      followDelta.set(f.last.pos[0], f.last.pos[1], f.last.pos[2]).sub(controls.target).multiplyScalar(0.1);
+      const p = flyDrawPos(f) || f.last.pos;
+      followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1);
       controls.target.add(followDelta); camera.position.add(followDelta);
     }
   }
@@ -2039,6 +2098,11 @@ function animate() {
   const now = performance.now(); const dt = Math.min(0.1, (now - lastFrame) / 1000); fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
   for (const f of flies) {
     const s = f.last; if (!s || !f.bodyGroups) continue;
+    if (isWatch && f.poseBuf?.length) {
+      const sampled = sampleWatchPose(f, now);
+      f.poseUpdated = true; shadowDirty = true;
+      if (sampled) applyWatchBodies(f, sampled.a, sampled.b, sampled.blend, sampled.extra);
+    } else {
     const previous = f.prev, blend = running && previous && s.t>previous.t ? Math.min(1,(now-f.recvAt)/f.poseInterval) : 1;
     f.poseUpdated = f.drawnPose !== s || f.drawnBlend !== blend;
     if (f.poseUpdated) {
@@ -2061,6 +2125,7 @@ function animate() {
     } else if (f.label && s) {
       f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
     }
+    }
     const mark = f.id === selected && raceFollow == null;
     f.ring.visible = mark;
     if (f.glow) f.glow.visible = mark;
@@ -2070,8 +2135,8 @@ function animate() {
   tickRaceCamera(dt);
   if (isRace) {
     for (const f of flies) {
-      const s = f.last;
-      if (f.label && s) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
+      const p = flyDrawPos(f);
+      if (f.label && p) f.label.position.set(p[0], p[1], p[2] + flyLabelZ(f));
     }
   }
   if (isRace && raceStartWall != null && !raceWinner) paintRaceClock(formatWall(now - raceStartWall));
@@ -2089,8 +2154,9 @@ function animate() {
   const projection = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   for (const f of flies) {
     if (!f.last) continue;
-    flyBounds.center.fromArray(f.last.pos);
-    viewPoint.fromArray(f.last.pos).applyMatrix4(camera.matrixWorldInverse);
+    const p = flyDrawPos(f) || f.last.pos;
+    flyBounds.center.fromArray(p);
+    viewPoint.fromArray(p).applyMatrix4(camera.matrixWorldInverse);
     const pixels = viewPoint.z < 0 && viewFrustum.intersectsSphere(flyBounds) ? 0.3 * projection / Math.max(0.05, -viewPoint.z) : 0;
     largest = Math.max(largest, pixels);
     const changed = f.setDetail(pixels);
