@@ -147,7 +147,7 @@ function waitRacePoses() {
   return Promise.all(flies.map(f => f.last ? Promise.resolve() : new Promise(res => { f.onPose = res; })));
 }
 
-let renderer, scene, camera, controls, envGroup, raycaster, floorMesh, sun, composer, gtao, resolution;
+let renderer, scene, camera, controls, envGroup, raycaster, floorMesh, wallMesh, sun, composer, gtao, resolution;
 let shadowDirty = true, lastShadow = -Infinity, shadowExtent = 0, lastBrainDraw = 0, brainDirty = true;
 let brainColorFly = -1, brainColorHover = -2;
 const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint = new THREE.Vector3();
@@ -155,6 +155,7 @@ const viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4(), f
 const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0, brainUploads: 0, brainDraws: 0 };
 let brainRenderer, brainScene, brainCam, brainPts, brainAct;
 let raceFloorLogo = null, raceFloorLogoWait = null, raceFloorPaint = 0;
+let raceWallLogo = null, raceWallLogoWait = null, raceWallPaint = 0;
 function raceFloorLogoImg() {
   if (raceFloorLogo) return Promise.resolve(raceFloorLogo);
   if (!raceFloorLogoWait) {
@@ -166,6 +167,18 @@ function raceFloorLogoImg() {
     });
   }
   return raceFloorLogoWait;
+}
+function raceWallLogoImg() {
+  if (raceWallLogo) return Promise.resolve(raceWallLogo);
+  if (!raceWallLogoWait) {
+    raceWallLogoWait = new Promise(res => {
+      const img = new Image();
+      img.onload = () => { raceWallLogo = img; res(img); };
+      img.onerror = () => res(null);
+      img.src = `${BASE}FLYticker.webp`;
+    });
+  }
+  return raceWallLogoWait;
 }
 function paintRaceFloor(fx, fs, logo) {
   const mid = fs / 2;
@@ -181,6 +194,17 @@ function paintRaceFloor(fx, fs, logo) {
   fx.rotate(-Math.PI / 2);
   fx.drawImage(logo, -dw / 2, -dh / 2, dw, dh);
   fx.restore();
+}
+function paintRaceWall(wx, ww, wh, logo) {
+  const vg = wx.createLinearGradient(0, 0, 0, wh);
+  vg.addColorStop(0, '#e0b8f0'); vg.addColorStop(1, '#7a3aa8');
+  wx.fillStyle = vg; wx.fillRect(0, 0, ww, wh);
+  const pastels = ['#f0c8ff', '#d080e8', '#a050c8']; wx.globalAlpha = 0.32;
+  for (let k = 0; k < 12; k++) { wx.fillStyle = pastels[k % pastels.length]; wx.fillRect(k * ww / 12, 0, ww / 12 + 1, wh); }
+  wx.globalAlpha = 1;
+  if (!logo) return;
+  const n = 10, bandH = wh * 0.58, bandW = bandH * (logo.width / logo.height), slot = ww / n, y = (wh - bandH) / 2;
+  for (let i = 0; i < n; i++) wx.drawImage(logo, i * slot + (slot - bandW) / 2, y, bandW, bandH);
 }
 function buildScene(data) {
   renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
@@ -279,14 +303,16 @@ function rebuildEnv() {
       paintRaceFloor(fx, fs, img);
       ft.needsUpdate = true;
     });
-    const wc = document.createElement('canvas'); wc.width = 1024; wc.height = 128; const wx = wc.getContext('2d');
-    const vg = wx.createLinearGradient(0, 0, 0, 128); vg.addColorStop(0, '#e0b8f0'); vg.addColorStop(1, '#7a3aa8');
-    wx.fillStyle = vg; wx.fillRect(0, 0, 1024, 128);
-    const pastels = ['#f0c8ff', '#d080e8', '#a050c8']; wx.globalAlpha = 0.32;
-    for (let k = 0; k < 12; k++) { wx.fillStyle = pastels[k % pastels.length]; wx.fillRect(k * 1024 / 12, 0, 1024 / 12 + 1, 128); }
-    wx.globalAlpha = 1;
+    const ww = 4096, wh = 256, wc = document.createElement('canvas'); wc.width = ww; wc.height = wh; const wx = wc.getContext('2d');
+    const wallPaintId = ++raceWallPaint;
+    paintRaceWall(wx, ww, wh, raceWallLogo);
     const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
     wallMat = new THREE.MeshStandardMaterial({ map: wt, side: THREE.BackSide, roughness: 0.62 });
+    if (!raceWallLogo) raceWallLogoImg().then(img => {
+      if (!img || wallPaintId !== raceWallPaint || wallMesh?.material?.map !== wt) return;
+      paintRaceWall(wx, ww, wh, img);
+      wt.needsUpdate = true;
+    });
   } else {
     // floor: same 0.4 cm checker the flies' eyes see
     const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d');
@@ -300,8 +326,8 @@ function rebuildEnv() {
   }
   floorMesh = new THREE.Mesh(new THREE.CircleGeometry(R + 0.1, 96), floorMat);
   floorMesh.receiveShadow = true; envGroup.add(floorMesh);
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true), wallMat);
-  wall.rotation.x = Math.PI / 2; wall.position.z = env.arena.wallHeight / 2; envGroup.add(wall);
+  wallMesh = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true), wallMat);
+  wallMesh.rotation.x = Math.PI / 2; wallMesh.position.z = env.arena.wallHeight / 2; envGroup.add(wallMesh);
   for (const o of env.obstacles) { const m = new THREE.Mesh(o.type === 'box' ? new THREE.BoxGeometry(o.sx * 2, o.sy * 2, o.sz) : new THREE.CylinderGeometry(o.r, o.r, o.sz, 32), new THREE.MeshStandardMaterial({ color: isRace ? '#6a3d86' : '#3d4a3d', roughness: 0.7 }));
     if (o.type !== 'box') m.rotation.x = Math.PI / 2; else m.rotation.z = o.yaw || 0; m.position.set(o.x, o.y, o.sz / 2); m.castShadow = m.receiveShadow = true; envGroup.add(m); }
   for (const f of env.food) { const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y, 0.002); m.userData.food = f; envGroup.add(m); }
