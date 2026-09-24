@@ -205,7 +205,7 @@ function paintRaceWall(wx, ww, wh, logo) {
   for (let k = 0; k < 12; k++) { wx.fillStyle = pastels[k % pastels.length]; wx.fillRect(k * ww / 12, 0, ww / 12 + 1, wh); }
   wx.globalAlpha = 1;
   if (!logo) return;
-  const n = 10, slot = ww / n;
+  const n = 5, slot = ww / n;
   const s = Math.min(1, slot / logo.width, wh / logo.height);
   wx.imageSmoothingEnabled = s < 1;
   const bandW = logo.width * s, bandH = logo.height * s;
