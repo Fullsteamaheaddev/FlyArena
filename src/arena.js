@@ -205,17 +205,24 @@ function paintRaceWall(wx, ww, wh, logo) {
   for (let k = 0; k < 12; k++) { wx.fillStyle = pastels[k % pastels.length]; wx.fillRect(k * ww / 12, 0, ww / 12 + 1, wh); }
   wx.globalAlpha = 1;
   if (!logo) return;
-  const n = 5, slot = ww / n;
-  const s = Math.min(1, slot / logo.width, wh / logo.height);
+  // Visible vinegar trails are at 60°/180°/300°. Decals sit between them (0°/120°/240°) — maze-lane
+  // wall panels, 120° apart. Cylinder UV: world atan2(y,x)=0 (+X) is u=0.25 after rotation.x = π/2.
+  const angles = [0, 2 * Math.PI / 3, 4 * Math.PI / 3];
+  const s = Math.min(1, (ww / 5.5) / logo.width, (wh * 0.86) / logo.height);
   wx.imageSmoothingEnabled = s < 1;
-  const bandW = logo.width * s, bandH = logo.height * s;
-  for (let i = 0; i < n; i++) {
-    const cx = i * slot + slot / 2, cy = wh / 2;
+  const bandW = logo.width * s, bandH = logo.height * s, cy = wh / 2;
+  const stamp = cx => {
     wx.save();
     wx.translate(cx, cy);
     wx.scale(-1, 1);
     wx.drawImage(logo, -bandW / 2, -bandH / 2, bandW, bandH);
     wx.restore();
+  };
+  for (const a of angles) {
+    const cx = (((a / (2 * Math.PI)) + 0.25 + 1) % 1) * ww;
+    stamp(cx);
+    if (cx - bandW / 2 < 0) stamp(cx + ww);
+    if (cx + bandW / 2 > ww) stamp(cx - ww);
   }
 }
 function buildScene(data) {
