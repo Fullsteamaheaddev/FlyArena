@@ -24,8 +24,8 @@ export const READOUT = { takeoffThreshold: 70, takeoffRatio: 3, takeoffTauSlow: 
 const LEGS = ['T1', 'T2', 'T3'], SIDES = ['left', 'right'];
 // jump program selected by scripts/jump_test2.py: lands upright from any walking phase, >=1.1 mm hop
 const JUMP = { pre: 30, push: 20, f2: 0.7, t2: 0.5, f3: 0.4, f1: 0.5, fly: 80 };   // scripts/jump_test3.py: 24/24 upright from fast turning gaits
-// righting reflex (VNC-level; scripts/righting_test.py): inverted > 150 ms -> left wing pushes on the substrate
-// while the legs flail in tripod antiphase; rights the fly from all tested inverted starts within ~0.1 s
+// righting reflex (VNC-level; scripts/righting_test.py): inverted or on-side > 150 ms -> left wing pushes
+// on the substrate while the legs flail in tripod antiphase. Stays on until thorax up >= 0.8.
 const RIGHT = { f: 6, aL: 1.0, aR: 0.3, tib: 0.5, abd: 0.5, wy: 1.0, wr: -1.0, wp: -1.0, wf: 4 };
 const PIVOT = { turn: 0.25, amp: 0.55, inner: -0.7 };   // turning on the spot
 const PHASE = { T1_left: 0, T2_right: 0, T3_left: 0, T1_right: Math.PI, T2_left: Math.PI, T3_right: Math.PI };
@@ -164,9 +164,10 @@ export class Motor {
     }
     // --- righting reflex ---
     const up = extra.up ?? 1;
-    this.invertedMs = up < -0.3 && !this.flying ? (this.invertedMs || 0) + dtMs : 0;
-    if (this.invertedMs > 150 || (this.righting && up < 0.8)) {
-      this.righting = true; const t = tMs / 1000, P = RIGHT;
+    this.invertedMs = up < 0.4 && !this.flying ? (this.invertedMs || 0) + dtMs : 0;
+    if (!this.flying && (this.invertedMs > 150 || (this.righting && up < 0.8))) {
+      this.righting = true; this.rightingMs = (this.rightingMs || 0) + dtMs;
+      const t = tMs / 1000, P = RIGHT;
       for (const leg of LEGS) for (const sd of SIDES) {
         const amp = sd === 'left' ? P.aL : P.aR, lph = 2 * Math.PI * P.f * t + (['T1_left', 'T2_right', 'T3_left'].includes(`${leg}_${sd}`) ? 0 : Math.PI);
         set(`coxa_${leg}_${sd}`, amp * Math.sin(lph) * R[`coxa_${leg}_${sd}`][1]);
@@ -178,7 +179,10 @@ export class Motor {
       const w = 0.5 + 0.5 * Math.sin(2 * Math.PI * P.wf * t);
       set('wing_yaw_left', P.wy * w); set('wing_roll_left', P.wr * w); set('wing_pitch_left', P.wp * w);
       this.cmd.righting = true;
-    } else if (this.righting) { this.righting = false; this.recoverUntil = tMs + 300; for (const ax of ['yaw', 'roll', 'pitch']) set(`wing_${ax}_left`, 0); }
+    } else if (this.righting) {
+      this.righting = false; this.rightingMs = 0; this.recoverUntil = tMs + 300;
+      for (const ax of ['yaw', 'roll', 'pitch']) set(`wing_${ax}_left`, 0);
+    } else this.rightingMs = 0;
     if (!this.righting && this.recoverUntil > tMs) for (const leg of LEGS) for (const sd of SIDES) {   // settle in a standing posture after righting
       for (const j of ['coxa', 'coxa_abduct', 'coxa_twist', 'femur', 'femur_twist', 'tibia', 'tarsus', 'tarsus2']) set(`${j}_${leg}_${sd}`, 0);
       set(`adhere_claw_${leg}_${sd}`, 0.8); }

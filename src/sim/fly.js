@@ -55,6 +55,7 @@ export class FlyAgent {
     this.others = [];   // [{x,y,yaw}] of other flies (set by the host)
     this.log = [];
     this.takeoffPending = false;
+    this.tNudge = -1e9;
   }
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
   state() {
@@ -187,10 +188,30 @@ export class FlyAgent {
       const act = this.motor.act, d = this.mjd;
       for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
     }
+    this.nudgeUprightIfNeeded();
     const dtSub = 1000 * M.opt.timestep;
     for (let s = 0; s < this.physPerMs; s++) { if (this.flight.active) this.flight.substep(dtSub); mj.mj_step(M, d); }
     this.t += 1;
     this.physiology(st);
+  }
+  /** if wing-flail righting is stuck, add a small world-frame roll toward +Z until thorax up is verified */
+  nudgeUprightIfNeeded() {
+    if (this.flight.active) return;
+    const d = this.mjd, th = this.bid.thorax, xm = th * 9;
+    const up = d.xmat[xm + 8];
+    if (up >= 0.8 || !this.motor.righting || (this.motor.rightingMs || 0) <= 200) return;
+    if (this.t - this.tNudge < 100) return;
+    const dx = d.xmat[xm + 2], dy = d.xmat[xm + 5];
+    const ax = dy, ay = -dx, len = Math.hypot(ax, ay);
+    if (len < 1e-4) return;
+    const w = 8 / len;
+    d.qvel[3] += ax * w;
+    d.qvel[4] += ay * w;
+    d.qvel[5] = 0;
+    d.qvel[2] += 4;
+    const act = this.motor.act;
+    for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
+    this.tNudge = this.t;
   }
   physiology(st) {
     const dt = 0.001;
