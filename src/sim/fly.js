@@ -59,16 +59,6 @@ export class FlyAgent {
     this.tTopNudge = -1e9;
   }
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
-  // TEST: remove after righting checks
-  debugPlace({ x, y, z, qw, qx, qy, qz }) {
-    if (this.flight.active) this.flight.end();
-    const d = this.mjd;
-    d.qpos[0] = x; d.qpos[1] = y; d.qpos[2] = z;
-    d.qpos[3] = qw; d.qpos[4] = qx; d.qpos[5] = qy; d.qpos[6] = qz;
-    for (let i = 0; i < d.qvel.length; i++) d.qvel[i] = 0;
-    this.mj.mj_forward(this.model, d);
-    this.motor.invertedMs = 0;
-  }
   state() {
     const d = this.mjd, xp = d.xpos, B = this.bid;
     const P = b => [xp[3 * b], xp[3 * b + 1], xp[3 * b + 2]];

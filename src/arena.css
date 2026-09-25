@@ -228,15 +228,6 @@ body.race #raceHud:not([hidden]) {
   position: fixed; top: 12px; left: 12px; width: 340px; z-index: 3;
   max-height: calc(100% - 24px);
 }
-/* TEST: remove after righting checks */
-#rightingTest {
-  position: fixed; left: 12px; bottom: 12px; z-index: 6;
-  width: 220px; padding: 10px 12px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  display: flex; flex-direction: column; gap: 6px;
-}
-#rightingTest b { font-size: 12px; }
-#rightingTest button { font-size: 12px; }
 body.race #scoreboard {
   position: static; width: auto; max-height: none; overflow: visible; padding-bottom: 8px;
 }
