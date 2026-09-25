@@ -1697,8 +1697,9 @@ function checkRaceFinish(f) {
     f.diedAt = performance.now();
     if (!raceWinner) { raceAudio?.playOof(); announceRace(`${f.name} died!`, f.color); }
   }
-  const food = env.food[0];
-  if (food && f?.last?.pos && f.last.alive !== false && Math.hypot(f.last.pos[0] - food.x, f.last.pos[1] - food.y) < food.r) {
+  const food = env.food[0], p = f?.last?.pos;
+  if (food && p && f.last.alive !== false && !f.last.flying && p[2] < 0.22
+      && Math.hypot(p[0] - food.x, p[1] - food.y) < food.r) {
     announceRaceWinner(f);
     return;
   }
