@@ -542,6 +542,55 @@ function raceHistoryHtml(rows) {
   return `<h2 class="hist">Last races</h2><ol class="race-hist">${rows.map(r =>
     `<li><i style="background:${r.color}"></i><b>${r.name}</b><span>${r.wall}</span></li>`).join('')}</ol>`;
 }
+// TEST: remove after righting checks
+function debugYawQuat(yaw, mode) {
+  const c = Math.cos(yaw / 2), s = Math.sin(yaw / 2);
+  if (mode === 'back') return { qw: 0, qx: c, qy: s, qz: 0 };
+  if (mode === 'side') {
+    const h = Math.SQRT1_2;
+    return { qw: c * h, qx: c * h, qy: s * h, qz: s * h };
+  }
+  return { qw: c, qx: 0, qy: 0, qz: s };
+}
+function mazeTopSpots(n) {
+  const obs = env.obstacles || [], spots = [];
+  if (!n || !obs.length) return spots;
+  const used = new Map();
+  for (let i = 0; i < n; i++) {
+    const k = Math.floor(i * obs.length / n) % obs.length;
+    const o = obs[k], share = used.get(k) || 0;
+    used.set(k, share + 1);
+    const yaw = o.yaw || 0, along = share * 0.35;
+    spots.push({ x: o.x + Math.cos(yaw) * along, y: o.y + Math.sin(yaw) * along, z: o.sz + 0.132, yaw });
+  }
+  return spots;
+}
+function sendDebugPlace(mode) {
+  const live = flies.filter(f => f.ready && f.worker);
+  const tops = mode === 'maze' ? mazeTopSpots(live.length) : null;
+  live.forEach((f, i) => {
+    let x, y, z, q;
+    if (mode === 'maze') {
+      const s = tops[i]; if (!s) return;
+      x = s.x; y = s.y; z = s.z; q = debugYawQuat(s.yaw);
+    } else {
+      x = f.last?.pos?.[0] || 0; y = f.last?.pos?.[1] || 0; z = 0.132;
+      q = debugYawQuat(f.last?.yaw || 0, mode);
+    }
+    f.worker.postMessage({ type: 'debugPlace', x, y, z, ...q });
+  });
+}
+function setupHostRightingTest() {
+  if ($('#rightingTest')) return;
+  const box = document.createElement('div');
+  box.id = 'rightingTest';
+  box.innerHTML = `<b>Righting test</b>
+    <button type="button" data-mode="back">On backs</button>
+    <button type="button" data-mode="side">On sides</button>
+    <button type="button" data-mode="maze">On maze tops</button>`;
+  document.body.appendChild(box);
+  box.querySelectorAll('button').forEach(b => b.onclick = () => sendDebugPlace(b.dataset.mode));
+}
 function setupRaceChrome() {
   document.body.classList.add('race');
   $('#panel').hidden = true;
@@ -563,6 +612,7 @@ function setupRaceChrome() {
     kickHostSim();
   });
   if (isHost) {
+    setupHostRightingTest();
     setInterval(() => {
       if (matchPhase === 'lobby') tickLobby();
       else if (matchPhase === 'live' && running) {

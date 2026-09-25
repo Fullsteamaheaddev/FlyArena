@@ -3,7 +3,7 @@
 //   physics state -> Senses (+ CompoundEye every 10 ms) -> sensory neuron drive -> brain (2 x 0.5 ms LIF steps)
 //   -> Motor (descending commands / motor neurons) -> actuators -> physics (10 x 0.1 ms MuJoCo steps)
 import { buildWorldXML } from './world.js';
-import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt, onObstacleTop } from './senses.js';
+import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt, onObstacleTop, obstacleDist } from './senses.js';
 import { Intrinsic } from './intrinsic.js';
 import { Neuromod } from './neuromod.js';
 import { Flight } from './flight.js';
@@ -55,9 +55,20 @@ export class FlyAgent {
     this.others = [];   // [{x,y,yaw}] of other flies (set by the host)
     this.log = [];
     this.takeoffPending = false;
-    this.tNudge = -1e9;
+    this.tDrop = -1e9;
+    this.tTopNudge = -1e9;
   }
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
+  // TEST: remove after righting checks
+  debugPlace({ x, y, z, qw, qx, qy, qz }) {
+    if (this.flight.active) this.flight.end();
+    const d = this.mjd;
+    d.qpos[0] = x; d.qpos[1] = y; d.qpos[2] = z;
+    d.qpos[3] = qw; d.qpos[4] = qx; d.qpos[5] = qy; d.qpos[6] = qz;
+    for (let i = 0; i < d.qvel.length; i++) d.qvel[i] = 0;
+    this.mj.mj_forward(this.model, d);
+    this.motor.invertedMs = 0;
+  }
   state() {
     const d = this.mjd, xp = d.xpos, B = this.bid;
     const P = b => [xp[3 * b], xp[3 * b + 1], xp[3 * b + 2]];
@@ -184,34 +195,68 @@ export class FlyAgent {
       if (this.flight.update(this.t, 1, { turn: this.cmd.turn, env: this.env, others: this.others, legTouch, rimHit: st.rimHit }) === 'landed') this.motor.recoverUntil = this.t + 300;
       this.cmd.flying = this.flight.active; this.cmd.flight = this.flight.label();
     }
-    if (!this.flight.active && st.pos[2] >= 0.22 && !onObstacleTop(st.pos, this.env)) {
+    if (!this.flight.active && st.pos[2] >= 0.22) {
       const act = this.motor.act, d = this.mjd;
       for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
     }
-    this.nudgeUprightIfNeeded();
+    this.dropUprightIfNeeded();
+    this.nudgeOffMazeTop();
     const dtSub = 1000 * M.opt.timestep;
     for (let s = 0; s < this.physPerMs; s++) { if (this.flight.active) this.flight.substep(dtSub); mj.mj_step(M, d); }
     this.t += 1;
     this.physiology(st);
   }
-  /** if wing-flail righting is stuck, add a small world-frame roll toward +Z until thorax up is verified */
-  nudgeUprightIfNeeded() {
-    if (this.flight.active) return;
-    const d = this.mjd, th = this.bid.thorax, xm = th * 9;
-    const up = d.xmat[xm + 8];
-    if (up >= 0.8 || !this.motor.righting || (this.motor.rightingMs || 0) <= 200) return;
-    if (this.t - this.tNudge < 100) return;
-    const dx = d.xmat[xm + 2], dy = d.xmat[xm + 5];
-    const ax = dy, ay = -dx, len = Math.hypot(ax, ay);
-    if (len < 1e-4) return;
-    const w = 8 / len;
-    d.qvel[3] += ax * w;
-    d.qvel[4] += ay * w;
-    d.qvel[5] = 0;
+  dropUprightIfNeeded() {
+    if (this.flight.active || this.motor.jumping) return;
+    if (this.t - this.tDrop < 400) return;
+    if ((this.motor.invertedMs || 0) <= 150) return;
+    const d = this.mjd, th = this.bid.thorax;
+    const fx = Rt9(d.xmat, th), yaw = Math.atan2(fx[1], fx[0]);
+    let x = d.qpos[0], y = d.qpos[1];
+    const p = [x, y, d.qpos[2]];
+    let near = null, nearD = Infinity;
+    for (const o of this.env.obstacles || []) {
+      const dist = obstacleDist(p, o);
+      if (dist < nearD) { nearD = dist; near = o; }
+    }
+    if (near && (nearD < 0.2 || onObstacleTop(p, this.env))) {
+      if (near.type === 'box' || near.sx != null) {
+        const yawW = near.yaw || 0, c = Math.cos(yawW), s = Math.sin(yawW);
+        const ly = -(x - near.x) * s + (y - near.y) * c;
+        const sign = ly >= 0 ? 1 : -1;
+        x += -s * sign; y += c * sign;
+      } else {
+        const dx = x - near.x, dy = y - near.y, len = Math.hypot(dx, dy) || 1;
+        x += dx / len; y += dy / len;
+      }
+    }
+    const hw = Math.cos(yaw / 2), hz = Math.sin(yaw / 2);
+    d.qpos[0] = x; d.qpos[1] = y; d.qpos[2] = 1.5;
+    d.qpos[3] = hw; d.qpos[4] = 0; d.qpos[5] = 0; d.qpos[6] = hz;
+    for (let i = 0; i < d.qvel.length; i++) d.qvel[i] = 0;
+    const act = this.motor.act;
+    for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
+    this.mj.mj_forward(this.model, d);
+    this.motor.recoverUntil = this.t + 300;
+    this.motor.invertedMs = 0;
+    this.tDrop = this.t;
+  }
+  onMazeTop() {
+    const d = this.mjd, p = [d.qpos[0], d.qpos[1], d.qpos[2]];
+    return (this.env.obstacles || []).some(o =>
+      obstacleDist(p, o) < 0.08 && p[2] > o.sz - 0.08 && p[2] < o.sz + 0.4);
+  }
+  nudgeOffMazeTop() {
+    if (this.flight.active || this.motor.jumping) return;
+    if (!this.onMazeTop()) return;
+    if (this.t - this.tTopNudge < 80) return;
+    const d = this.mjd, a = Math.random() * Math.PI * 2;
+    d.qvel[0] += 10 * Math.cos(a);
+    d.qvel[1] += 10 * Math.sin(a);
     d.qvel[2] += 4;
     const act = this.motor.act;
     for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
-    this.tNudge = this.t;
+    this.tTopNudge = this.t;
   }
   physiology(st) {
     const dt = 0.001;

@@ -43,6 +43,7 @@ onmessage = async (e) => {
   else if (m.type === 'mode') fly.motor.mode = m.mode;
   else if (m.type === 'stimulate') fly.brain.setDrive(m.indices, m.rate);
   else if (m.type === 'takeoff') { fly.requestTakeoff(); postPose(); }
+  else if (m.type === 'debugPlace') { fly.debugPlace(m); postPose(); } // TEST: remove after righting checks
   else if (m.type === 'activity') {
     const eyes = fly.fv ? fly.fv.lumEye.map(e => e.slice(0)) : null;
     const groups = meter.read(fly.brain.spikeCount, fly.t);
