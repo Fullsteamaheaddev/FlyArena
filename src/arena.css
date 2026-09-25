@@ -55,6 +55,8 @@ a { color: var(--acc); }
 #scoreboard .race-clock[hidden] { display: none; }
 #scoreboard .race-clock b { font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 650; }
 #scoreboard .race-clock span { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+#scoreboard .race-clock span[hidden] { display: none; }
+#scoreboard .race-clock span.slow { color: #ff6b6b; }
 #scoreboard section { padding: 10px 16px; border-bottom: 1px solid var(--line); }
 #scoreboard section:last-child { border-bottom: 0; }
 #scoreboard h2 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; }

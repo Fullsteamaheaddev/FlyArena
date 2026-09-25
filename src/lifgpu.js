@@ -157,6 +157,10 @@ export class LIFGpu {
     if (!device) {
       const adapter = await navigator.gpu.requestAdapter();
       if (!adapter) throw new Error('no WebGPU adapter');
+      const info = adapter.info || {};
+      const soft = adapter.isFallbackAdapter || info.isFallbackAdapter
+        || /swiftshader|llvmpipe|basic render|warp/i.test(`${info.vendor || ''} ${info.architecture || ''} ${info.description || ''} ${info.device || ''}`);
+      if (soft) throw new Error(`software WebGPU adapter (${info.description || info.architecture || info.vendor || 'fallback'})`);   // slower than the WASM kernel
       device = await adapter.requestDevice();
     }
     const b = new LIFGpu();

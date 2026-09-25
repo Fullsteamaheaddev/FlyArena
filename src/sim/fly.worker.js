@@ -25,7 +25,7 @@ onmessage = async (e) => {
       pos: m.pos, yaw: m.yaw, nProxies: m.nProxies, mode: m.mode, brainOpts: m.brainOpts, vision: m.vision, neuromod: { calib: m.neuromod }, sex: m.sex, seed });
     meter = new GroupMeter(buildGroups(m.bodymap, data.meta.types, data.side), g.N);
     proxyIds = Array.from({ length:m.nProxies }, (_,k) => fly.model.body_mocapid[fly.model.body(`proxy${k}`).id]);
-    postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj) });
+    postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj), backend: fly.brain.device ? 'WebGPU' : 'WASM' });
     postPose();
     if (running) { lastReal = performance.now(); loop(loopEpoch); }
   } else if (m.type === 'run') {

@@ -474,7 +474,7 @@ function removeFly(f) {
 }
 function onWorker(f, m) {
   if (m.type === 'ready') {
-    f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null);
+    f.ready = true; f.backend = m.backend; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null);
     if (m.wingPoses) { f.wingPoses = m.wingPoses; watchWingPoses = m.wingPoses; }
     buildWingBlur(f, m.wingPoses); f.onReady?.();
   }
@@ -754,9 +754,27 @@ function setupMatchLink() {
     },
   });
 }
+let simRateRef = null, simRate = null;
+function sampleSimRate(now) {
+  const f = flies.find(x => x.last);
+  if (matchPhase !== 'live' || !running || !f) { simRateRef = null; simRate = null; paintSimRate(null); return; }
+  if (!simRateRef) { simRateRef = { now, t: f.last.t }; return; }
+  if (now - simRateRef.now < 1000) return;
+  simRate = { rate: (f.last.t - simRateRef.t) / (now - simRateRef.now), target: speed, backend: f.backend || '' };
+  simRateRef = { now, t: f.last.t };
+  paintSimRate(simRate);
+}
+function paintSimRate(r) {
+  const el = $('#simRate'); if (!el) return;
+  el.hidden = !r;
+  if (!r) return;
+  el.textContent = `sim ${r.rate.toFixed(2)}× of ${r.target}×${r.backend ? ' · ' + r.backend : ''}`;
+  el.classList.toggle('slow', r.rate < 0.5 * r.target);
+}
 function publishMatchState(force = false) {
   if (!isHost || !matchLink) return;
   const now = performance.now();
+  sampleSimRate(now);
   if (!force && now - lastMatchSend < 1000 / 30) return;
   lastMatchSend = now;
   const wall = raceStartWall != null ? formatWall(now - raceStartWall) : '0 s';
@@ -772,7 +790,7 @@ function publishMatchState(force = false) {
   }));
   matchLink.sendState(buildMatchState({
     matchId, phase: matchPhase, flies,
-    clock: { wall, fly: flySecs(), elapsed: raceStartWall != null ? now - raceStartWall : null },
+    clock: { wall, fly: flySecs(), elapsed: raceStartWall != null ? now - raceStartWall : null, sim: simRate },
     winner: raceWinner, why: raceWinnerWhy,
     bodyNames: flies.find(f => f.bodyNames)?.bodyNames || null,
     wingPoses: (() => {
@@ -947,6 +965,7 @@ function applyWatchState(st) {
   betClosesAt = st.betClosesAt ?? null;
   if (st.pools) poolSnap = st.pools;
   if (st.clock) {
+    paintSimRate(st.phase === 'live' ? st.clock.sim : null);
     if (st.phase === 'live') {
       const elapsed = st.clock.elapsed ?? parseWallMs(st.clock.wall);
       if (elapsed != null && raceStartWall == null) raceStartWall = performance.now() - elapsed;
