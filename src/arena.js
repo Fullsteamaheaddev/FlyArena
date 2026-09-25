@@ -155,7 +155,7 @@ const viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4(), f
 const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0, brainUploads: 0, brainDraws: 0 };
 let brainRenderer, brainScene, brainCam, brainPts, brainAct;
 let raceFloorLogo = null, raceFloorLogoWait = null, raceFloorPaint = 0;
-let raceWallLogo = null, raceWallLogoWait = null, raceWallPaint = 0;
+let raceWallLogo = null, raceWallLogoWait = null;
 function raceFloorLogoImg() {
   if (raceFloorLogo) return Promise.resolve(raceFloorLogo);
   if (!raceFloorLogoWait) {
@@ -180,22 +180,36 @@ function raceWallLogoImg() {
   }
   return raceWallLogoWait;
 }
-function paintRaceFloor(fx, fs, logo) {
+function paintRaceFloor(fx, fs, logo, ticker) {
   const mid = fs / 2;
   const rg = fx.createRadialGradient(mid, mid, 0, mid, mid, mid);
   rg.addColorStop(0, '#8a2fb8'); rg.addColorStop(0.35, '#6b2494'); rg.addColorStop(0.7, '#4a1870'); rg.addColorStop(1, '#2c0d48');
   fx.fillStyle = rg; fx.fillRect(0, 0, fs, fs);
   fx.strokeStyle = 'rgba(210,150,255,0.28)'; fx.lineWidth = fs / 51;
   for (const r of [0.22, 0.42, 0.62, 0.82]) { fx.beginPath(); fx.arc(mid, mid, r * mid, 0, Math.PI * 2); fx.stroke(); }
-  if (!logo) return;
-  const dw = fs * 0.53, dh = dw * (logo.height / logo.width);
-  fx.save();
-  fx.translate(mid, mid);
-  fx.rotate(-Math.PI / 2);
-  fx.drawImage(logo, -dw / 2, -dh / 2, dw, dh);
-  fx.restore();
+  if (logo) {
+    const dw = fs * 0.53, dh = dw * (logo.height / logo.width);
+    fx.save();
+    fx.translate(mid, mid);
+    fx.rotate(-Math.PI / 2);
+    fx.drawImage(logo, -dw / 2, -dh / 2, dw, dh);
+    fx.restore();
+  }
+  if (!ticker) return;
+  // Visible vinegar trails at 60°/180°/300°. Decals sit between them on the outer apron (0°/120°/240°).
+  const angles = [0, 2 * Math.PI / 3, 4 * Math.PI / 3];
+  const dw = fs * 0.2, dh = dw * (ticker.height / ticker.width), rr = 0.82 * mid;
+  fx.imageSmoothingEnabled = true;
+  fx.imageSmoothingQuality = 'high';
+  for (const a of angles) {
+    fx.save();
+    fx.translate(mid + rr * Math.cos(a), mid - rr * Math.sin(a));
+    fx.rotate(-a);
+    fx.drawImage(ticker, -dw / 2, -dh / 2, dw, dh);
+    fx.restore();
+  }
 }
-function paintRaceWall(wx, ww, wh, logo) {
+function paintRaceWall(wx, ww, wh) {
   wx.imageSmoothingEnabled = true;
   wx.imageSmoothingQuality = 'high';
   const vg = wx.createLinearGradient(0, 0, 0, wh);
@@ -204,26 +218,6 @@ function paintRaceWall(wx, ww, wh, logo) {
   const pastels = ['#f0c8ff', '#d080e8', '#a050c8']; wx.globalAlpha = 0.32;
   for (let k = 0; k < 12; k++) { wx.fillStyle = pastels[k % pastels.length]; wx.fillRect(k * ww / 12, 0, ww / 12 + 1, wh); }
   wx.globalAlpha = 1;
-  if (!logo) return;
-  // Visible vinegar trails are at 60°/180°/300°. Decals sit between them (0°/120°/240°) — maze-lane
-  // wall panels, 120° apart. Cylinder UV: world atan2(y,x)=0 (+X) is u=0.25 after rotation.x = π/2.
-  const angles = [0, 2 * Math.PI / 3, 4 * Math.PI / 3];
-  const s = Math.min(1, (ww / 5.5) / logo.width, (wh * 0.86) / logo.height);
-  wx.imageSmoothingEnabled = s < 1;
-  const bandW = logo.width * s, bandH = logo.height * s, cy = wh / 2;
-  const stamp = cx => {
-    wx.save();
-    wx.translate(cx, cy);
-    wx.scale(-1, 1);
-    wx.drawImage(logo, -bandW / 2, -bandH / 2, bandW, bandH);
-    wx.restore();
-  };
-  for (const a of angles) {
-    const cx = (((a / (2 * Math.PI)) + 0.25 + 1) % 1) * ww;
-    stamp(cx);
-    if (cx - bandW / 2 < 0) stamp(cx + ww);
-    if (cx + bandW / 2 > ww) stamp(cx - ww);
-  }
 }
 function buildScene(data) {
   renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
@@ -314,27 +308,23 @@ function rebuildEnv() {
   if (isRace) {
     const fs = 1024, fc = document.createElement('canvas'); fc.width = fc.height = fs; const fx = fc.getContext('2d');
     const paintId = ++raceFloorPaint;
-    paintRaceFloor(fx, fs, raceFloorLogo);
+    paintRaceFloor(fx, fs, raceFloorLogo, raceWallLogo);
     const ft = new THREE.CanvasTexture(fc); ft.colorSpace = THREE.SRGBColorSpace; ft.generateMipmaps = false; ft.minFilter = THREE.LinearFilter; ft.magFilter = THREE.LinearFilter; ft.anisotropy = aniso;
     floorMat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.82 });
-    if (!raceFloorLogo) raceFloorLogoImg().then(img => {
-      if (!img || paintId !== raceFloorPaint || floorMesh?.material?.map !== ft) return;
-      paintRaceFloor(fx, fs, img);
+    const refreshFloor = () => {
+      if (paintId !== raceFloorPaint || floorMesh?.material?.map !== ft) return;
+      paintRaceFloor(fx, fs, raceFloorLogo, raceWallLogo);
       ft.needsUpdate = true;
-    });
+    };
+    if (!raceFloorLogo) raceFloorLogoImg().then(img => { if (img) refreshFloor(); });
+    if (!raceWallLogo) raceWallLogoImg().then(img => { if (img) refreshFloor(); });
     const maxTex = renderer.capabilities.maxTextureSize;
     const ww = Math.min(maxTex, 16384), wh = Math.min(maxTex, 1024);
     const wc = document.createElement('canvas'); wc.width = ww; wc.height = wh; const wx = wc.getContext('2d');
-    const wallPaintId = ++raceWallPaint;
-    paintRaceWall(wx, ww, wh, raceWallLogo);
+    paintRaceWall(wx, ww, wh);
     const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
     wt.generateMipmaps = false; wt.minFilter = THREE.LinearFilter; wt.magFilter = THREE.LinearFilter; wt.anisotropy = aniso;
     wallMat = new THREE.MeshStandardMaterial({ map: wt, side: THREE.BackSide, roughness: 0.62 });
-    if (!raceWallLogo) raceWallLogoImg().then(img => {
-      if (!img || wallPaintId !== raceWallPaint || wallMesh?.material?.map !== wt) return;
-      paintRaceWall(wx, ww, wh, img);
-      wt.needsUpdate = true;
-    });
   } else {
     // floor: same 0.4 cm checker the flies' eyes see
     const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d');
