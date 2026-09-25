@@ -198,13 +198,14 @@ function paintRaceFloor(fx, fs, logo, ticker) {
   if (!ticker) return;
   // Visible vinegar trails at 60°/180°/300°. Decals sit between them on the outer apron (0°/120°/240°).
   const angles = [0, 2 * Math.PI / 3, 4 * Math.PI / 3];
-  const dw = fs * 0.2, dh = dw * (ticker.height / ticker.width), rr = 0.82 * mid;
+  const dw = fs * 0.18, dh = dw * (ticker.height / ticker.width), rr = 0.82 * mid;
   fx.imageSmoothingEnabled = true;
   fx.imageSmoothingQuality = 'high';
   for (const a of angles) {
     fx.save();
     fx.translate(mid + rr * Math.cos(a), mid - rr * Math.sin(a));
-    fx.rotate(-a);
+    // Tangent to the rim, letter tops outward (readable in a top-down view).
+    fx.rotate(-a + Math.PI / 2);
     fx.drawImage(ticker, -dw / 2, -dh / 2, dw, dh);
     fx.restore();
   }
