@@ -220,6 +220,12 @@ export function obstacleDist(p, o) {
   return Math.hypot(p[0] - o.x, p[1] - o.y) - o.r;
 }
 
+/** thorax well on an obstacle top (inset so a rim/half-off pose is not supported). */
+export function onObstacleTop(p, env, inset = 0.04) {
+  return (env.obstacles || []).some(o =>
+    obstacleDist(p, o) < -inset && p[2] > o.sz - 0.05 && p[2] < o.sz + 0.28);
+}
+
 /** horizontal clearance (cm) from point p to the nearest wall, obstacle or other fly; negative = inside.
  *  With a height z, obstacles and flies that are not at that height are ignored. */
 export function clearance(p, env, others = [], z = null) {

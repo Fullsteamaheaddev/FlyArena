@@ -3,7 +3,7 @@
 //   physics state -> Senses (+ CompoundEye every 10 ms) -> sensory neuron drive -> brain (2 x 0.5 ms LIF steps)
 //   -> Motor (descending commands / motor neurons) -> actuators -> physics (10 x 0.1 ms MuJoCo steps)
 import { buildWorldXML } from './world.js';
-import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt } from './senses.js';
+import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt, onObstacleTop } from './senses.js';
 import { Intrinsic } from './intrinsic.js';
 import { Neuromod } from './neuromod.js';
 import { Flight } from './flight.js';
@@ -182,6 +182,10 @@ export class FlyAgent {
       const legTouch = Object.values(st.touch).some(x => x > 0);
       if (this.flight.update(this.t, 1, { turn: this.cmd.turn, env: this.env, others: this.others, legTouch, rimHit: st.rimHit }) === 'landed') this.motor.recoverUntil = this.t + 300;
       this.cmd.flying = this.flight.active; this.cmd.flight = this.flight.label();
+    }
+    if (!this.flight.active && st.pos[2] >= 0.22 && !onObstacleTop(st.pos, this.env)) {
+      const act = this.motor.act, d = this.mjd;
+      for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
     }
     const dtSub = 1000 * M.opt.timestep;
     for (let s = 0; s < this.physPerMs; s++) { if (this.flight.active) this.flight.substep(dtSub); mj.mj_step(M, d); }
