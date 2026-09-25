@@ -5,7 +5,7 @@ import { attachBrain, attachEyes } from '../brainsetup.js';
 import { buildGroups, GroupMeter } from './groups.js';
 
 let fly = null, meter = null, running = false, speed = 1, others = [], env = null, lastReal = 0, simAhead = 0, timer = null, loopEpoch = 0;
-let burstSteps = 8, burstMs = 8;
+let burstSteps = 8, burstMs = 8, fenceEvery = 1, fenceN = 0;
 let proxyIds = [], lastPose = -Infinity, loopActive = false;
 const POSE_EVERY = 1000 / 30; // wall ms: twelve workers must not flood the render thread
 
@@ -18,6 +18,7 @@ onmessage = async (e) => {
     env = m.env;
     if (m.burstSteps) burstSteps = m.burstSteps;
     if (m.burstMs) burstMs = m.burstMs;
+    if (m.fenceEvery) fenceEvery = m.fenceEvery;
     const seed = m.seed || 0;
     const brain = await attachBrain(m.wasmModule, m.brainMem, m.slot, data, 101 + m.id + seed);
     const flyvis = m.brainMem.fv ? { eyes: attachEyes(brain.instance, m.brainMem, m.slot), map: m.flyvisMap, gain: 150 } : null;
@@ -74,7 +75,7 @@ async function loop(epoch = loopEpoch) {
   // and leaves the motor reading increasingly old brain state when many flies share the GPU.
   while (running && epoch === loopEpoch && simAhead >= 1 && steps < burstSteps && performance.now() - t0 < burstMs) { fly.step(); simAhead -= 1; steps++; }
   fly.brain.flush?.();
-  if (steps && fly.brain.device) await fly.brain.device.queue.onSubmittedWorkDone();
+  if (steps && fly.brain.device && (++fenceN % Math.max(1, fenceEvery) === 0)) await fly.brain.device.queue.onSubmittedWorkDone();
   if (epoch !== loopEpoch) { loopActive = false; return; }
   if (simAhead > 50) simAhead = 50;   // can't keep up: run as fast as possible
   if (steps && (!running || performance.now() - lastPose >= POSE_EVERY)) postPose();

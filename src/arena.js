@@ -456,7 +456,7 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
   worker.onmessage = e => onWorker(f, e.data);
   worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: MAX_FLIES - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: true, sex,
     brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap,
-    ...(isRace ? { burstSteps: 16, burstMs: 16, seed: Math.floor(Math.random() * 1e9) } : {}) });
+    ...(isRace ? { burstSteps: 64, burstMs: 64, fenceEvery: 4, seed: Math.floor(Math.random() * 1e9) } : {}) });
   await new Promise(res => { f.onReady = res; });
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });

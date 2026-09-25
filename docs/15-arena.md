@@ -11,7 +11,7 @@ Files: `arena.html`, `src/arena.js`, `src/sim/fly.worker.js`, `src/sim/fly.js`.
   unused proxies are parked outside the arena. The old seven-proxy allocation generated invalid-body
   lookups once the population exceeded eight flies.
 - WebGPU brains use bounded bursts (at most eight simulated milliseconds / eight CPU milliseconds;
-  Fruit Fly uses 16 / 16), flush, and await their submitted GPU work before scheduling more. This
+  Fruit Fly uses 64 / 64), flush, and await their submitted GPU work every four bursts. This
   prevents an accumulating compute queue from starving WebGL or making motor readback increasingly
   stale. WASM uses the same CPU burst limit without a GPU fence. Neither backend skips neural/physics
   steps.
