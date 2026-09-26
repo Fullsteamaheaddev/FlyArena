@@ -135,13 +135,10 @@ async function spawnPresetFlies() {
       raceSpotRot++;
       const ids = [...Array(n).keys()];
       for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
-      const planned = [];
       for (let i = 0; i < n; i++) {
         const s = spots[(i + rot) % n], k = ids[i];
-        planned.push({ pos: s.pos, yaw: s.yaw, sex: s.sex, ident: { name: RACE_NAMES[k], color: FLY_COLORS[k] } });
+        await addFly(s.pos, s.yaw, s.sex, { name: RACE_NAMES[k], color: FLY_COLORS[k] });
       }
-      if (brainParams.gpu !== false) await addRaceGpuPack(planned);
-      else for (const p of planned) await addFly(p.pos, p.yaw, p.sex, p.ident);
     } else for (const s of spots) await addFly(s.pos, s.yaw, s.sex);
   } else { await addFly([st0[0], st0[1]], st0[2]);
     for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
@@ -429,82 +426,37 @@ function updateWingBlur(f, s) {
 
 // ---------------- flies ----------------
 let nextId = 0;
-function flyWorkerPayload() {
-  return {
-    graph: shared, meta, bodymap, flyXML, gait, env, nProxies: MAX_FLIES - 1, mode: $('#mode').value,
-    brainOpts: brainParams, neuromod: neuromodCalib, vision: true,
-    brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv },
-    wasmModule, flyvisMap,
-    ...(isRace ? { burstSteps: 64, burstMs: 64, fenceEvery: 4 } : {}),
-  };
-}
-function eachWorker(msg) {
-  const seen = new Set();
-  for (const f of flies) {
-    if (!f.worker || seen.has(f.worker)) continue;
-    seen.add(f.worker);
-    f.worker.postMessage(msg);
-  }
-}
-function postFly(f, msg) { if (f?.worker) f.worker.postMessage({ ...msg, id: f.id }); }
-function routeWorker(worker) {
-  worker.onmessage = e => {
-    const m = e.data;
-    const target = flies.find(x => x.id === m.id);
-    if (target) onWorker(target, m);
-  };
-}
-function attachRaceLabel(f, pos) {
-  const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color;
-  el.innerHTML = `<span class="fly-label-chip">${f.name}</span><div class="fly-label-info"></div>`;
-  const selectFly = () => {
-    selected = f.id;
-    renderFlyList();
-    if (f.ready && f.worker && shouldPollBrainActivity()) postFly(f, { type: 'activity' });
-  };
-  el.addEventListener('pointerdown', e => { e.stopPropagation(); startRaceFollow(f.id); });
-  const setOpen = open => {
-    const info = el.querySelector('.fly-label-info');
-    info.classList.toggle('open', open);
-    if (open) { paintFlyLabel(f); selectFly(); }
-  };
-  el.addEventListener('pointerenter', () => setOpen(true));
-  el.addEventListener('pointerleave', () => setOpen(false));
-  el.addEventListener('focus', () => setOpen(true));
-  el.addEventListener('blur', () => setOpen(false));
-  f.label = new CSS2DObject(el); f.label.position.set(pos[0], pos[1], 1.1); scene.add(f.label);
-}
-function makeFlyRecord(pos, yaw, sex, ident) {
-  const cap = PRESET.maxFlies || MAX_FLIES;
-  if (flies.length >= cap) { alert(`At most ${cap} flies`); return null; }
-  const id = nextId++; const color = ident?.color || FLY_COLORS[id % FLY_COLORS.length];
-  const f = { id, worker: null, color, sex, name: ident?.name || (isRace ? RACE_NAMES[id] || `fly ${id}` : `fly ${id}`), ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
-  scene.add(f.group); flies.push(f); batches.add(f);
-  if (isRace) attachRaceLabel(f, pos);
-  return f;
-}
-async function addRaceGpuPack(planned) {
-  const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
-  const records = [];
-  for (const p of planned) {
-    const f = makeFlyRecord(p.pos, p.yaw, p.sex, p.ident); if (!f) break;
-    f.worker = worker;
-    records.push({ id: f.id, pos: p.pos, yaw: p.yaw, sex: p.sex, slot: f.id, seed: Math.floor(Math.random() * 1e9) });
-  }
-  const waiting = records.map(r => { const f = flies.find(x => x.id === r.id); return new Promise(res => { f.onReady = res; }); });
-  routeWorker(worker);
-  worker.postMessage({ type: 'init', flies: records, ...flyWorkerPayload() });
-  await Promise.all(waiting);
-  if (running) worker.postMessage({ type: 'run' });
-  worker.postMessage({ type: 'speed', speed });
-  renderFlyList();
-}
 async function addFly(pos, yaw, sex = 'm', ident = null) {
-  const f = makeFlyRecord(pos, yaw, sex, ident); if (!f) return;
+  const cap = PRESET.maxFlies || MAX_FLIES;
+  if (flies.length >= cap) { alert(`At most ${cap} flies`); return; }
+  const id = nextId++; const color = ident?.color || FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
-  f.worker = worker;
-  routeWorker(worker);
-  worker.postMessage({ type: 'init', id: f.id, pos, yaw, sex, slot: f.id, seed: isRace ? Math.floor(Math.random() * 1e9) : 0, ...flyWorkerPayload() });
+  const f = { id, worker, color, sex, name: ident?.name || (isRace ? RACE_NAMES[id] || `fly ${id}` : `fly ${id}`), ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
+  scene.add(f.group); flies.push(f); batches.add(f);
+  if (isRace) {
+    const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color;
+    el.innerHTML = `<span class="fly-label-chip">${f.name}</span><div class="fly-label-info"></div>`;
+    const selectFly = () => {
+      selected = f.id;
+      renderFlyList();
+      if (f.ready && f.worker && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
+    };
+    el.addEventListener('pointerdown', e => { e.stopPropagation(); startRaceFollow(f.id); });
+    const setOpen = open => {
+      const info = el.querySelector('.fly-label-info');
+      info.classList.toggle('open', open);
+      if (open) { paintFlyLabel(f); selectFly(); }
+    };
+    el.addEventListener('pointerenter', () => setOpen(true));
+    el.addEventListener('pointerleave', () => setOpen(false));
+    el.addEventListener('focus', () => setOpen(true));
+    el.addEventListener('blur', () => setOpen(false));
+    f.label = new CSS2DObject(el); f.label.position.set(pos[0], pos[1], 1.1); scene.add(f.label);
+  }
+  worker.onmessage = e => onWorker(f, e.data);
+  worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: MAX_FLIES - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: true, sex,
+    brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap,
+    ...(isRace ? { burstSteps: 64, burstMs: 64, fenceEvery: 4, seed: Math.floor(Math.random() * 1e9) } : {}) });
   await new Promise(res => { f.onReady = res; });
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });
@@ -512,8 +464,7 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
   return f;
 }
 function removeFly(f) {
-  const shared = f.worker && flies.some(o => o !== f && o.worker === f.worker);
-  if (!shared) f.worker?.terminate();
+  f.worker?.terminate();
   batches.remove(f);
   scene.remove(f.group);
   scene.remove(f.ring);
@@ -547,34 +498,34 @@ let foodDirty = false, lastOthers = 0;
 function broadcastOthers() {
   const now = performance.now(); if (now - lastOthers < 1000 / 30) return; lastOthers = now;
   const poses = flies.filter(o => o.last && o.last.alive !== false).map(o => ({ id:o.id, x:o.last.pos[0], y:o.last.pos[1], z:o.last.pos[2], yaw:o.last.yaw, sex:o.sex }));
-  for (const f of flies) if (f.ready) postFly(f, { type: 'others', others: poses.filter(o => o.id !== f.id) });
+  for (const f of flies) if (f.ready) f.worker.postMessage({ type:'others', others:poses.filter(o => o.id !== f.id) });
 }
-function syncEnv() { eachWorker({ type: 'env', env }); }
+function syncEnv() { for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'env', env }); }
 
 // ---------------- UI ----------------
 function buildUI() {
-  $('#play').onclick = () => { running = !running; eachWorker({ type: running ? 'run' : 'pause' }); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
+  $('#play').onclick = () => { running = !running; for (const f of flies) f.worker.postMessage({ type: running ? 'run' : 'pause' }); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
   $('#addFly').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2); };
   $('#addFemale').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2, 'f'); };
-  $('#speed').oninput = e => { speed = +e.target.value; $('#speedv').textContent = speed.toFixed(2) + '×'; eachWorker({ type: 'speed', speed }); };
+  $('#speed').oninput = e => { speed = +e.target.value; $('#speedv').textContent = speed.toFixed(2) + '×'; for (const f of flies) f.worker.postMessage({ type: 'speed', speed }); };
   $('#preset').innerHTML = Object.entries(PRESETS).map(([k, p]) => `<option value="${k}" ${k === presetKey ? 'selected' : ''}>${p.label}</option>`).join('');
   $('#preset').onchange = e => { location.search = '?env=' + e.target.value; };
-  $('#mode').onchange = e => { for (const f of flies) postFly(f, { type: 'mode', mode: e.target.value }); };
+  $('#mode').onchange = e => { for (const f of flies) f.worker.postMessage({ type: 'mode', mode: e.target.value }); };
   document.querySelectorAll('.tools button').forEach(b => b.onclick = () => { tool = b.dataset.tool; document.querySelectorAll('.tools button').forEach(x => x.classList.toggle('on', x === b)); });
   setupFolds();
   setInterval(() => {
     if (document.hidden && !isHost) return;
     if (isHost && isRace) {
-      for (const f of flies) if (f.ready && f.worker) postFly(f, { type: 'activity', eyesOnly: f.id !== selected });
+      for (const f of flies) if (f.ready && f.worker) f.worker.postMessage({ type: 'activity', eyesOnly: f.id !== selected });
       return;
     }
     const f = flies.find(x => x.id === selected);
-    if (f?.ready && f.worker && shouldPollBrainActivity()) postFly(f, { type: 'activity' });
+    if (f?.ready && f.worker && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
   }, 120);
   $('#wind').oninput = e => { const v = +e.target.value; $('#windv').textContent = v; env.wind = [v, 0]; syncEnv(); };
   $('#light').oninput = e => { env.light.sky = +e.target.value; scene.background = new THREE.Color().setHSL(0.6, 0.3, 0.02 + 0.05 * env.light.sky); syncEnv(); };
   $('#threat').onclick = () => launchThreat();
-  $('#takeoff').onclick = () => postFly(flies.find(x => x.id === selected), { type: 'takeoff' });
+  $('#takeoff').onclick = () => flies.find(x => x.id === selected)?.worker.postMessage({ type: 'takeoff' });
   setInterval(() => { if (foodDirty) { foodDirty = false; syncEnv(); envGroup.children.forEach(m => { if (m.userData.food) m.material.opacity = 0.35 + 0.65 * Math.min(1, m.userData.food.amount / 5); }); } renderFlyList(); }, 500);
 }
 function loadRaceHistory() {
@@ -617,7 +568,7 @@ function setupRaceChrome() {
       else if (matchPhase === 'live' && running) {
         const now = performance.now();
         if (flies.some(f => f.ready && (!f.recvAt || now - f.recvAt > 1500))) {
-          eachWorker({ type: 'run' });
+          for (const f of flies) f.worker?.postMessage({ type: 'run' });
         }
         publishMatchState(true);
       }
@@ -787,7 +738,7 @@ function applyPoolStatus(p) {
 function kickHostSim() {
   if (!isHost) return;
   if (matchPhase === 'live' && running) {
-    eachWorker({ type: 'run' });
+    for (const f of flies) f.worker?.postMessage({ type: 'run' });
     publishMatchState(true);
   }
   if (matchPhase === 'lobby' && betClosesAt && Date.now() >= betClosesAt) goLiveFromLobby();
@@ -1256,10 +1207,10 @@ function setRaceBrainFolded(folded, { user = false, instant = false } = {}) {
   if (!folded) requestAnimationFrame(() => requestAnimationFrame(syncBrainInset));
   if (folded) {
     const f = flies.find(x => x.id === selected);
-    if (f?.ready && f.worker) postFly(f, { type: 'activity' });
+    if (f?.ready && f.worker) f.worker.postMessage({ type: 'activity' });
   } else if (!instant) {
     const f = flies.find(x => x.id === selected);
-    if (f?.ready && f.worker && shouldPollBrainActivity()) postFly(f, { type: 'activity' });
+    if (f?.ready && f.worker && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
   }
 }
 function raceMobile() {
@@ -1724,7 +1675,7 @@ function startRace() {
   matchResetIn = null;
   clearInterval(lobbyTimer); lobbyTimer = null;
   raceAudio?.unlock().then(() => raceAudio?.playBed('race'));
-  eachWorker({ type: 'run' });
+  for (const f of flies) f.worker?.postMessage({ type: 'run' });
   announceRace('GO!');
   scheduleRaceBrainFold();
   publishMatchState(true);
@@ -1791,10 +1742,7 @@ async function resetRace() {
   const clock = $('#raceClock'); if (clock) clock.hidden = true;
   if (raceAnnounce) { raceAnnounce.element.querySelector('.race-announce-text')?.classList.remove('pop'); }
   setRaceBrainFolded(raceMobile(), { instant: true });
-  eachWorker({ type: 'pause' });
-  const workers = new Set(flies.map(f => f.worker).filter(Boolean));
-  for (const f of flies) { f.worker = null; removeFly(f); }
-  for (const w of workers) w.terminate();
+  for (const f of flies) { f.worker?.postMessage({ type: 'pause' }); removeFly(f); }
   flies.length = 0; nextId = 0; selected = 0;
   snapRaceOverview();
   if (env.food[0]) env.food[0].amount = 8;
@@ -1828,7 +1776,7 @@ function startRaceFollow(id) {
   raceCamTween = { mode: 'in', t: 0, dur: 0.55, fromPos: camera.position.clone(), fromTarget: controls.target.clone() };
   renderFlyList();
   const f = flies.find(x => x.id === id);
-  if (f?.ready && shouldPollBrainActivity()) postFly(f, { type: 'activity' });
+  if (f?.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
   if (isWatch && f && (f.lastGroups || f.lastEyes) && groups.length) onActivity(f, { groups: f.lastGroups || [], eyes: f.lastEyes, t: f.last?.t || 0 });
 }
 function stopRaceFollow() {
@@ -2032,7 +1980,7 @@ function updateThreat() {
   const pos = threatAnim.start.map((s, i) => s + (threatAnim.end[i] - s) * k);
   if (u >= 1 && performance.now() - threatAnim.t0 > threatAnim.dur + 600) { threatAnim = null; env.threat = null; threatMesh.visible = false; shadowDirty = true; syncEnv(); return; }
   threatMesh.visible = true; threatMesh.position.set(...pos); env.threat = { x: pos[0], y: pos[1], z: pos[2] };
-  eachWorker({ type: 'env', env: { threat: env.threat } });
+  for (const fl of flies) if (fl.ready) fl.worker.postMessage({ type: 'env', env: { threat: env.threat } });
 }
 // ---------------- render loop ----------------
 let lastFrame = performance.now(), fpsN = 0, fpsT = 0, lastSim = 0, lastSimReal = performance.now();

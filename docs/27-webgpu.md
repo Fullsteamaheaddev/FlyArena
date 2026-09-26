@@ -3,8 +3,7 @@
 File: `src/lifgpu.js`. Same model as the WASM kernel ([doc 6](06-wasm-kernel.md), `src/wasm/lif.c`),
 running the brain's two 0.5 ms LIF steps on the GPU. Selected automatically in `attachBrain` when
 `navigator.gpu` exists; `?gpu=0` on the arena URL or `gpu: false` in brain params forces WASM. Any
-initialisation failure falls back to WASM silently. Fruit Fly shares one WebGPU device and one
-connectome buffer across its flies (`LIFGpu.create` reuses `device` and `graphBuffer`).
+initialisation failure falls back to WASM silently.
 
 ## Layout
 

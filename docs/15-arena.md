@@ -5,7 +5,6 @@ Files: `arena.html`, `src/arena.js`, `src/sim/fly.worker.js`, `src/sim/fly.js`.
 ## Architecture
 - The main thread loads data, writes the connectome and flyvis model into shared memory, and renders.
 - Each fly runs in its own Web Worker with its own MuJoCo world and brain slot (maximum 12 flies).
-  Fruit Fly packs its three flies into one worker so they share a single WebGPU device and connectome buffer.
 - Workers transfer pose buffers at most 30 times per wall-clock second. The renderer interpolates
   positions and quaternions between snapshots, without extrapolating the simulation.
 - Other-fly positions and sexes are shared at most 30 Hz. Every world has 11 cached collision proxies;

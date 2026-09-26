@@ -34,14 +34,14 @@ export function attachEyes(instance, mem, slot) {
 }
 /** worker: attach a brain to its slot. Uses the WebGPU kernel when available (opts.gpu !== false); the wasm
  * module is still instantiated either way because the flyvis eyes run on its fv_step. Falls back to WASM. */
-export async function attachBrain(wasmModuleOrBytes, mem, slot, data, seed, gpu = null) {
+export async function attachBrain(wasmModuleOrBytes, mem, slot, data, seed) {
   const inst = wasmModuleOrBytes instanceof WebAssembly.Module ? await WebAssembly.instantiate(wasmModuleOrBytes, { env: { memory: mem.memory } })
     : (await WebAssembly.instantiate(wasmModuleOrBytes, { env: { memory: mem.memory } })).instance;
   if (mem.opts.gpu !== false && typeof navigator !== 'undefined' && navigator.gpu) {
     try {
       const buf = mem.memory.buffer, G = mem.graph, N = data.N, E = data.E;
       const graph = { indptr: new Uint32Array(buf, G.indptr, N + 1), indices: new Uint32Array(buf, G.indices, E), weights: new Float32Array(buf, G.weights, E), sign: new Float32Array(buf, G.sign, N) };
-      const gb = await LIFGpu.create({ N, E, graph, params: mem.opts, seed, device: gpu?.device || null, graphBuffer: gpu?.graphBuffer || null });
+      const gb = await LIFGpu.create({ N, E, graph, params: mem.opts, seed });
       gb.instance = inst;
       console.info('brain backend: WebGPU');
       return applyClassPhysiology(gb, data, mem.opts);
