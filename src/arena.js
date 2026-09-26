@@ -54,7 +54,11 @@ const RACE_LABEL_Z = 1.05, RACE_LABEL_Z_CHASE = 0.28;
 const RACE_HISTORY_KEY = 'odorRaceResults';
 const RACE_FLIES_KEY = 'odorRaceFlies';
 const ENTER_GATE_KEY = 'fruitFlyEntered';
+const TICKER_KEY = 'sugarRunTickerUrl';
+const X_HREF = 'https://x.com/SugarRunFun';
+const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
 let lastRaceFliesKey = '';
+let watchTickerUrl = null;
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
@@ -234,7 +238,7 @@ function buildScene(data) {
   room.dispose(); pmrem.dispose();
   camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, Math.max(100, env.arena.radius * 8)); camera.up.set(0, 0, 1);
   const R = env.arena.radius;
-  // Race: sit on +X so a maze lane points at the camera (0°/120°/240° stays left-right symmetric).
+  // Race: sit on +X so a rim start points at the camera (0°/120°/240° stays left-right symmetric).
   if (isRace) camera.position.set(R * 1.3, 0, R * 1.45);
   else camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
@@ -546,7 +550,7 @@ function setupRaceChrome() {
   document.body.classList.add('race');
   $('#panel').hidden = true;
   $('#raceHud').hidden = false;
-  document.title = 'Fruit Fly';
+  document.title = 'Sugar Run';
   $('#follow').checked = false;
   const capL = $('#eyeL')?.closest('figure')?.querySelector('figcaption');
   const capR = $('#eyeR')?.closest('figure')?.querySelector('figcaption');
@@ -675,22 +679,72 @@ function unlockRaceAudio(ev) {
     else playWatchBed();
   });
 }
+function flyTimeLine(fly) {
+  const n = String(fly ?? '0');
+  return `${n} second${n === '1' ? '' : 's'} in fly time`;
+}
+function tickerUrl() {
+  const env = String(import.meta.env.VITE_TICKER_URL || '').trim();
+  if (env) return env;
+  try { return (localStorage.getItem(TICKER_KEY) || '').trim(); } catch { return ''; }
+}
+function resolvedTickerUrl() {
+  if (isWatch && watchTickerUrl != null) return watchTickerUrl;
+  return tickerUrl();
+}
+function paintRaceTicker(href) {
+  const a = $('#raceTicker');
+  if (!a) return;
+  const url = href != null ? String(href).trim() : resolvedTickerUrl();
+  if (url) {
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.removeAttribute('aria-disabled');
+    a.style.pointerEvents = '';
+  } else {
+    a.removeAttribute('href');
+    a.removeAttribute('target');
+    a.removeAttribute('rel');
+    a.setAttribute('aria-disabled', 'true');
+    a.style.pointerEvents = 'none';
+  }
+}
+function setupRaceSocials() {
+  if ($('#raceSocials')) { paintRaceTicker(); return; }
+  const nav = document.createElement('nav');
+  nav.id = 'raceSocials';
+  nav.hidden = true;
+  nav.setAttribute('aria-label', 'Sugar Run links');
+  nav.innerHTML = `<a class="race-social race-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
+    <a class="race-social race-social-ticker" id="raceTicker" aria-label="FLYticker"><img src="${BASE}FLYticker.webp" alt="FLYticker" /></a>`;
+  document.body.appendChild(nav);
+  paintRaceTicker();
+}
+function showRaceSocials() {
+  if ($('#enterGate')) return;
+  const el = $('#raceSocials');
+  if (!el) return;
+  paintRaceTicker();
+  if (!el.hidden) return;
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('in'));
+}
 function setupEnterGate() {
+  setupRaceSocials();
   let entered = false;
   try { entered = sessionStorage.getItem(ENTER_GATE_KEY) === '1'; } catch {}
-  if (entered) return;
+  if (entered) { showRaceSocials(); return; }
   const el = document.createElement('div');
   el.id = 'enterGate';
   el.innerHTML = `<div class="enter-card" role="dialog" aria-labelledby="enterTitle" aria-modal="true">
-    <img class="enter-logo" src="${BASE}FruitFlyText.png" alt="Fruit Fly" />
-    <h1 id="enterTitle">Welcome to Fruit Fly</h1>
-    <p>Three of us, three brains — 165,122 neurons each — racing for a drop of vinegar. Pick a fly. Cheer. Bet. Don't get eaten by a fruit bowl.</p>
+    <img class="enter-logo" src="${BASE}FruitFlyText.png" alt="Sugar Run" />
+    <h1 id="enterTitle">Welcome to Sugar Run</h1>
+    <p>Three of us, three brains — 165,122 neurons each — racing for sugar at the centre. Pick a fly. Cheer. Bet. Don't get eaten by a fruit bowl.</p>
     <button type="button" class="enter-token" id="enterToken" hidden></button>
     <button type="button" class="primary" id="enterBtn">Press to enter</button>
     <div class="enter-socials">
-      <a class="enter-social enter-social-x" href="https://x.com/SugarRunFun" target="_blank" rel="noopener noreferrer" aria-label="X">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-      </a>
+      <a class="enter-social enter-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
     </div>
   </div>`;
   document.body.appendChild(el);
@@ -702,6 +756,7 @@ function setupEnterGate() {
     removeEventListener('keydown', onKey);
     unlockRaceAudio();
     syncBpHint();
+    showRaceSocials();
   };
   const onKey = e => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dismiss(); }
@@ -807,6 +862,7 @@ function publishMatchState(force = false) {
     act,
     betClosesAt,
     pools: poolSnap,
+    tickerUrl: tickerUrl(),
   }));
 }
 let watchOverlayPhase = null, watchSawRest = false;
@@ -824,7 +880,7 @@ function showWatchWaiting(msg) {
   lastLobbyKind = '';
   lastPoolKey = '';
   if (card) card.dataset.kind = '';
-  card.innerHTML = `<h1>Fruit Fly</h1><p>${msg}</p>`;
+  card.innerHTML = `<h1>Sugar Run</h1><p>${msg}</p>`;
   if (watchOverlayPhase !== 'wait') showRaceOverlayCard(card);
   else { const overlay = $('#raceOverlay'); overlay.hidden = false; }
   watchOverlayPhase = 'wait';
@@ -850,7 +906,7 @@ function applyWatchOverlay(st) {
     const reset = settleNote();
     if (watchOverlayPhase !== 'results') {
       const note = w.why === 'last' ? 'last remaining' : w.why === 'died' ? 'last to die' : '';
-      card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${st.clock?.wall || ''}</p><p class="flyt">${st.clock?.fly || '0'} s fly</p>
+      card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${st.clock?.wall || ''}</p><p class="flyt">${flyTimeLine(st.clock?.fly)}</p>
         <div class="bet-actions"></div>
         <p id="betNote" class="flyt"></p>
         <p id="raceReset">${reset}</p>`;
@@ -964,6 +1020,10 @@ function applyWatchState(st) {
   if (st.matchId != null && st.matchId !== matchId) { matchId = st.matchId; poolStatus = null; }
   betClosesAt = st.betClosesAt ?? null;
   if (st.pools) poolSnap = st.pools;
+  if ('tickerUrl' in st) {
+    watchTickerUrl = st.tickerUrl || '';
+    paintRaceTicker(watchTickerUrl);
+  }
   if (st.clock) {
     paintSimRate(st.phase === 'live' ? st.clock.sim : null);
     if (st.phase === 'live') {
@@ -1541,7 +1601,7 @@ function paintLobbyOverlay(force = false) {
     const open = !chainConfigured() || poolStatus === 1 || (poolStatus == null && betClosesAt != null);
     const note = !chainConfigured() ? 'Pool not configured (set VITE_POOL).'
       : (open ? 'Pick a fly, then Bet.' : 'Opening the race on-chain…');
-    card.innerHTML = `<h1>Fruit Fly</h1><p>Winner pool — first to the vinegar</p>
+    card.innerHTML = `<h1>Sugar Run</h1><p>Winner pool — first to the sugary center, or last alive</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       ${poolRowsHtml()}
       <div class="bet-stake">
@@ -1554,7 +1614,7 @@ function paintLobbyOverlay(force = false) {
       </div>
       <p id="betNote" class="flyt">${note}</p>`;
   } else {
-    card.innerHTML = `<h1>Fruit Fly</h1><p>First to the vinegar wins!</p>
+    card.innerHTML = `<h1>Sugar Run</h1><p>Winner pool — first to the sugary center, or last alive</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       <p class="flyt">Race starts itself — no GO</p>
       ${poolRowsHtml()}${raceHistoryHtml(loadRaceHistory())}`;
@@ -1699,7 +1759,7 @@ function announceRaceWinner(f, why) {
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   const card = $('#raceCard');
   const note = why === 'last' ? 'last remaining' : why === 'died' ? 'last to die' : '';
-  card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="sub">${wall}</p><p class="flyt">${fly} s fly</p>${raceHistoryHtml(hist)}<p id="raceReset">${settleNote()}</p>`;
+  card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${wall}</p><p class="flyt">${flyTimeLine(fly)}</p>${raceHistoryHtml(hist)}<p id="raceReset">${settleNote()}</p>`;
   publishMatchState(true);
   showRaceOverlayCard(card, { flyColor: f.color });
   settleHostRace(f.id);

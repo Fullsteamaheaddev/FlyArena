@@ -29,7 +29,7 @@ export const PRESETS = {
   courtship: { label: 'Courtship: a male and a female', env: () => ({ ...structuredClone(DEFAULT_ENV), obstacles: [], hazards: [], bitterPatches: [], food: [], odors: [] }),
     flySpots: [{ pos: [-0.6, 0], yaw: 0, sex: 'm' }, { pos: [0.4, 0.3], yaw: 2.4, sex: 'f' }] },
   race: {
-    label: 'Fruit Fly',
+    label: 'Sugar Run',
     flies: 3,
     maxFlies: 3,
     flySpots: [0, 1, 2].map(i => {
@@ -54,16 +54,8 @@ export const PRESETS = {
           ];
         }),
       ],
-      // Three identical radial lanes (0°, 120°, 240°): same flanking walls and inner gates, same height.
-      obstacles: [0, 1, 2].flatMap(i => {
-        const a = i * 2 * Math.PI / 3, c = Math.cos(a), s = Math.sin(a);
-        return [
-          { x: 6.2, y: 1.5, sx: 2.2, sy: 0.12, sz: 0.275 },
-          { x: 6.2, y: -1.5, sx: 2.2, sy: 0.12, sz: 0.275 },
-          { x: 2.4, y: 1.15, sx: 0.9, sy: 0.12, sz: 0.275 },
-          { x: 2.4, y: -1.15, sx: 0.9, sy: 0.12, sz: 0.275 },
-        ].map(t => ({ type: 'box', x: t.x * c - t.y * s, y: t.x * s + t.y * c, sx: t.sx, sy: t.sy, sz: t.sz, yaw: a }));
-      }),
+      // Open plate: no maze walls. Outer circular arena wall is in buildWorldXML.
+      obstacles: [],
     }),
   },
 };

@@ -52,6 +52,7 @@ async function refresh() {
   $('#adminOp').value = op;
   $('#adminFee').value = feeBps / 100;
   $('#adminFeeTo').value = feeTo;
+  try { $('#adminTicker').value = localStorage.getItem('sugarRunTickerUrl') || ''; } catch { $('#adminTicker').value = ''; }
   const mint = $('#adminMint');
   if (mint) mint.textContent = `Mint ${meta.symbol || chipSymbol()}`;
 }
@@ -95,6 +96,11 @@ $('#adminSetFee').onclick = async () => {
 $('#adminSetFeeTo').onclick = async () => {
   try { if (!(await authorize())) return; await adminSetFeeRecipient($('#adminFeeTo').value.trim()); status('Fee wallet saved.'); await refresh(); }
   catch (e) { status(e.message || String(e)); }
+};
+$('#adminSetTicker').onclick = () => {
+  const url = $('#adminTicker').value.trim();
+  try { localStorage.setItem('sugarRunTickerUrl', url); } catch {}
+  status(url ? 'Ticker URL saved on this browser.' : 'Ticker URL cleared.');
 };
 $('#adminMint').onclick = async () => {
   try {
