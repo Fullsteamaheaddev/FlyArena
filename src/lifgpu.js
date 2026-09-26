@@ -153,7 +153,7 @@ const BATCH_STEPS = 8, BATCH_MS = 2;
 
 export class LIFGpu {
   /** graph: { indptr, indices, weights, sign } as typed arrays (views into shared wasm memory are fine) */
-  static async create({ N, E, graph, params = {}, seed = 1, device = null }) {
+  static async create({ N, E, graph, params = {}, seed = 1, device = null, graphBuffer = null }) {
     if (!device) {
       const adapter = await navigator.gpu.requestAdapter();
       if (!adapter) throw new Error('no WebGPU adapter');
@@ -169,18 +169,22 @@ export class LIFGpu {
     const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
     // graph pack: indptr | indices | weights | sign as u32 words
     const ipOff = 0, ixOff = align(N + 1), wOff = ixOff + align(E), sOff = wOff + align(E), gWords = sOff + align(N);
-    const gArr = new Uint32Array(gWords);
-    gArr.set(graph.indptr, ipOff); gArr.set(graph.indices, ixOff);
-    gArr.set(new Uint32Array(graph.weights.buffer, graph.weights.byteOffset, E), wOff);
-    gArr.set(new Uint32Array(graph.sign.buffer, graph.sign.byteOffset, N), sOff);
+    const mk = (arr, usage = S) => { const g = device.createBuffer({ size: Math.max(16, arr.byteLength), usage }); device.queue.writeBuffer(g, 0, arr.buffer, arr.byteOffset, arr.byteLength); return g; };
+    let graphBuf = graphBuffer;
+    if (!graphBuf) {
+      const gArr = new Uint32Array(gWords);
+      gArr.set(graph.indptr, ipOff); gArr.set(graph.indices, ixOff);
+      gArr.set(new Uint32Array(graph.weights.buffer, graph.weights.byteOffset, E), wOff);
+      gArr.set(new Uint32Array(graph.sign.buffer, graph.sign.byteOffset, N), sOff);
+      graphBuf = mk(gArr, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
+    }
     // f32 state pack: v | refr | trace | adapt | res | bias | thr | drive
     const st = new Float32Array(8 * N); st.fill(p.vRest, 0, N); st.fill(1, 4 * N, 5 * N);   // v=vRest, res=1
     // atomics pack: gE | gI | spikeC | ring | ringCount | driven
     const ringOff = 3 * N, rcOff = ringOff + b.nslots * N, drvOff = rcOff + b.nslots, atWords = drvOff + N;
-    const mk = (arr, usage = S) => { const g = device.createBuffer({ size: Math.max(16, arr.byteLength), usage }); device.queue.writeBuffer(g, 0, arr.buffer, arr.byteOffset, arr.byteLength); return g; };
     b.buf = {
       hdr: device.createBuffer({ size: 144, usage: S }),
-      graph: mk(gArr, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST),
+      graph: graphBuf,
       st: mk(st), at: mk(new Int32Array(atWords)), deltas: device.createBuffer({ size: 16 + 16 * DELTA_CAP, usage: S }),
     };
     b._offs = { ipOff, ixOff, wOff, sOff, ringOff, rcOff, drvOff };
@@ -196,13 +200,18 @@ export class LIFGpu {
     b._staging = [0, 1, 2, 3].map(() => device.createBuffer({ size: b._rbSize, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }));
     b._rbBusy = [false, false, false, false]; b._rbK = 0;
     b._enc = null; b._cp = null; b._stepsInPass = 0; b._lastSubmit = 0;
-    const mod = device.createShaderModule({ code: WGSL });
-    const types = ['storage', 'read-only-storage', 'storage', 'storage', 'storage'];
-    const bgl = device.createBindGroupLayout({ entries: types.map((t, i) => ({ binding: i, visibility: GPUShaderStage.COMPUTE, buffer: { type: t } })) });
-    const pll = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
-    b._pipes = {};
-    for (const n of ['applyDeltas', 'zeroDeltas', 'deliver', 'driven', 'background', 'membrane', 'threshold', 'tick'])
-      b._pipes[n] = device.createComputePipeline({ layout: pll, compute: { module: mod, entryPoint: n } });
+    let pipes = device._lifPipes, bgl = device._lifBgl;
+    if (!pipes) {
+      const mod = device.createShaderModule({ code: WGSL });
+      const types = ['storage', 'read-only-storage', 'storage', 'storage', 'storage'];
+      bgl = device.createBindGroupLayout({ entries: types.map((t, i) => ({ binding: i, visibility: GPUShaderStage.COMPUTE, buffer: { type: t } })) });
+      const pll = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
+      pipes = {};
+      for (const n of ['applyDeltas', 'zeroDeltas', 'deliver', 'driven', 'background', 'membrane', 'threshold', 'tick'])
+        pipes[n] = device.createComputePipeline({ layout: pll, compute: { module: mod, entryPoint: n } });
+      device._lifPipes = pipes; device._lifBgl = bgl;
+    }
+    b._pipes = pipes;
     b._bg = device.createBindGroup({ layout: bgl, entries: [b.buf.hdr, b.buf.graph, b.buf.st, b.buf.at, b.buf.deltas].map((r, i) => ({ binding: i, resource: { buffer: r } })) });
     b._hdrBuf = new ArrayBuffer(144); b._hd = new DataView(b._hdrBuf);
     b._writeParams();   // static header: N, constants, offsets, ring position
