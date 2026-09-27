@@ -2,7 +2,7 @@
 // stroke calibrates force per amplitude; a lumped stroke-plane/haltere controller
 // directs that mean force and stabilises attitude. MuJoCo integrates motion/contact.
 // This is an engineered flight motor, not a resolved unsteady-aerodynamics solver.
-import { clearance, obstacleDist } from './senses.js';
+import { clearance, obstacleDist, windAt } from './senses.js';
 
 // wing yaw, roll, pitch joint angles (rad) over one stroke cycle: 50 samples of body/flysuite/wing_pattern_fmech.npy
 export const WING_CYCLE = [[-0.835, -0.102, 0.809], [-0.825, -0.113, 1.126], [-0.799, -0.112, 1.459], [-0.754, -0.095, 1.766], [-0.688, -0.061, 2.000], [-0.602, -0.013, 2.129], [-0.496, 0.042, 2.144], [-0.371, 0.092, 2.068], [-0.231, 0.131, 1.949], [-0.081, 0.151, 1.831], [0.074, 0.152, 1.743], [0.230, 0.135, 1.691], [0.383, 0.104, 1.667], [0.531, 0.066, 1.658], [0.671, 0.025, 1.657], [0.804, -0.016, 1.659], [0.928, -0.056, 1.656], [1.043, -0.092, 1.643], [1.145, -0.127, 1.615], [1.234, -0.161, 1.567], [1.307, -0.193, 1.494], [1.361, -0.225, 1.389], [1.397, -0.255, 1.243], [1.412, -0.282, 1.051], [1.407, -0.303, 0.815], [1.382, -0.316, 0.542], [1.339, -0.319, 0.248], [1.279, -0.311, -0.042], [1.204, -0.292, -0.294], [1.115, -0.265, -0.471], [1.015, -0.234, -0.553], [0.906, -0.202, -0.551], [0.791, -0.171, -0.502], [0.669, -0.141, -0.446], [0.544, -0.113, -0.406], [0.416, -0.087, -0.386], [0.286, -0.062, -0.377], [0.155, -0.040, -0.368], [0.026, -0.019, -0.353], [-0.100, -0.002, -0.329], [-0.221, 0.011, -0.296], [-0.333, 0.020, -0.253], [-0.435, 0.023, -0.204], [-0.526, 0.021, -0.150], [-0.606, 0.013, -0.095], [-0.674, 0.001, -0.034], [-0.730, -0.016, 0.042], [-0.775, -0.036, 0.146], [-0.808, -0.059, 0.298], [-0.828, -0.081, 0.507]];
@@ -187,7 +187,7 @@ export class Flight {
     r = Math.max(-F.yawMax, Math.min(F.yawMax, r));
     if (landing) r = 0;
     const spd = landing ? F.landSpeed * Math.max(0, Math.min(1, (com[2] - .18) / .3)) : this.speed * Math.min(1, age / F.climbMs + 0.3);
-    const wind = ctx.env.wind || [0,0];
+    const wind = windAt(com, ctx.env);
     const vt = [spd * Math.cos(yaw) + wind[0], spd * Math.sin(yaw) + wind[1], 0];
     // centring: a wall or obstacle closer than the margin pushes the flight path away from it
     const c0 = clearance(com, ctx.env, ctx.others, com[2]);

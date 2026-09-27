@@ -227,6 +227,7 @@ body.race .race-social:focus-visible {
 }
 body.race .race-social svg { width: 20px; height: 20px; fill: currentColor; }
 body.race .race-social img { width: 28px; height: 28px; object-fit: contain; display: block; }
+body.race .race-social-ticker img { opacity: 0.5; }
 body.race .race-social[aria-disabled="true"] { pointer-events: none; }
 body.race #enterGate .enter-token {
   display: inline-flex; align-items: center; justify-content: center;
@@ -314,6 +315,29 @@ body.race #bpHint[hidden] { display: none; animation: none; }
   28% { transform: scale(1); opacity: 1; }
   82% { transform: scale(1); opacity: 1; }
   100% { transform: scale(1); opacity: 0; }
+}
+body.race #chaosToast {
+  position: fixed; left: 50%; top: 14%; z-index: 6; pointer-events: none;
+  transform: translateX(-50%) translateY(-12px) scale(.86);
+  opacity: 0; text-align: center; max-width: min(90vw, 28em);
+}
+body.race #chaosToast.in {
+  animation: chaosToastIn .5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+body.race #chaosToast[hidden] { display: none; }
+body.race #chaosToast h2 {
+  margin: 0; font-family: var(--race-title); font-weight: 400;
+  font-size: clamp(28px, 5vw, 56px); line-height: 1.05; color: #fff;
+  text-shadow: 0 3px 0 #000, 0 8px 20px rgba(0,0,0,.5);
+}
+body.race #chaosToast p {
+  margin: 6px 0 0; font-family: var(--race-title); font-weight: 400;
+  font-size: clamp(14px, 2.2vw, 22px); color: rgba(255,255,255,.82);
+  text-shadow: 0 2px 0 #000;
+}
+@keyframes chaosToastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(.86); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
 body.race #bpBody { flex: none; }
 /* 12 named groups; show about half so the panel stays shorter */
@@ -568,6 +592,7 @@ body.race .race-card button.primary:focus-visible {
   body.race #enterGate .enter-token.copied,
   body.race #profile #profileConnect.copied { animation: none; transform: none; }
   body.race #raceSocials.in { animation: none; opacity: 1; transform: none; }
+  body.race #chaosToast.in { animation: none; opacity: 1; transform: translateX(-50%); }
   body.race .race-social:hover,
   body.race .race-social:focus-visible { transform: none; }
   body.race #profile,

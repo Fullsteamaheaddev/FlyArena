@@ -38,7 +38,7 @@ export const PRESETS = {
     }),
     env: () => ({
       ...structuredClone(DEFAULT_ENV),
-      arena: { ...DEFAULT_ENV.arena, radius: 12.5 },
+      arena: { ...DEFAULT_ENV.arena, radius: 12.5, clipHeight: 8 },
       hazards: [],
       bitterPatches: [],
       food: [{ x: 0, y: 0, r: 0.5, sugar: 1, bitter: 0, water: 0.2, amount: 8 }],
@@ -61,13 +61,25 @@ export const PRESETS = {
 };
 export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, nProxies = 0 } = {}) {
   const a = env.arena, parts = [];
-  parts.push(`<geom name="floor" type="plane" size="${a.radius + 1} ${a.radius + 1} .1" rgba=".55 .5 .42 1" friction="1" solref="0.0002 1" group="0"/>`);
+  // Floor + walls on a mocap body so Sugar Run can tilt / punch / rattle the real collision dish.
+  parts.push('<body name="arena" mocap="true">');
+  parts.push(`<geom name="floor" type="cylinder" size="${(a.radius + 0.1).toFixed(4)} 0.25" pos="0 0 -0.25" rgba=".55 .5 .42 1" friction="1.4" solref="0.002 1" condim="3" group="0"/>`);
   // circular wall from box segments
   const n = a.segments, t = 0.05;
   for (let k = 0; k < n; k++) {
     const th = (k + 0.5) / n * 2 * Math.PI, len = 2 * Math.PI * a.radius / n * 0.55;
     const x = (a.radius + t) * Math.cos(th), y = (a.radius + t) * Math.sin(th);
     parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${a.wallHeight / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${a.wallHeight / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+  }
+  const clipH = a.clipHeight ?? a.wallHeight;
+  if (clipH > a.wallHeight + 0.01) {
+    const extra = clipH - a.wallHeight;
+    const zc = a.wallHeight + extra / 2;
+    for (let k = 0; k < n; k++) {
+      const th = (k + 0.5) / n * 2 * Math.PI, len = 2 * Math.PI * a.radius / n * 0.55;
+      const x = (a.radius + t) * Math.cos(th), y = (a.radius + t) * Math.sin(th);
+      parts.push(`<geom name="wallclip${k}" type="box" size="${t} ${len.toFixed(4)} ${(extra / 2).toFixed(4)}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${zc.toFixed(4)}" euler="0 0 ${th.toFixed(4)}" rgba="0 0 0 0" group="3" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+    }
   }
   env.obstacles.forEach((o, k) => {
     const sideFric = 0.02, yaw = (o.yaw || 0).toFixed(4);
@@ -81,6 +93,7 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
   env.food.forEach((f, k) => parts.push(`<geom name="food${k}" type="cylinder" size="${f.r} 0.002" pos="${f.x} ${f.y} 0.002" rgba=".95 .8 .3 1" contype="0" conaffinity="0" group="0"/>`));
   env.bitterPatches.forEach((f, k) => parts.push(`<geom name="bitter${k}" type="cylinder" size="${f.r} 0.002" pos="${f.x} ${f.y} 0.002" rgba=".3 .55 .85 1" contype="0" conaffinity="0" group="0"/>`));
   env.hazards.forEach((h, k) => parts.push(`<geom name="hazard${k}" type="cylinder" size="${h.r} 0.002" pos="${h.x} ${h.y} 0.002" rgba=".85 .3 .2 1" contype="0" conaffinity="0" group="0"/>`));
+  parts.push('</body>');
   // other flies: kinematic ellipsoid proxies (body + head), collide with this fly and are visible
   for (let k = 0; k < nProxies; k++) parts.push(`<body name="proxy${k}" mocap="true" pos="${50 + k} 50 -5"><geom name="proxy${k}_body" type="ellipsoid" size="0.14 0.05 0.05" pos="-0.03 0 0" rgba=".2 .15 .1 1" group="0" contype="2" conaffinity="2"/><geom name="proxy${k}_head" type="sphere" size="0.045" pos="0.08 0 0.01" rgba=".5 .1 .08 1" group="0" contype="2" conaffinity="2"/></body>`);
   // a looming threat (predator / swatter): kinematic dark sphere, parked far away until launched

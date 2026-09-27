@@ -104,7 +104,7 @@ export function unpackEyes(packed) {
   });
 }
 
-export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, wingPoses, resetIn, why, selected, eyes, groups, visions, act, betClosesAt, pools, tickerUrl }) {
+export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, wingPoses, resetIn, why, selected, eyes, groups, visions, act, betClosesAt, pools, tickerUrl, chaosCue }) {
   return {
     type: 'state',
     matchId,
@@ -117,6 +117,7 @@ export function buildMatchState({ matchId, phase, flies, clock, winner, bodyName
     betClosesAt: betClosesAt ?? null,
     pools: pools || [],
     tickerUrl: tickerUrl || '',
+    chaosCue: chaosCue || null,
     winner: winner ? { id: winner.id, name: winner.name, color: winner.color, why: why || null } : null,
     selected: selected ?? null,
     eyes: eyes || null,

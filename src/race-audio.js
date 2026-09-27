@@ -1,6 +1,9 @@
 // Race-only sounds: menu/race looping beds, wing buzz, foot ticks; Yipee.wav on a win.
-export function createRaceAudio(yipeeUrl, gongUrl) {
-  let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf;
+export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
+  const boopUrl = extraUrls.boop;
+  const thunderUrl = extraUrls.thunder;
+  const thumbUrl = extraUrls.thumb;
+  let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf, boopBuf, thunderBuf, thumbBuf;
   let currentBed = null, lastStep = 0, muted = false, keepOsc = null;
 
   async function unlock() {
@@ -27,6 +30,24 @@ export function createRaceAudio(yipeeUrl, gongUrl) {
         const raw = await (await fetch(gongUrl)).arrayBuffer();
         gongBuf = await ctx.decodeAudioData(raw.slice(0));
       } catch { gongBuf = null; }
+    }
+    if (boopUrl && !boopBuf) {
+      try {
+        const raw = await (await fetch(boopUrl)).arrayBuffer();
+        boopBuf = await ctx.decodeAudioData(raw.slice(0));
+      } catch { boopBuf = null; }
+    }
+    if (thunderUrl && !thunderBuf) {
+      try {
+        const raw = await (await fetch(thunderUrl)).arrayBuffer();
+        thunderBuf = await ctx.decodeAudioData(raw.slice(0));
+      } catch { thunderBuf = null; }
+    }
+    if (thumbUrl && !thumbBuf) {
+      try {
+        const raw = await (await fetch(thumbUrl)).arrayBuffer();
+        thumbBuf = await ctx.decodeAudioData(raw.slice(0));
+      } catch { thumbBuf = null; }
     }
   }
   function startBuzz() {
@@ -205,7 +226,203 @@ export function createRaceAudio(yipeeUrl, gongUrl) {
     g.gain.setValueAtTime(0.08, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.09);
     o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.1);
   }
-  return { unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, setMuted, setMotion, hold };
+  function playChaos(kind, extra = {}) {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const hold = { thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7, firefly: 7.1, boop: 1.1, puff: 5.1 }[kind] || 0.8;
+    duck(true);
+    setTimeout(() => duck(false), hold * 1000);
+    if (kind === 'thumb') { sfxThumb(t0); playBuf(thumbBuf, t0, 0.85); }
+    else if (kind === 'spin') sfxSpin(t0);
+    else if (kind === 'quake') sfxQuake(t0);
+    else if (kind === 'flip') sfxFlip(t0);
+    else if (kind === 'tilt') sfxTilt(t0);
+    else if (kind === 'lightning') {
+      sfxBolt(t0, extra.killed ? 1.15 : 0.95); sfxBolt(t0 + 0.35, 0.9); sfxBolt(t0 + 0.7, 0.85);
+      playBuf(thunderBuf, t0, 0.85); playBuf(thunderBuf, t0 + 0.35, 0.8); playBuf(thunderBuf, t0 + 0.7, 0.75);
+    }
+    else if (kind === 'double') {
+      for (let i = 0; i < 6; i++) {
+        const t = t0 + i * 0.4;
+        sfxBolt(t, 0.7);
+        playBuf(thunderBuf, t, 0.55);
+      }
+    }
+    else if (kind === 'crumb') sfxCrumb(t0);
+    else if (kind === 'firefly') sfxFirefly(t0);
+    else if (kind === 'boop') { sfxBoop(t0); playBuf(boopBuf, t0, 0.85); }
+    else if (kind === 'puff') sfxPuff(t0);
+  }
+  function playBuf(buf, when, gain = 0.8) {
+    if (!ctx || !buf) return;
+    const src = ctx.createBufferSource(), g = ctx.createGain();
+    g.gain.value = gain;
+    src.buffer = buf;
+    src.connect(g); g.connect(master);
+    src.start(when);
+  }
+  function noiseSrc(dur) {
+    const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const b = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource(); src.buffer = b; return src;
+  }
+  function sfxThumb(t0) {
+    const thud = ctx.createOscillator(); thud.type = 'sine';
+    thud.frequency.setValueAtTime(90, t0); thud.frequency.exponentialRampToValueAtTime(42, t0 + 0.16);
+    const tg = ctx.createGain(); tg.gain.setValueAtTime(0.0001, t0); tg.gain.exponentialRampToValueAtTime(0.45, t0 + 0.012); tg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.22);
+    thud.connect(tg); tg.connect(master); thud.start(t0); thud.stop(t0 + 0.24);
+    const ns = noiseSrc(0.18); const bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 420;
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0.22, t0); ng.gain.exponentialRampToValueAtTime(0.001, t0 + 0.16);
+    ns.connect(bp); bp.connect(ng); ng.connect(master); ns.start(t0);
+    const t1 = t0 + 1.05;
+    const who = noiseSrc(0.28); const hp = ctx.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = 1400; hp.Q.value = 0.7;
+    const wg = ctx.createGain(); wg.gain.setValueAtTime(0.0001, t1); wg.gain.exponentialRampToValueAtTime(0.22, t1 + 0.02); wg.gain.exponentialRampToValueAtTime(0.001, t1 + 0.28);
+    who.connect(hp); hp.connect(wg); wg.connect(master); who.start(t1);
+  }
+  function sfxSpin(t0) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(160, t0); o.frequency.exponentialRampToValueAtTime(1200, t0 + 0.48);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(320, t0); bp.frequency.exponentialRampToValueAtTime(1900, t0 + 0.48); bp.Q.value = 4;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.14, t0 + 0.04); g.gain.setValueAtTime(0.14, t0 + 0.5); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.62);
+    const ns = noiseSrc(0.62); const ng = ctx.createGain(); ng.gain.value = 0.08;
+    o.connect(bp); ns.connect(bp); bp.connect(g); g.connect(master); ns.connect(ng); ng.connect(master);
+    o.start(t0); o.stop(t0 + 0.62); ns.start(t0);
+  }
+  function sfxQuake(t0) {
+    const ns = noiseSrc(5.1); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 90; lp.Q.value = 0.5;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.28, t0 + 0.18); g.gain.setValueAtTime(0.22, t0 + 4.6); g.gain.exponentialRampToValueAtTime(0.001, t0 + 5.15);
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 38;
+    const og = ctx.createGain(); og.gain.value = 0.12;
+    ns.connect(lp); lp.connect(g); g.connect(master); o.connect(og); og.connect(g);
+    ns.start(t0); o.start(t0); o.stop(t0 + 5.15);
+  }
+  function sfxFlip(t0) {
+    const knock = ctx.createOscillator(); knock.type = 'triangle';
+    knock.frequency.setValueAtTime(180, t0); knock.frequency.exponentialRampToValueAtTime(70, t0 + 0.12);
+    const kg = ctx.createGain(); kg.gain.setValueAtTime(0.35, t0); kg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.18);
+    knock.connect(kg); kg.connect(master); knock.start(t0); knock.stop(t0 + 0.2);
+    const who = noiseSrc(0.45); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(400, t0); bp.frequency.exponentialRampToValueAtTime(1800, t0 + 0.35);
+    const wg = ctx.createGain(); wg.gain.setValueAtTime(0.0001, t0 + 0.05); wg.gain.exponentialRampToValueAtTime(0.2, t0 + 0.08); wg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.5);
+    who.connect(bp); bp.connect(wg); wg.connect(master); who.start(t0 + 0.05);
+    const t1 = t0 + 0.7;
+    const cl = noiseSrc(0.2); const lp = ctx.createBiquadFilter(); lp.type = 'highpass'; lp.frequency.value = 900;
+    const cg = ctx.createGain(); cg.gain.setValueAtTime(0.16, t1); cg.gain.exponentialRampToValueAtTime(0.001, t1 + 0.2);
+    cl.connect(lp); lp.connect(cg); cg.connect(master); cl.start(t1);
+  }
+  function sfxTilt(t0) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(260, t0); o.frequency.linearRampToValueAtTime(110, t0 + 0.85);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.26, t0 + 0.06);
+    g.gain.setValueAtTime(0.2, t0 + 0.5); g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.05);
+    o.connect(bp); bp.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 1.08);
+    const rumble = noiseSrc(1.1);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220;
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t0); rg.gain.exponentialRampToValueAtTime(0.14, t0 + 0.08);
+    rg.gain.exponentialRampToValueAtTime(0.001, t0 + 1.0);
+    rumble.connect(lp); lp.connect(rg); rg.connect(master); rumble.start(t0);
+    const t1 = t0 + 3.0;
+    const clunk = ctx.createOscillator(); clunk.type = 'sine';
+    clunk.frequency.setValueAtTime(105, t1); clunk.frequency.exponentialRampToValueAtTime(42, t1 + 0.2);
+    const cg = ctx.createGain(); cg.gain.setValueAtTime(0.55, t1); cg.gain.exponentialRampToValueAtTime(0.001, t1 + 0.28);
+    clunk.connect(cg); cg.connect(master); clunk.start(t1); clunk.stop(t1 + 0.3);
+    const slam = noiseSrc(0.25);
+    const hp = ctx.createBiquadFilter(); hp.type = 'lowpass'; hp.frequency.value = 480;
+    const sg = ctx.createGain(); sg.gain.setValueAtTime(0.22, t1); sg.gain.exponentialRampToValueAtTime(0.001, t1 + 0.22);
+    slam.connect(hp); hp.connect(sg); sg.connect(master); slam.start(t1);
+  }
+  function sfxBolt(t0, amp = 1) {
+    const ns = noiseSrc(0.18); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0.0001, t0); ng.gain.exponentialRampToValueAtTime(0.55 * amp, t0 + 0.004); ng.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
+    ns.connect(hp); hp.connect(ng); ng.connect(master); ns.start(t0);
+    const th = noiseSrc(0.7); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180;
+    const tg = ctx.createGain(); tg.gain.setValueAtTime(0.0001, t0); tg.gain.exponentialRampToValueAtTime(0.28 * amp, t0 + 0.03); tg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.75);
+    th.connect(lp); lp.connect(tg); tg.connect(master); th.start(t0);
+  }
+  function sfxCakeSmoosh(t0) {
+    const sponge = ctx.createOscillator(); sponge.type = 'triangle';
+    sponge.frequency.setValueAtTime(88, t0); sponge.frequency.exponentialRampToValueAtTime(54, t0 + 0.2);
+    const sponge2 = ctx.createOscillator(); sponge2.type = 'sine';
+    sponge2.frequency.setValueAtTime(132, t0); sponge2.frequency.exponentialRampToValueAtTime(72, t0 + 0.18);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, t0); sg.gain.exponentialRampToValueAtTime(0.28, t0 + 0.014);
+    sg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.24);
+    sponge.connect(sg); sponge2.connect(sg); sg.connect(master);
+    sponge.start(t0); sponge.stop(t0 + 0.26); sponge2.start(t0); sponge2.stop(t0 + 0.24);
+    const goo = noiseSrc(0.34);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(380, t0); bp.frequency.exponentialRampToValueAtTime(140, t0 + 0.26);
+    bp.Q.setValueAtTime(1.4, t0); bp.Q.linearRampToValueAtTime(0.55, t0 + 0.22);
+    const gg = ctx.createGain();
+    gg.gain.setValueAtTime(0.0001, t0); gg.gain.exponentialRampToValueAtTime(0.36, t0 + 0.007);
+    gg.gain.setValueAtTime(0.24, t0 + 0.09); gg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.36);
+    goo.connect(bp); bp.connect(gg); gg.connect(master); goo.start(t0);
+    const smear = ctx.createOscillator(); smear.type = 'sine';
+    smear.frequency.setValueAtTime(260, t0 + 0.025); smear.frequency.exponentialRampToValueAtTime(105, t0 + 0.22);
+    const mg = ctx.createGain();
+    mg.gain.setValueAtTime(0.0001, t0 + 0.025); mg.gain.exponentialRampToValueAtTime(0.14, t0 + 0.045);
+    mg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28);
+    smear.connect(mg); mg.connect(master); smear.start(t0 + 0.025); smear.stop(t0 + 0.3);
+    const cream = noiseSrc(0.24);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(220, t0); lp.frequency.exponentialRampToValueAtTime(95, t0 + 0.3);
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.2, t0 + 0.008); cg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32);
+    cream.connect(lp); lp.connect(cg); cg.connect(master); cream.start(t0 + 0.008);
+  }
+  function playCakeLand() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    sfxCakeSmoosh(ctx.currentTime);
+  }
+  function sfxCrumb(t0) {
+    for (let i = 0; i < 3; i++) {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      const f = 980 + i * 420;
+      o.frequency.setValueAtTime(f, t0 + i * 0.04); o.frequency.exponentialRampToValueAtTime(f * 1.4, t0 + i * 0.04 + 0.08);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.07, t0 + i * 0.04); g.gain.exponentialRampToValueAtTime(0.001, t0 + i * 0.04 + 0.12);
+      o.connect(g); g.connect(master); o.start(t0 + i * 0.04); o.stop(t0 + i * 0.04 + 0.13);
+    }
+    const t1 = t0 + 0.22;
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(240, t1); o.frequency.exponentialRampToValueAtTime(90, t1 + 0.1);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.12, t1); g.gain.exponentialRampToValueAtTime(0.001, t1 + 0.12);
+    o.connect(g); g.connect(master); o.start(t1); o.stop(t1 + 0.13);
+  }
+  function sfxFirefly(t0) {
+    for (let i = 0; i < 16; i++) {
+      const t = t0 + 0.16 + i * 0.4 + Math.random() * 0.1;
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 1200 + Math.random() * 700;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.045, t + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.18);
+    }
+  }
+  function sfxBoop(t0) {
+    const thud = ctx.createOscillator(); thud.type = 'sine';
+    thud.frequency.setValueAtTime(140, t0); thud.frequency.exponentialRampToValueAtTime(64, t0 + 0.12);
+    const tg = ctx.createGain(); tg.gain.setValueAtTime(0.28, t0); tg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.16);
+    thud.connect(tg); tg.connect(master); thud.start(t0); thud.stop(t0 + 0.18);
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(880, t0 + 0.02); o.frequency.exponentialRampToValueAtTime(420, t0 + 0.14);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.12, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.16);
+    o.connect(g); g.connect(master); o.start(t0 + 0.02); o.stop(t0 + 0.18);
+  }
+  function sfxPuff(t0) {
+    const rumble = noiseSrc(5.1);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 140; lp.Q.value = 0.7;
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t0); rg.gain.linearRampToValueAtTime(0.18, t0 + 0.25);
+    rg.gain.setValueAtTime(0.14, t0 + 4.2); rg.gain.exponentialRampToValueAtTime(0.001, t0 + 5.1);
+    rumble.connect(lp); lp.connect(rg); rg.connect(master); rumble.start(t0);
+    const whoosh = noiseSrc(5.1);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 0.8;
+    const wg = ctx.createGain();
+    wg.gain.setValueAtTime(0.0001, t0); wg.gain.linearRampToValueAtTime(0.12, t0 + 0.18);
+    wg.gain.setValueAtTime(0.08, t0 + 4.3); wg.gain.exponentialRampToValueAtTime(0.001, t0 + 5.1);
+    whoosh.connect(bp); bp.connect(wg); wg.connect(master); whoosh.start(t0);
+  }
+  return { unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, playChaos, playCakeLand, setMuted, setMotion, hold };
 }
 
 function makeMusicBuffer(ctx) {

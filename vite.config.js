@@ -18,6 +18,8 @@ function rewriteWatch(req) {
   else if (/\/brain\/?$/.test(path)) req.url = path.replace(/\/brain\/?$/, '/brain.html') + qs;
   else if (/\/admin\/?$/.test(path)) req.url = path.replace(/\/admin\/?$/, '/admin.html') + qs;
   else if (/\/racehost\/?$/.test(path)) req.url = path.replace(/\/racehost\/?$/, '/arena.html') + qs;
+  else if (/\/local\/chaos\/?$/.test(path)) req.url = path.replace(/\/local\/chaos\/?$/, '/local/chaos.html') + qs;
+  else if (/\/local\/prop-studio\/?$/.test(path)) req.url = path.replace(/\/local\/prop-studio\/?$/, '/local/prop-studio.html') + qs;
 }
 const watchRoute = {
   name: 'watch-route',

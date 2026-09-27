@@ -15,6 +15,7 @@ import { allocBrainMemory, MAX_FLIES } from './brainsetup.js';
 import { parseFlyVis } from './flyvis.js';
 import { buildGroups } from './sim/groups.js';
 import { createRaceAudio } from './race-audio.js';
+import { createRaceChaos, paintChaosScorches, CHAOS_KINDS } from './race-chaos.js';
 import { matchRole, isWatchPath, isRaceHostPath, matchUrl, createMatchLink, buildMatchState, packAct, unpackAct, packEyes, unpackEyes } from './match.js';
 import {
   DEFAULT_WINDOW, chainConfigured, connectWallet, disconnectWallet, ensureWallet, restoreWallet, switchAccount, onWalletChange, getAccount, readWindow, readPools,
@@ -36,10 +37,11 @@ const isRace = presetKey === 'race' && PRESET === PRESETS.race;
 const raceRole = isRace ? (matchRole() || 'host') : null;
 const isWatch = raceRole === 'watch';
 const isHost = raceRole === 'host';
+const chaosTestMode = import.meta.env.DEV && new URLSearchParams(location.search).has('chaosTest');
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
-let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0;
+let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0, raceChaos = null, raceFloorPaintCtx = null;
 let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null, watchWingPoses = null, lastSentWingPoses = null;
 const WATCH_POSE_DELAY = 250, WATCH_POSE_EXTRAP = 120, WATCH_POSE_RING = 10;
 let betClosesAt = null, poolSnap = [], lobbyTimer = null, lastPoolRead = 0, chainSettled = false, betFlyId = null, lastLobbyKind = '', lastPoolKey = '', lastLobbyTickSec = null;
@@ -49,6 +51,7 @@ const OPEN_GRACE_MS = 25000;     // if the pool never opens (operator offline) t
 const SETTLE_GRACE_MS = 45000;   // nor does a stuck settle strand the results card forever
 const CLAIM_WINDOW_MS = 6000;    // time to see the payout / Claim once the match is settled
 let raceFollow = null, raceCamHome = null, raceCamTween = null, raceAnnounce = null, raceBrainTimer = null, raceBrainTouched = false;
+let chaosCamHold = false;
 const RACE_PLUME_TOP = 0.20, RACE_CHASE_BACK = 2.6, RACE_CHASE_Z = 1.15;
 const RACE_LABEL_Z = 1.05, RACE_LABEL_Z_CHASE = 0.28;
 const RACE_HISTORY_KEY = 'odorRaceResults';
@@ -61,6 +64,25 @@ let lastRaceFliesKey = '';
 let watchTickerUrl = null;
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
+
+function fireChaos(kind, extra) {
+  if (!raceChaos) { console.warn('[chaos] not ready'); return null; }
+  if (isHost && matchPhase === 'lobby') startRace();
+  if (chaosTestMode) raceChaos.holdRoulette?.();
+  return raceChaos.debugFire(kind, { physics: extra?.physics ?? isHost, ...extra });
+}
+
+function loadLocalChaosHarness() {
+  if (!chaosTestMode) return;
+  window.fireChaos = fireChaos;
+  window.previewChaosProp = (kind) => raceChaos?.previewProp?.(kind);
+  window.CHAOS_KINDS = CHAOS_KINDS;
+  const s = document.createElement('script');
+  s.type = 'module';
+  s.src = '/local/chaos-harness.js';
+  s.onerror = () => console.info('[chaos test] call fireChaos("lightning")  kinds:', CHAOS_KINDS.join(', '));
+  document.head.appendChild(s);
+}
 
 async function main() {
   if (isWatch) return mainWatch();
@@ -93,9 +115,14 @@ async function main() {
   $('#loading').remove();
   if (isRace) setupRaceChrome();
   await spawnPresetFlies();
-  if (isRace) { await waitRacePoses(); await showRaceStart(); }
+  if (isRace) {
+    await waitRacePoses();
+    await showRaceStart();
+    if (chaosTestMode && isHost) { startRace(); raceChaos?.holdRoulette?.(); }
+  }
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
-  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish, resetRace, startRaceFollow, stopRaceFollow, announceRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; } };
+  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish, resetRace, startRaceFollow, stopRaceFollow, announceRace, fireChaos, startRace, previewChaosProp: (kind) => raceChaos?.previewProp?.(kind), get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; }, get raceChaos() { return raceChaos; }, chaosKinds: CHAOS_KINDS };
+  loadLocalChaosHarness();
   animate();
 }
 
@@ -125,7 +152,8 @@ async function mainWatch() {
     refreshProfile();
     syncBpHint();
   }
-  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, rebuildEnv, startRaceFollow, stopRaceFollow, announceRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; } };
+  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, rebuildEnv, startRaceFollow, stopRaceFollow, announceRace, fireChaos, startRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; }, get raceChaos() { return raceChaos; }, chaosKinds: CHAOS_KINDS };
+  loadLocalChaosHarness();
   animate();
 }
 
@@ -194,6 +222,7 @@ function paintRaceFloor(fx, fs, logo, ticker) {
   if (logo) {
     const dw = fs * 0.53, dh = dw * (logo.height / logo.width);
     fx.save();
+    fx.globalAlpha = 0.5;
     fx.translate(mid, mid);
     fx.rotate(-Math.PI / 2);
     fx.drawImage(logo, -dw / 2, -dh / 2, dw, dh);
@@ -205,6 +234,7 @@ function paintRaceFloor(fx, fs, logo, ticker) {
   const dw = fs * 0.18, dh = dw * (ticker.height / ticker.width), rr = 0.82 * mid;
   fx.imageSmoothingEnabled = true;
   fx.imageSmoothingQuality = 'high';
+  fx.globalAlpha = 0.5;
   for (const a of angles) {
     fx.save();
     fx.translate(mid + rr * Math.cos(a), mid - rr * Math.sin(a));
@@ -213,6 +243,17 @@ function paintRaceFloor(fx, fs, logo, ticker) {
     fx.drawImage(ticker, -dw / 2, -dh / 2, dw, dh);
     fx.restore();
   }
+  fx.globalAlpha = 1;
+}
+function paintRaceFloorFull(fx, fs, logo, ticker) {
+  paintRaceFloor(fx, fs, logo, ticker);
+  if (isRace && raceChaos) paintChaosScorches(fx, fs, env.arena.radius, raceChaos.getScorches(), performance.now());
+}
+function repaintRaceFloor() {
+  const c = raceFloorPaintCtx;
+  if (!c) return;
+  paintRaceFloorFull(c.fx, c.fs, raceFloorLogo, raceWallLogo);
+  c.ft.needsUpdate = true;
 }
 function paintRaceWall(wx, ww, wh) {
   wx.imageSmoothingEnabled = true;
@@ -280,7 +321,7 @@ function buildScene(data) {
     document.body.appendChild(labelRenderer.domElement);
     controls.connect(labelRenderer.domElement);
   }
-  envGroup = new THREE.Group(); scene.add(envGroup); rebuildEnv();
+  envGroup = new THREE.Group(); envGroup.matrixAutoUpdate = true; scene.add(envGroup); rebuildEnv();
   batches = new ArenaBatches(scene, visual, MAX_FLIES);
   raycaster = new THREE.Raycaster();
   const clickEl = isRace ? labelRenderer.domElement : renderer.domElement;
@@ -313,12 +354,13 @@ function rebuildEnv() {
   if (isRace) {
     const fs = 1024, fc = document.createElement('canvas'); fc.width = fc.height = fs; const fx = fc.getContext('2d');
     const paintId = ++raceFloorPaint;
-    paintRaceFloor(fx, fs, raceFloorLogo, raceWallLogo);
+    paintRaceFloorFull(fx, fs, raceFloorLogo, raceWallLogo);
     const ft = new THREE.CanvasTexture(fc); ft.colorSpace = THREE.SRGBColorSpace; ft.generateMipmaps = false; ft.minFilter = THREE.LinearFilter; ft.magFilter = THREE.LinearFilter; ft.anisotropy = aniso;
     floorMat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.82 });
+    raceFloorPaintCtx = { fx, fs, ft };
     const refreshFloor = () => {
       if (paintId !== raceFloorPaint || floorMesh?.material?.map !== ft) return;
-      paintRaceFloor(fx, fs, raceFloorLogo, raceWallLogo);
+      paintRaceFloorFull(fx, fs, raceFloorLogo, raceWallLogo);
       ft.needsUpdate = true;
     };
     if (!raceFloorLogo) raceFloorLogoImg().then(img => { if (img) refreshFloor(); });
@@ -347,7 +389,10 @@ function rebuildEnv() {
   wallMesh.rotation.x = Math.PI / 2; wallMesh.position.z = env.arena.wallHeight / 2; envGroup.add(wallMesh);
   for (const o of env.obstacles) { const m = new THREE.Mesh(o.type === 'box' ? new THREE.BoxGeometry(o.sx * 2, o.sy * 2, o.sz) : new THREE.CylinderGeometry(o.r, o.r, o.sz, 32), new THREE.MeshStandardMaterial({ color: isRace ? '#6a3d86' : '#3d4a3d', roughness: 0.7 }));
     if (o.type !== 'box') m.rotation.x = Math.PI / 2; else m.rotation.z = o.yaw || 0; m.position.set(o.x, o.y, o.sz / 2); m.castShadow = m.receiveShadow = true; envGroup.add(m); }
-  for (const f of env.food) { const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y, 0.002); m.userData.food = f; envGroup.add(m); }
+  for (const f of env.food) {
+    if (f.hiddenDisc) continue;
+    const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y, 0.002); m.userData.food = f; envGroup.add(m);
+  }
   for (const b of env.bitterPatches) { const m = discMesh(b.r, '#4f8fd6', 0.9); m.position.set(b.x, b.y, 0.002); envGroup.add(m); }
   for (const h of env.hazards) { const m = discMesh(h.r, '#d9502f', 0.9); m.position.set(h.x, h.y, 0.002); envGroup.add(m); const glow = discMesh(h.r + 0.4, '#d9502f', 0.12, 0.001); glow.position.set(h.x, h.y, 0.001); envGroup.add(glow); }
   for (const o of env.odors) {
@@ -558,7 +603,27 @@ function setupRaceChrome() {
   if (capR) capR.textContent = 'Right';
   const note = $('#bpBody .note');
   if (note) note.textContent = 'What this fly sees.';
-  raceAudio = createRaceAudio(`${BASE}yipee.wav`, `${BASE}gong.wav`);
+  raceAudio = createRaceAudio(`${BASE}yipee.wav`, `${BASE}gong.wav`, {
+    boop: `${BASE}boop.wav`,
+    thunder: `${BASE}Thundersound.wav`,
+    thumb: `${BASE}thumb.wav`,
+  });
+  raceChaos = createRaceChaos({
+    THREE,
+    scene: () => scene,
+    envGroup: () => envGroup,
+    camera: () => camera,
+    controls: () => controls,
+    flies: () => flies,
+    env: () => env,
+    audio: () => raceAudio,
+    syncEnv,
+    rebuildEnv,
+    repaintFloor: repaintRaceFloor,
+    isHostLive: () => isHost && isRace && matchPhase === 'live' && running && !raceWinner,
+    onCue: () => publishMatchState(true),
+    holdFollow: on => { chaosCamHold = !!on; },
+  });
   armWatchAudio();
   document.addEventListener('visibilitychange', () => {
     raceAudio.setMuted(document.hidden);
@@ -863,6 +928,7 @@ function publishMatchState(force = false) {
     betClosesAt,
     pools: poolSnap,
     tickerUrl: tickerUrl(),
+    chaosCue: raceChaos?.getCue?.() || null,
   }));
 }
 let watchOverlayPhase = null, watchSawRest = false;
@@ -1024,6 +1090,7 @@ function applyWatchState(st) {
     watchTickerUrl = st.tickerUrl || '';
     paintRaceTicker(watchTickerUrl);
   }
+  if (st.chaosCue) raceChaos?.playCue(st.chaosCue);
   if (st.clock) {
     paintSimRate(st.phase === 'live' ? st.clock.sim : null);
     if (st.phase === 'live') {
@@ -1066,6 +1133,7 @@ function applyWatchState(st) {
     scheduleRaceBrainFold();
     playWatchBed();
   }
+  if (wasLive && st.phase !== 'live') raceChaos?.stopLive();
   if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && !raceWinner) {
     announceRace(`${st.winner.name} wins!`, st.winner.color);
     raceAudio?.setMotion({ flying: false, walk: 0 });
@@ -1132,6 +1200,7 @@ function announceRace(text, color) {
   span.classList.remove('pop');
   void span.offsetWidth;
   span.classList.add('pop');
+  if (/\bdied!/.test(text)) raceChaos?.hideToast?.();
   if (text === 'GO!') raceAudio?.playGong();
 }
 const announceNdc = new THREE.Vector3();
@@ -1738,6 +1807,7 @@ function startRace() {
   for (const f of flies) f.worker?.postMessage({ type: 'run' });
   announceRace('GO!');
   scheduleRaceBrainFold();
+  raceChaos?.arm();
   publishMatchState(true);
 }
 function announceRaceWinner(f, why) {
@@ -1756,6 +1826,7 @@ function announceRaceWinner(f, why) {
   raceAudio?.playBed('menu');
   raceAudio?.playYipee();
   announceRace(`${f.name} wins!`, f.color);
+  raceChaos?.stopLive();
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   const card = $('#raceCard');
   const note = why === 'last' ? 'last remaining' : why === 'died' ? 'last to die' : '';
@@ -1799,6 +1870,7 @@ async function resetRace() {
   clearInterval(raceResetTimer); raceResetTimer = null;
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   running = false; raceWinner = null; raceWinnerWhy = null; raceStartWall = null;
+  raceChaos?.reset();
   const clock = $('#raceClock'); if (clock) clock.hidden = true;
   if (raceAnnounce) { raceAnnounce.element.querySelector('.race-announce-text')?.classList.remove('pop'); }
   setRaceBrainFolded(raceMobile(), { instant: true });
@@ -1806,11 +1878,14 @@ async function resetRace() {
   flies.length = 0; nextId = 0; selected = 0;
   snapRaceOverview();
   if (env.food[0]) env.food[0].amount = 8;
+  if (env.food.length > 1) env.food.length = 1;
+  if (env.odors) env.odors = env.odors.filter(o => !o.chaosCake);
   env.threat = null;
   rebuildEnv();
   await spawnPresetFlies();
   await waitRacePoses();
   await showRaceStart();
+  if (chaosTestMode && isHost) { startRace(); raceChaos?.holdRoulette?.(); }
   raceResetting = false;
 }
 function easeOutBack(t, s = 1.7) { const u = t - 1; return u * u * ((s + 1) * u + s) + 1; }
@@ -1854,7 +1929,7 @@ function snapRaceOverview() {
   controls.target.copy(raceCamHome.target);
 }
 function tickRaceCamera(dt) {
-  if (!isRace) return;
+  if (!isRace || chaosCamHold) return;
   if (raceCamTween) {
     raceCamTween.t = Math.min(1, raceCamTween.t + dt / raceCamTween.dur);
     const k = raceCamTween.mode === 'in' ? easeOutBack(raceCamTween.t) : easeInBack(raceCamTween.t);
@@ -2101,6 +2176,7 @@ function animate() {
   const sf = flies.find(x => x.id === selected);
   if (!isRace && sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   tickRaceCamera(dt);
+  if (isRace) raceChaos?.tick(dt);
   if (isRace) {
     for (const f of flies) {
       const p = flyDrawPos(f);
@@ -2113,7 +2189,7 @@ function animate() {
     raceAudio.setMotion({ flying: !!s?.flying, walk: s?.flying ? 0 : Math.abs(s?.cmd?.v || 0) });
   }
   if (sf?.last) { const t = sf.last.t / 1000; $('#simt').textContent = t.toFixed(2); if (now - lastSimReal > 1000) { $('#rt').textContent = ((t - lastSim) / ((now - lastSimReal) / 1000)).toFixed(2); lastSim = t; lastSimReal = now; } }
-  updateThreat(); controls.update();
+  updateThreat(); if (!chaosCamHold) controls.update();
   camera.position.z = Math.max(camera.position.z, 0.02);
   camera.updateMatrixWorld();
   pinRaceAnnounce();

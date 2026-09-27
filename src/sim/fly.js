@@ -13,6 +13,32 @@ import { createBrain } from '../brainmodel.js';
 
 const Rt9 = (xm, b) => [xm[b * 9], xm[b * 9 + 3], xm[b * 9 + 6]];   // body x axis (heading) in world frame
 
+function quatMul(a, b) {
+  return [
+    a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+    a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+    a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+    a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0],
+  ];
+}
+function quatRotate(qw, qx, qy, qz, v) {
+  const tx = 2 * (qy * v[2] - qz * v[1]);
+  const ty = 2 * (qz * v[0] - qx * v[2]);
+  const tz = 2 * (qx * v[1] - qy * v[0]);
+  return [
+    v[0] + qw * tx + qy * tz - qz * ty,
+    v[1] + qw * ty + qz * tx - qx * tz,
+    v[2] + qw * tz + qx * ty - qy * tx,
+  ];
+}
+function dishNormal(qw, qx, qy, qz) {
+  return [
+    2 * (qx * qz + qw * qy),
+    2 * (qy * qz - qw * qx),
+    1 - 2 * (qx * qx + qy * qy),
+  ];
+}
+
 export class FlyAgent {
   constructor({ mj, flyXML, env, data, size, sign, bodymap, gait, id = 0, pos = [0, 0], yaw = 0, nProxies = 0, mode = 'descending', brainOpts = {}, vision = true, brain = null, flyvis = null, intrinsic = true, seed = 0, neuromod = null, sex = 'm' }) {
     this.id = id; this.mj = mj; this.env = env; this.data = data; this.vision = vision; this.sex = sex;
@@ -57,6 +83,88 @@ export class FlyAgent {
     this.takeoffPending = false;
     this.tDrop = -1e9;
     this.tTopNudge = -1e9;
+    this.chaosPin = false;
+    this.chaosSpin = false;
+    this.chaosSpinWz = 0;
+    this.chaosSpinLeft = 0;
+    this.chaosLoose = false;
+    this.chaosBias = [0, 0];
+    this.dishMocap = -1;
+    this.dishPose = { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 };
+    try { this.dishMocap = M.body_mocapid[M.body('arena').id]; } catch { this.dishMocap = -1; }
+  }
+  releaseClaws() {
+    const act = this.motor.act, d = this.mjd;
+    for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
+  }
+  applyChaos(m) {
+    const d = this.mjd;
+    const op = m.op;
+    if (op === 'pin') { this.chaosPin = m.on !== false; if (this.chaosPin && this.flight.active) this.flight.end(); return; }
+    if (op === 'spin') {
+      this.chaosSpin = m.on !== false;
+      this.chaosSpinWz = m.wz || 28;
+      this.chaosSpinLeft = (m.turns || 3.5) * Math.PI * 2;
+      if (this.chaosSpin) {
+        this.releaseClaws();
+        if (this.flight.active) this.flight.end();
+        d.qvel[2] += m.vz || 6;
+        d.qvel[5] = this.chaosSpinWz;
+      } else {
+        this.chaosSpinLeft = 0;
+      }
+      return;
+    }
+    if (op === 'loose') { this.chaosLoose = m.on !== false; if (this.chaosLoose) this.releaseClaws(); return; }
+    if (op === 'ground') { if (this.flight.active) this.flight.end(); return; }
+    if (op === 'dish') {
+      const id = this.dishMocap;
+      if (id == null || id < 0) return;
+      const nx = m.x || 0, ny = m.y || 0, nz = m.z || 0;
+      const nqw = m.qw ?? 1, nqx = m.qx || 0, nqy = m.qy || 0, nqz = m.qz || 0;
+      const o = this.dishPose;
+      const local = quatRotate(o.qw, -o.qx, -o.qy, -o.qz, [d.qpos[0] - o.x, d.qpos[1] - o.y, d.qpos[2] - o.z]);
+      const world = quatRotate(nqw, nqx, nqy, nqz, local);
+      d.qpos[0] = nx + world[0];
+      d.qpos[1] = ny + world[1];
+      d.qpos[2] = nz + world[2];
+      const delta = quatMul([nqw, nqx, nqy, nqz], [o.qw, -o.qx, -o.qy, -o.qz]);
+      const fq = quatMul(delta, [d.qpos[3], d.qpos[4], d.qpos[5], d.qpos[6]]);
+      d.qpos[3] = fq[0]; d.qpos[4] = fq[1]; d.qpos[5] = fq[2]; d.qpos[6] = fq[3];
+      const v = quatRotate(nqw, nqx, nqy, nqz, quatRotate(o.qw, -o.qx, -o.qy, -o.qz, [d.qvel[0], d.qvel[1], d.qvel[2]]));
+      d.qvel[0] = v[0]; d.qvel[1] = v[1]; d.qvel[2] = v[2];
+      const N = dishNormal(nqw, nqx, nqy, nqz);
+      const vn = d.qvel[0] * N[0] + d.qvel[1] * N[1] + d.qvel[2] * N[2];
+      if (vn < 0) { d.qvel[0] -= vn * N[0]; d.qvel[1] -= vn * N[1]; d.qvel[2] -= vn * N[2]; }
+      d.mocap_pos[id * 3] = nx;
+      d.mocap_pos[id * 3 + 1] = ny;
+      d.mocap_pos[id * 3 + 2] = nz;
+      d.mocap_quat[id * 4] = nqw;
+      d.mocap_quat[id * 4 + 1] = nqx;
+      d.mocap_quat[id * 4 + 2] = nqy;
+      d.mocap_quat[id * 4 + 3] = nqz;
+      this.dishPose = { x: nx, y: ny, z: nz, qw: nqw, qx: nqx, qy: nqy, qz: nqz };
+      return;
+    }
+    if (op === 'bias') {
+      this.chaosBias = [m.ax || 0, m.ay || 0];
+      return;
+    }
+    if (op === 'kill') {
+      this.alive = false;
+      this.health = 0;
+      return;
+    }
+    if (op === 'impulse' || op === 'flip') {
+      this.releaseClaws();
+      if (this.flight.active) this.flight.end();
+      d.qvel[0] += m.vx || 0;
+      d.qvel[1] += m.vy || 0;
+      d.qvel[2] += m.vz || 0;
+      d.qvel[3] += m.wx || 0;
+      d.qvel[4] += m.wy || 0;
+      d.qvel[5] += m.wz || 0;
+    }
   }
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
   state() {
@@ -173,10 +281,23 @@ export class FlyAgent {
     if (this.motor.pivot) this.lastPivot = this.t;
     const gated = this.t - (this.lastTouch ?? -1e9) < 500 || this.t - (this.lastPivot ?? -1e9) < 300;
     this.motor.flying = this.flight.active;
+    const pinned = this.chaosPin;
+    const spinning = this.chaosSpin;
     this.cmd = this.motor.apply(this.t, 1, { up: this.mjd.xmat[this.bid.thorax * 9 + 8], touching: gated, voluntary: this.takeoffPending || (this.intrinsic && this.t < this.intrinsic.takeoffUntil),
       court: this.intrinsic?.state === 'court' ? { sing: !!this.intrinsic.courtSing, side: this.intrinsic.courtSide } : null,
-      contact: st.bodyContact.left || st.bodyContact.right || st.antTouch.left || st.antTouch.right });   // no takeoff while pressed against something
-    // takeoff: once the jump has pushed off, the wings start (tarsal reflex); an escape banks away from the threat
+      contact: st.bodyContact.left || st.bodyContact.right || st.antTouch.left || st.antTouch.right,
+      pin: pinned || spinning,
+      loose: this.chaosLoose || spinning });
+    if (pinned) {
+      this.cmd.v = 0; this.cmd.turn = 0;
+      d.qvel[0] = 0; d.qvel[1] = 0;
+      if (d.qvel[2] > 0) d.qvel[2] = 0;
+    }
+    if (spinning) {
+      d.qvel[5] = this.chaosSpinWz;
+      this.chaosSpinLeft -= Math.abs(this.chaosSpinWz) * 0.001;
+      if (this.chaosSpinLeft <= 0) { this.chaosSpin = false; this.chaosSpinLeft = 0; }
+    }
     if (this.motor.launchT === this.t && !this.flight.active) {
       const th = this.env.threat; this.flight.start(this.t, { cause: this.motor.jumpCause, awayFrom: th ? [th.x, th.y] : null }); this.flights++; this.takeoffPending = false;
     }
@@ -186,18 +307,45 @@ export class FlyAgent {
       this.cmd.flying = this.flight.active; this.cmd.flight = this.flight.label();
     }
     if (!this.flight.active && st.pos[2] >= 0.22) {
-      const act = this.motor.act, d = this.mjd;
-      for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
+      this.releaseClaws();
     }
     this.dropUprightIfNeeded();
     this.nudgeOffMazeTop();
     const dtSub = 1000 * M.opt.timestep;
-    for (let s = 0; s < this.physPerMs; s++) { if (this.flight.active) this.flight.substep(dtSub); mj.mj_step(M, d); }
+    const [bx, by] = this.chaosBias;
+    for (let s = 0; s < this.physPerMs; s++) {
+      if (bx || by) { d.qvel[0] += bx * M.opt.timestep; d.qvel[1] += by * M.opt.timestep; }
+      if (spinning && this.chaosSpin) d.qvel[5] = this.chaosSpinWz;
+      if (this.flight.active) this.flight.substep(dtSub);
+      mj.mj_step(M, d);
+    }
+    this.guardDish();
     this.t += 1;
     this.physiology(st);
   }
+  guardDish() {
+    const id = this.dishMocap;
+    if (id == null || id < 0) return;
+    const d = this.mjd;
+    const o = id * 3, q = id * 4;
+    const px = d.mocap_pos[o], py = d.mocap_pos[o + 1], pz = d.mocap_pos[o + 2];
+    const qw = d.mocap_quat[q], qx = d.mocap_quat[q + 1], qy = d.mocap_quat[q + 2], qz = d.mocap_quat[q + 3];
+    const nx = 2 * (qx * qz + qw * qy);
+    const ny = 2 * (qy * qz - qw * qx);
+    const nz = 1 - 2 * (qx * qx + qy * qy);
+    const dist = (d.qpos[0] - px) * nx + (d.qpos[1] - py) * ny + (d.qpos[2] - pz) * nz;
+    if (dist >= 0) return;
+    const push = -dist;
+    d.qpos[0] += nx * push;
+    d.qpos[1] += ny * push;
+    d.qpos[2] += nz * push;
+    const vn = d.qvel[0] * nx + d.qvel[1] * ny + d.qvel[2] * nz;
+    if (vn < 0) { d.qvel[0] -= vn * nx; d.qvel[1] -= vn * ny; d.qvel[2] -= vn * nz; }
+  }
   dropUprightIfNeeded() {
-    if (this.flight.active || this.motor.jumping) return;
+    if (this.flight.active || this.motor.jumping || this.chaosSpin || this.chaosPin) return;
+    const dq = this.dishPose;
+    if (dq && dq.qx * dq.qx + dq.qy * dq.qy > 0.01) return;
     if (this.t - this.tDrop < 400) return;
     if ((this.motor.invertedMs || 0) <= 150) return;
     const d = this.mjd, th = this.bid.thorax;

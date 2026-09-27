@@ -44,6 +44,7 @@ onmessage = async (e) => {
   else if (m.type === 'mode') fly.motor.mode = m.mode;
   else if (m.type === 'stimulate') fly.brain.setDrive(m.indices, m.rate);
   else if (m.type === 'takeoff') { fly.requestTakeoff(); postPose(); }
+  else if (m.type === 'chaos') { if (fly) { fly.applyChaos(m); if (m.op === 'kill' || m.op === 'impulse' || m.op === 'flip' || m.op === 'spin') postPose(); } }
   else if (m.type === 'activity') {
     const eyes = fly.fv ? fly.fv.lumEye.map(e => e.slice(0)) : null;
     const groups = meter.read(fly.brain.spikeCount, fly.t);

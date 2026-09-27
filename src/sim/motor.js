@@ -77,7 +77,8 @@ export class Motor {
     const net = fwd - 2 * back;
     // backward walking (MDN) is slow in real flies, ~1 cm/s, a third of top forward speed
     const sat = x => 1 - Math.exp(-x / R0.fwdScale);   // speed saturates smoothly with DN drive
-    const v = grooming ? 0 : (net > R0.fwdThreshold ? sat(net - R0.fwdThreshold) : back > R0.fwdThreshold ? -R0.backMax * sat(back - R0.fwdThreshold) : 0);
+    const v0 = grooming ? 0 : (net > R0.fwdThreshold ? sat(net - R0.fwdThreshold) : back > R0.fwdThreshold ? -R0.backMax * sat(back - R0.fwdThreshold) : 0);
+    const v = extra.pin ? 0 : v0;
     this.turnF = (this.turnF || 0) + dtMs / (this.flying ? R0.flightTurnTau : R0.turnTau) * (turn - (this.turnF || 0));   // flight steering is faster
     // slow adaptation removes standing left/right imbalances of the steering DNs (the model's DNa02 and P9
     // pairs receive unequal tonic input), keeping transient asymmetries: saccades, plumes, objects
@@ -85,7 +86,7 @@ export class Motor {
     // courtship circuit readout: pIP10 and DNp13 sit downstream of the pheromone pathways (2 hops from the
     // cVA and tarsal pheromone receptors); both roughly double their rate near another fly
     const court = Math.max(0, Math.min(1, 0.5 * Math.max(0, this.wmean(this.dn.courtP) - R0.courtPBase) / R0.courtPScale + 0.5 * Math.max(0, this.wmean(this.dn.courtDN) - R0.courtDNBase) / R0.courtDNScale));
-    this.cmd = { v, turn: Math.max(-0.6, Math.min(0.6, (this.turnF - this.turnBase) / R0.turnScale)), drive: fwd, back, groom, grooming, escape: this.mean(this.dn.escape), takeoff: this.wmean(this.dn.takeoff), court };
+    this.cmd = { v: extra.pin ? 0 : v, turn: extra.pin ? 0 : Math.max(-0.6, Math.min(0.6, (this.turnF - this.turnBase) / R0.turnScale)), drive: fwd, back, groom, grooming, escape: this.mean(this.dn.escape), takeoff: this.wmean(this.dn.takeoff), court };
     if (this.mode === 'connectome') {
       for (const leg of LEGS) for (const sd of SIDES) {
         for (const j of ['coxa', 'coxa_abduct', 'coxa_twist', 'femur', 'femur_twist', 'tibia', 'tarsus', 'tarsus2']) set(`${j}_${leg}_${sd}`, muscleCtrl(`${j}_${leg}_${sd}`));
@@ -139,7 +140,7 @@ export class Motor {
     const loomTakeoff = to > READOUT.takeoffThreshold && to > READOUT.takeoffRatio * this.toSlow;
     // an inverted fly cannot jump; nor does one whose antennae are on the object filling its view (a wall it
     // walked into looms on the eye, but touch says it is not an approaching predator)
-    const canJump = (extra.up ?? 1) > 0.5 && !this.righting && !(this.recoverUntil > tMs) && !this.flying && (!extra.touching || (extra.voluntary && !extra.contact));
+    const canJump = !extra.pin && (extra.up ?? 1) > 0.5 && !this.righting && !(this.recoverUntil > tMs) && !this.flying && (!extra.touching || (extra.voluntary && !extra.contact));
     if ((this.gfSpike || loomTakeoff || extra.voluntary) && canJump && this.jumpT < 0 && tMs > READOUT.startupMs) { this.jumpT = tMs; this.launchT = -1; this.jumpCause = this.gfSpike ? 'GF burst' : loomTakeoff ? `takeoff DNs ${to.toFixed(0)}Hz (baseline ${this.toSlow.toFixed(0)})` : 'voluntary'; if (globalThis.LOG_JUMPS) console.log(`jump at ${tMs} ms: ${this.jumpCause}, up ${(extra.up ?? 1).toFixed(2)}`); }
     if (this.jumpT >= 0) {
       // jump program (tested in scripts/jump_test.py): TTM drives both middle legs to full extension for 20 ms,
@@ -164,6 +165,7 @@ export class Motor {
     if (this.recoverUntil > tMs) for (const leg of LEGS) for (const sd of SIDES) {   // settle in a standing posture after a drop
       for (const j of ['coxa', 'coxa_abduct', 'coxa_twist', 'femur', 'femur_twist', 'tibia', 'tarsus', 'tarsus2']) set(`${j}_${leg}_${sd}`, 0);
       set(`adhere_claw_${leg}_${sd}`, 0.8); }
+    if (extra.loose) for (const leg of LEGS) for (const sd of SIDES) set(`adhere_claw_${leg}_${sd}`, 0);
     return this.cmd;
   }
   feeding() { return 1 - Math.exp(-this.mean(this.feedingIdx) * Math.LN2 / READOUT.muscleHalf); }
