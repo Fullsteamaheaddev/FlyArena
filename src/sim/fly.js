@@ -97,6 +97,21 @@ export class FlyAgent {
     const act = this.motor.act, d = this.mjd;
     for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
   }
+  dieKnockover() {
+    if (!this.alive) return;
+    const d = this.mjd;
+    this.releaseClaws();
+    if (this.flight.active) this.flight.end();
+    this.chaosPin = false;
+    this.chaosSpin = false;
+    this.chaosSpinLeft = 0;
+    this.chaosBias = [0, 0];
+    d.qvel[2] += 6;
+    d.qvel[4] += (Math.random() > 0.5 ? 1 : -1) * (26 + Math.random() * 8);
+    this.health = 0;
+    this.alive = false;
+    this.ragdollMs = 380;
+  }
   applyChaos(m) {
     const d = this.mjd;
     const op = m.op;
@@ -151,8 +166,7 @@ export class FlyAgent {
       return;
     }
     if (op === 'kill') {
-      this.alive = false;
-      this.health = 0;
+      this.dieKnockover();
       return;
     }
     if (op === 'impulse' || op === 'flip') {
@@ -220,8 +234,17 @@ export class FlyAgent {
   };
   /** advance 1 ms of simulated time */
   step() {
-    if (!this.alive) return;
     const mj = this.mj, M = this.model, d = this.mjd;
+    if (!this.alive) {
+      if (this.ragdollMs > 0) {
+        this.ragdollMs -= 1;
+        const act = this.motor.act;
+        for (const name of Object.keys(act)) d.ctrl[act[name]] = 0;
+        for (let s = 0; s < this.physPerMs; s++) mj.mj_step(M, d);
+        this.t += 1;
+      }
+      return;
+    }
     const th = this.env.threat, tm = this.threatMocap * 3;
     if (th) { d.mocap_pos[tm] = th.x; d.mocap_pos[tm + 1] = th.y; d.mocap_pos[tm + 2] = th.z; } else if (d.mocap_pos[tm + 2] > -10) d.mocap_pos[tm + 2] = -20;
     const st = this.state();
@@ -411,7 +434,7 @@ export class FlyAgent {
     if (st.heat > 0.5) this.health -= dt * 0.5 * st.heat;
     if (this.energy <= 0) { this.energy = 0; this.health -= dt * 0.2; }
     this.energy = Math.min(1, this.energy);
-    if (this.health <= 0 && this.alive) { this.alive = false; this.health = 0; }
+    if (this.health <= 0 && this.alive) this.dieKnockover();
   }
   behavior(st) {
     const c = this.cmd || {}; const m = this.motor;

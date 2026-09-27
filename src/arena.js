@@ -520,6 +520,11 @@ function removeFly(f) {
   f.ring.geometry.dispose(); f.ring.material.dispose();
   if (f.glow) { f.glow.removeFromParent(); f.glow.material.map?.dispose(); f.glow.material.dispose(); }
   if (f.label) { scene.remove(f.label); f.label.element.remove(); }
+  if (f.deathFx) {
+    scene.remove(f.deathFx.sprite);
+    f.deathFx.sprite.material.dispose();
+    f.deathFx = null;
+  }
 }
 function onWorker(f, m) {
   if (m.type === 'ready') {
@@ -607,6 +612,8 @@ function setupRaceChrome() {
     boop: `${BASE}boop.wav`,
     thunder: `${BASE}Thundersound.wav`,
     thumb: `${BASE}thumb.wav`,
+    splatter1: `${BASE}splatter1.wav`,
+    splatter2: `${BASE}splatter2.wav`,
   });
   raceChaos = createRaceChaos({
     THREE,
@@ -1110,7 +1117,7 @@ function applyWatchState(st) {
     else if (f && (f.name !== row.name || f.color !== row.color)) applyWatchFlyIdent(f, row);
     if (f) ensureWingBlur(f);
     if (!f) continue;
-    if (f.last && f.last.alive !== false && row.alive === false && !st.winner) raceAudio?.playOof();
+    if (f.last && f.last.alive !== false && row.alive === false) onFlyDeath(f, { winnerKnown: !!st.winner });
     f.prev = f.last; f.last = row;
     cueSelectedTakeoff(f);
     const received = performance.now();
@@ -1844,12 +1851,49 @@ function announceRaceWinner(f, why) {
     resetRace();
   }, 1000);
 }
-function checkRaceFinish(f) {
-  if (!running || raceWinner || raceResetting) return;
-  if (f?.last?.alive === false && !f.diedAt) {
-    f.diedAt = performance.now();
-    if (!raceWinner) { raceAudio?.playOof(); announceRace(`${f.name} died!`, f.color); }
+let deadFlyMap = null;
+function ensureDeadFlyMap() {
+  if (deadFlyMap) return deadFlyMap;
+  deadFlyMap = new THREE.TextureLoader().load(`${BASE}deadfly.webp`);
+  deadFlyMap.colorSpace = THREE.SRGBColorSpace;
+  return deadFlyMap;
+}
+function easeOutCubic(t) { return 1 - (1 - t) ** 3; }
+function spawnDeadFlySprite(f) {
+  if (!isRace || f.deathFx) return;
+  const mat = new THREE.SpriteMaterial({ map: ensureDeadFlyMap(), transparent: true, depthWrite: false, opacity: 0 });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.setScalar(0.35);
+  scene.add(sprite);
+  const p = f.last?.pos || [0, 0, 0.13];
+  sprite.position.set(p[0], p[1], p[2] - 0.12);
+  f.deathFx = { sprite, t0: performance.now(), riseDur: 550, hoverZ: 0.28 };
+}
+function updateDeadFlySprites(now) {
+  for (const f of flies) {
+    const fx = f.deathFx;
+    if (!fx) continue;
+    const anchor = flyDrawPos(f) || f.last?.pos;
+    if (!anchor) continue;
+    const u = Math.min(1, (now - fx.t0) / fx.riseDur);
+    const ease = easeOutCubic(u);
+    fx.sprite.position.set(anchor[0], anchor[1], anchor[2] - 0.12 + (fx.hoverZ + 0.12) * ease);
+    fx.sprite.material.opacity = 0.95 * ease;
+    fx.sprite.quaternion.copy(camera.quaternion);
   }
+}
+function onFlyDeath(f, { winnerKnown = false } = {}) {
+  if (!isRace || !f || f.diedAt) return;
+  f.diedAt = performance.now();
+  if (!winnerKnown) raceAudio?.playOof();
+  if (!isWatch && !raceWinner) announceRace(`${f.name} died!`, f.color);
+  spawnDeadFlySprite(f);
+}
+function checkRaceFinish(f) {
+  if (f?.last?.alive === false && !f.diedAt && isRace && running && !raceResetting) {
+    onFlyDeath(f, { winnerKnown: !!raceWinner });
+  }
+  if (!running || raceWinner || raceResetting) return;
   const food = env.food[0], p = f?.last?.pos;
   if (food && p && f.last.alive !== false && !f.last.flying && p[2] < 0.22
       && Math.hypot(p[0] - food.x, p[1] - food.y) < food.r) {
@@ -2176,6 +2220,7 @@ function animate() {
   const sf = flies.find(x => x.id === selected);
   if (!isRace && sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   tickRaceCamera(dt);
+  if (isRace) updateDeadFlySprites(now);
   if (isRace) raceChaos?.tick(dt);
   if (isRace) {
     for (const f of flies) {

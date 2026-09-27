@@ -22,6 +22,13 @@ function liveFlies(flies) {
 }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function randRange(a, b) { return a + Math.random() * (b - a); }
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 function worldToFloor(x, y, R, fs) {
   const mid = fs / 2;
   return [mid + (x / R) * mid, mid - (y / R) * mid];
@@ -968,7 +975,7 @@ export function createRaceChaos(api) {
     let [x, y] = randomInDish();
     let extra = [];
     if (kind === 'crumb') {
-      const pts = cakeDropPoints(CAKE_SLICE_COUNT);
+      const pts = shuffle(cakeDropPoints(CAKE_SLICE_COUNT));
       x = pts[0].x;
       y = pts[0].y;
       extra = pts.slice(1);

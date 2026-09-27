@@ -3,7 +3,9 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   const boopUrl = extraUrls.boop;
   const thunderUrl = extraUrls.thunder;
   const thumbUrl = extraUrls.thumb;
-  let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf, boopBuf, thunderBuf, thumbBuf;
+  const splatter1Url = extraUrls.splatter1;
+  const splatter2Url = extraUrls.splatter2;
+  let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf, boopBuf, thunderBuf, thumbBuf, splatter1Buf, splatter2Buf;
   let currentBed = null, lastStep = 0, muted = false, keepOsc = null;
 
   async function unlock() {
@@ -48,6 +50,18 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
         const raw = await (await fetch(thumbUrl)).arrayBuffer();
         thumbBuf = await ctx.decodeAudioData(raw.slice(0));
       } catch { thumbBuf = null; }
+    }
+    if (splatter1Url && !splatter1Buf) {
+      try {
+        const raw = await (await fetch(splatter1Url)).arrayBuffer();
+        splatter1Buf = await ctx.decodeAudioData(raw.slice(0));
+      } catch { splatter1Buf = null; }
+    }
+    if (splatter2Url && !splatter2Buf) {
+      try {
+        const raw = await (await fetch(splatter2Url)).arrayBuffer();
+        splatter2Buf = await ctx.decodeAudioData(raw.slice(0));
+      } catch { splatter2Buf = null; }
     }
   }
   function startBuzz() {
@@ -373,9 +387,21 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     cg.gain.setValueAtTime(0.2, t0 + 0.008); cg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32);
     cream.connect(lp); lp.connect(cg); cg.connect(master); cream.start(t0 + 0.008);
   }
+  function playSplatterBuffer(buf) {
+    if (!buf || !ctx || ctx.state !== 'running' || muted) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = 0.62;
+    src.connect(g);
+    g.connect(master);
+    src.start();
+  }
   function playCakeLand() {
     if (!ctx || ctx.state !== 'running' || muted) return;
-    sfxCakeSmoosh(ctx.currentTime);
+    const t0 = ctx.currentTime;
+    sfxCakeSmoosh(t0);
+    playSplatterBuffer(Math.random() < 0.5 ? splatter1Buf : splatter2Buf);
   }
   function sfxCrumb(t0) {
     for (let i = 0; i < 3; i++) {
