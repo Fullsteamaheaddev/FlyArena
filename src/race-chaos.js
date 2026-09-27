@@ -699,16 +699,17 @@ export function createRaceChaos(api) {
     const protos = LEAF_COLORS.map(c => makeLeaf(T, c));
     for (let i = 0; i < n; i++) {
       const a = randRange(0, Math.PI * 2);
+      const r0 = R * randRange(0.06, 0.18);
       const s = protos[i % protos.length].clone();
       s.traverse(o => { if (o.material) o.material = o.material.clone(); });
       s.scale.setScalar(0.45);
-      s.position.set(R * Math.cos(a), R * Math.sin(a), 0.52);
+      s.position.set(r0 * Math.cos(a), r0 * Math.sin(a), 0.52);
       root.add(s);
-      bits.push({ s, a, speed: randRange(1.3, 2.6), spin: randRange(-8, 8), tumble: randRange(-6, 6) });
+      bits.push({ s, a, r0, speed: randRange(1.3, 2.6), spin: randRange(-8, 8), tumble: randRange(-6, 6) });
     }
     tween(5000, u => {
       for (const b of bits) {
-        const r = R * (1 - u * 0.85);
+        const r = b.r0 + u * (R * 0.88 - b.r0);
         b.s.position.set(r * Math.cos(b.a + u * b.speed), r * Math.sin(b.a + u * b.speed), 0.4 + 0.3 * Math.sin(u * 9 + b.speed));
         b.s.rotation.set(u * b.tumble, u * b.spin * 0.5, u * b.spin);
         fadeGroup(b.s, 0.95 * (1 - u));
@@ -960,9 +961,21 @@ export function createRaceChaos(api) {
         const env = api.env();
         savedWind = env.wind ? [...env.wind] : [0, 0];
         savedRadial = env.windRadial ?? 0;
-        env.windRadial = (savedRadial || 0) + 3;
+        const PUFF_RADIAL = 14;
+        const PUFF_BIAS = 85;
+        env.windRadial = (savedRadial || 0) - PUFF_RADIAL;
+        for (const f of liveFlies(flies())) {
+          const p = f.last?.pos;
+          if (!p) continue;
+          const rad = Math.hypot(p[0], p[1]);
+          if (rad < 0.05) continue;
+          post(f, { op: 'bias', ax: (p[0] / rad) * PUFF_BIAS, ay: (p[1] / rad) * PUFF_BIAS });
+        }
         api.syncEnv?.();
-        later(5000, restoreWind);
+        later(5000, () => {
+          restoreWind();
+          postEvery({ op: 'bias', ax: 0, ay: 0 });
+        });
       }
     }
   }
