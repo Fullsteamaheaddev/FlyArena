@@ -1087,38 +1087,43 @@ export function createRaceChaos(api) {
     busyUntil = 0;
   }
 
-  function reset() {
-    lastKind = null; nextAt = 0; busyUntil = 0; startedAt = 0;
-    cue = null;
-    scorches = [];
+  function disposeAllFx() {
     tweens = [];
+    shakes = [];
+    scorches = [];
+    busyUntil = 0;
+    dishAnim = null;
+    hideToast();
     cancelCam();
     restoreWind();
     clearCakeDespawns();
     stripCake();
+    resetEnvPose();
+    if (previewMesh) { disposeObj(previewMesh); previewMesh = null; }
+    if (fxRoot) {
+      while (fxRoot.children.length) disposeObj(fxRoot.children[0]);
+    }
+  }
+
+  function reset() {
+    disposeAllFx();
+    lastKind = null;
+    nextAt = 0;
+    startedAt = 0;
+    cue = null;
     postEvery({ op: 'pin', on: false });
     postEvery({ op: 'spin', on: false });
     postEvery({ op: 'loose', on: false });
     postEvery({ op: 'bias', ax: 0, ay: 0 });
-    resetEnvPose();
-    hideToast();
-    if (fxRoot) {
-      while (fxRoot.children.length) disposeObj(fxRoot.children[0]);
-    }
     api.repaintFloor?.();
   }
 
   function stopLive() {
-    tweens = [];
-    restoreWind();
-    stripCake();
-    hideToast();
-    cancelCam();
+    disposeAllFx();
     postEvery({ op: 'pin', on: false });
     postEvery({ op: 'spin', on: false });
     postEvery({ op: 'loose', on: false });
     postEvery({ op: 'bias', ax: 0, ay: 0 });
-    resetEnvPose();
     nextAt = Infinity;
   }
 

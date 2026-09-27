@@ -1141,6 +1141,7 @@ function applyWatchState(st) {
     playWatchBed();
   }
   if (wasLive && st.phase !== 'live') raceChaos?.stopLive();
+  if (isWatch && isRace && st.phase === 'lobby') raceChaos?.reset();
   if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && !raceWinner) {
     announceRace(`${st.winner.name} wins!`, st.winner.color);
     raceAudio?.setMotion({ flying: false, walk: 0 });
@@ -1778,6 +1779,7 @@ async function showRaceStart() {
   publishMatchState(true);
   if (isHost && chainConfigured()) openHostRace().catch(e => console.warn('openRace', e));
   refreshPoolSnap().then(() => paintLobbyOverlay());
+  raceChaos?.reset();
 }
 function formatWall(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -1833,7 +1835,7 @@ function announceRaceWinner(f, why) {
   raceAudio?.playBed('menu');
   raceAudio?.playYipee();
   announceRace(`${f.name} wins!`, f.color);
-  raceChaos?.stopLive();
+  raceChaos?.reset();
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   const card = $('#raceCard');
   const note = why === 'last' ? 'last remaining' : why === 'died' ? 'last to die' : '';
