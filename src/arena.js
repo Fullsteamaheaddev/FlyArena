@@ -53,7 +53,11 @@ const CLAIM_WINDOW_MS = 6000;    // time to see the payout / Claim once the matc
 let raceFollow = null, raceCamHome = null, raceCamTween = null, raceAnnounce = null, raceBrainTimer = null, raceBrainTouched = false;
 let chaosCamHold = false;
 const RACE_PLUME_TOP = 0.20, RACE_CHASE_BACK = 2.6, RACE_CHASE_Z = 1.15;
+const ARENA_FLOOR_DECAL_Z = 0.01;
+const FLOOR_DECAL_POLYGON_OFFSET = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
 const RACE_LABEL_Z = 1.05, RACE_LABEL_Z_CHASE = 0.28;
+const DEAD_FLY_SCALE_START = 0.1, DEAD_FLY_SCALE_END = 0.3, DEAD_FLY_OVERVIEW_MUL = 1.875, DEAD_FLY_CHASE_SCREEN_MUL = 2, DEAD_FLY_BELOW_LABEL = 0.62, DEAD_FLY_BELOW_LABEL_CHASE = 0.11, DEAD_FLY_CENTER_Y = 0.08, DEAD_FLY_OVERVIEW_Z_LIFT = 0.07, DEAD_FLY_Z_LIFT_PER_SCALE = 0.22, DEAD_FLY_RISE_DUR = 550;
+const DEAD_FLY_BLINK_MS = 1000, DEAD_FLY_BLINK_OP_MIN = 0.35, DEAD_FLY_BLINK_SCALE_MIN = 0.92; // keep in sync with bpHintBlink in arena.css
 const RACE_HISTORY_KEY = 'odorRaceResults';
 const RACE_FLIES_KEY = 'odorRaceFlies';
 const ENTER_GATE_KEY = 'fruitFlyEntered';
@@ -72,15 +76,29 @@ function fireChaos(kind, extra) {
   return raceChaos.debugFire(kind, { physics: extra?.physics ?? isHost, ...extra });
 }
 
+/** Dev / ?chaosTest: chaos-kill one fly (oof, skull, ragdoll). id = fly id; default selected, else first live. */
+function killFly(id) {
+  if (!isRace) { console.warn('[killFly] race only'); return null; }
+  const live = flies.filter(f => f.worker && f.last?.alive !== false);
+  let f = id != null ? flies.find(x => x.id === id) : flies.find(x => x.id === selected);
+  if (!f || f.last?.alive === false) f = live[0];
+  if (!f?.worker) { console.warn('[killFly] no live fly'); return null; }
+  if (isHost && matchPhase === 'lobby') startRace();
+  if (chaosTestMode) raceChaos?.holdRoulette?.();
+  f.worker.postMessage({ type: 'chaos', op: 'kill' });
+  return { id: f.id, name: f.name, color: f.color };
+}
+
 function loadLocalChaosHarness() {
   if (!chaosTestMode) return;
   window.fireChaos = fireChaos;
+  window.killFly = killFly;
   window.previewChaosProp = (kind) => raceChaos?.previewProp?.(kind);
   window.CHAOS_KINDS = CHAOS_KINDS;
   const s = document.createElement('script');
   s.type = 'module';
   s.src = '/local/chaos-harness.js';
-  s.onerror = () => console.info('[chaos test] call fireChaos("lightning")  kinds:', CHAOS_KINDS.join(', '));
+  s.onerror = () => console.info('[chaos test] fireChaos("lightning")  killFly()  kinds:', CHAOS_KINDS.join(', '));
   document.head.appendChild(s);
 }
 
@@ -121,7 +139,7 @@ async function main() {
     if (chaosTestMode && isHost) { startRace(); raceChaos?.holdRoulette?.(); }
   }
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
-  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish, resetRace, startRaceFollow, stopRaceFollow, announceRace, fireChaos, startRace, previewChaosProp: (kind) => raceChaos?.previewProp?.(kind), get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; }, get raceChaos() { return raceChaos; }, chaosKinds: CHAOS_KINDS };
+  window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish, resetRace, startRaceFollow, stopRaceFollow, announceRace, fireChaos, killFly, startRace, previewChaosProp: (kind) => raceChaos?.previewProp?.(kind), get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; }, get raceChaos() { return raceChaos; }, chaosKinds: CHAOS_KINDS };
   loadLocalChaosHarness();
   animate();
 }
@@ -179,7 +197,7 @@ function waitRacePoses() {
   return Promise.all(flies.map(f => f.last ? Promise.resolve() : new Promise(res => { f.onPose = res; })));
 }
 
-let renderer, scene, camera, controls, envGroup, raycaster, floorMesh, wallMesh, sun, composer, gtao, resolution;
+let renderer, scene, camera, controls, envGroup, chaosCakeGroup, raycaster, floorMesh, wallMesh, sun, composer, gtao, resolution;
 let shadowDirty = true, lastShadow = -Infinity, shadowExtent = 0, lastBrainDraw = 0, brainDirty = true;
 let brainColorFly = -1, brainColorHover = -2;
 const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint = new THREE.Vector3();
@@ -321,7 +339,10 @@ function buildScene(data) {
     document.body.appendChild(labelRenderer.domElement);
     controls.connect(labelRenderer.domElement);
   }
-  envGroup = new THREE.Group(); envGroup.matrixAutoUpdate = true; scene.add(envGroup); rebuildEnv();
+  envGroup = new THREE.Group(); envGroup.matrixAutoUpdate = true;
+  chaosCakeGroup = new THREE.Group(); chaosCakeGroup.name = 'chaosCakes'; chaosCakeGroup.matrixAutoUpdate = true;
+  envGroup.add(chaosCakeGroup);
+  scene.add(envGroup); rebuildEnv();
   batches = new ArenaBatches(scene, visual, MAX_FLIES);
   raycaster = new THREE.Raycaster();
   const clickEl = isRace ? labelRenderer.domElement : renderer.domElement;
@@ -344,9 +365,21 @@ function buildScene(data) {
   brainCam.position.set(0, 0, 1050); brainCam.lookAt(0, 0, 0); brainAct = new Float32Array(data.N);
 }
 let pd = null;
-function discMesh(r, color, opacity = 1, z = 0.0015) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color, transparent: opacity < 1, opacity, roughness: 0.8 })); m.position.z = z; m.receiveShadow = true; return m; }
+function discMesh(r, color, opacity = 1, z = ARENA_FLOOR_DECAL_Z) {
+  const transparent = opacity < 1;
+  const mat = new THREE.MeshStandardMaterial({
+    color, transparent, opacity, roughness: 0.8,
+    ...(transparent ? { depthWrite: false, ...FLOOR_DECAL_POLYGON_OFFSET } : {}),
+  });
+  const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), mat);
+  m.position.z = z;
+  m.receiveShadow = !transparent;
+  if (transparent) m.renderOrder = 1;
+  return m;
+}
 function rebuildEnv() {
   // Placement rebuilds own their resources; release old GPU buffers/textures before replacing them.
+  if (chaosCakeGroup?.parent === envGroup) envGroup.remove(chaosCakeGroup);
   envGroup.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
   envGroup.clear(); shadowDirty = true;
   const R = env.arena.radius, aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
@@ -391,12 +424,12 @@ function rebuildEnv() {
     if (o.type !== 'box') m.rotation.x = Math.PI / 2; else m.rotation.z = o.yaw || 0; m.position.set(o.x, o.y, o.sz / 2); m.castShadow = m.receiveShadow = true; envGroup.add(m); }
   for (const f of env.food) {
     if (f.hiddenDisc) continue;
-    const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y, 0.002); m.userData.food = f; envGroup.add(m);
+    const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y); m.userData.food = f; envGroup.add(m);
   }
-  for (const b of env.bitterPatches) { const m = discMesh(b.r, '#4f8fd6', 0.9); m.position.set(b.x, b.y, 0.002); envGroup.add(m); }
-  for (const h of env.hazards) { const m = discMesh(h.r, '#d9502f', 0.9); m.position.set(h.x, h.y, 0.002); envGroup.add(m); const glow = discMesh(h.r + 0.4, '#d9502f', 0.12, 0.001); glow.position.set(h.x, h.y, 0.001); envGroup.add(glow); }
+  for (const b of env.bitterPatches) { const m = discMesh(b.r, '#4f8fd6', 0.9); m.position.set(b.x, b.y); envGroup.add(m); }
+  for (const h of env.hazards) { const m = discMesh(h.r, '#d9502f', 0.9); m.position.set(h.x, h.y); envGroup.add(m); const glow = discMesh(h.r + 0.4, '#d9502f', 0.12, ARENA_FLOOR_DECAL_Z * 0.5); glow.position.set(h.x, h.y); envGroup.add(glow); }
   for (const o of env.odors) {
-    if (o.hidden) continue;
+    if (o.hidden || isRace) continue;
     const across = o.sigmaAcross || o.sigma, along = o.sigmaAlong;
     const spanX = (along || across) * 4.4, spanY = across * 4.4;
     const yaw = along ? Math.atan2(o.y, o.x) : 0;
@@ -409,6 +442,7 @@ function rebuildEnv() {
     addPlane(z1);
     if (isRace && z1 > z0) addPlane(z0);
   }
+  if (chaosCakeGroup) envGroup.add(chaosCakeGroup);
 }
 function plumeTexture(spanX, spanY, capsule, rgb) {
   const s = 256, g = document.createElement('canvas'); g.width = g.height = s;
@@ -428,25 +462,57 @@ function plumeTexture(spanX, spanY, capsule, rgb) {
   const tex = new THREE.CanvasTexture(g); tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
   return tex;
 }
-function makeFlyGlow(color) {
-  const s = 64, c = document.createElement('canvas'); c.width = c.height = s;
-  const x = c.getContext('2d'), g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  const rgb = new THREE.Color(color);
-  const col = `${Math.round(rgb.r * 255)},${Math.round(rgb.g * 255)},${Math.round(rgb.b * 255)}`;
-  g.addColorStop(0, `rgba(${col},0.9)`); g.addColorStop(0.4, `rgba(${col},0.35)`); g.addColorStop(1, `rgba(${col},0)`);
-  x.fillStyle = g; x.fillRect(0, 0, s, s);
-  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-  spr.scale.set(0.9, 0.9, 1); spr.position.set(0, 0, 0.06); spr.visible = false;
-  return spr;
+const FLY_BEACON_PERIOD = 2.2, FLY_BEACON_START_SCALE = 0.2, FLY_BEACON_MAX_SCALE = 3.2, FLY_BEACON_PEAK_OPACITY = 0.75;
+function createFlyBeacon(color) {
+  const group = new THREE.Group();
+  group.visible = false;
+  const geom = new THREE.RingGeometry(0.42, 0.48, 48);
+  const rings = [0, 0.5].map(phaseOffset => {
+    const mesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: FLY_BEACON_PEAK_OPACITY, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.FrontSide, ...FLOOR_DECAL_POLYGON_OFFSET,
+    }));
+    mesh.renderOrder = 2;
+    mesh.userData.phaseOffset = phaseOffset;
+    group.add(mesh);
+    return mesh;
+  });
+  return { group, rings, geom, t: 0 };
+}
+function tickFlyBeacon(beacon, dt) {
+  beacon.t += dt;
+  for (const mesh of beacon.rings) {
+    const u = ((beacon.t / FLY_BEACON_PERIOD) + mesh.userData.phaseOffset) % 1;
+    const fade = u * u;
+    const scale = FLY_BEACON_START_SCALE + (FLY_BEACON_MAX_SCALE - FLY_BEACON_START_SCALE) * u;
+    mesh.scale.set(scale, scale, 1);
+    mesh.material.opacity = (1 - fade) * FLY_BEACON_PEAK_OPACITY;
+  }
+}
+function setFlyBeaconColor(beacon, color) {
+  if (!beacon) return;
+  for (const mesh of beacon.rings) mesh.material.color.set(color);
+}
+function disposeFlyBeacon(beacon) {
+  if (!beacon) return;
+  beacon.group.parent?.remove(beacon.group);
+  beacon.geom.dispose();
+  for (const mesh of beacon.rings) mesh.material.dispose();
 }
 function buildFlyMesh(color, sex) {
   const appearance = visual.instantiate(sex);
-  // Fine ground marker leaves the legs and contact shadow readable at macro scale.
-  const ring = new THREE.Mesh(new THREE.RingGeometry(isRace ? 0.14 : 0.175, isRace ? 0.22 : 0.177, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: isRace ? 0.9 : 0.6, depthWrite: false }));
-  scene.add(ring);
-  let glow = null;
-  if (isRace && appearance.bodies?.thorax) { glow = makeFlyGlow(color); appearance.bodies.thorax.add(glow); }
-  return { ...appearance, ring, glow };
+  if (isRace) {
+    const beacon = createFlyBeacon(color);
+    envGroup.add(beacon.group);
+    return { ...appearance, ring: beacon.group, beacon, glow: null };
+  }
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.175, 0.177, 64),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, ...FLOOR_DECAL_POLYGON_OFFSET }),
+  );
+  ring.renderOrder = 2;
+  envGroup.add(ring);
+  return { ...appearance, ring, beacon: null, glow: null };
 }
 
 // One instanced draw per wing film across the sampled beat cycle. Poses are thorax-local and immutable.
@@ -516,9 +582,12 @@ function removeFly(f) {
   f.worker?.terminate();
   batches.remove(f);
   scene.remove(f.group);
-  scene.remove(f.ring);
-  f.ring.geometry.dispose(); f.ring.material.dispose();
-  if (f.glow) { f.glow.removeFromParent(); f.glow.material.map?.dispose(); f.glow.material.dispose(); }
+  if (f.beacon) disposeFlyBeacon(f.beacon);
+  else if (f.ring) {
+    f.ring.parent?.remove(f.ring);
+    f.ring.geometry.dispose();
+    f.ring.material.dispose();
+  }
   if (f.label) { scene.remove(f.label); f.label.element.remove(); }
   if (f.deathFx) {
     scene.remove(f.deathFx.sprite);
@@ -619,6 +688,7 @@ function setupRaceChrome() {
     THREE,
     scene: () => scene,
     envGroup: () => envGroup,
+    dishCakeGroup: () => chaosCakeGroup,
     camera: () => camera,
     controls: () => controls,
     flies: () => flies,
@@ -1046,12 +1116,15 @@ function applyWatchBodies(f, a, b, blend, extra) {
   const ap = a.pos || b.pos, bp = b.pos || ap;
   const pos = [ap[0] + (bp[0] - ap[0]) * u + ex, ap[1] + (bp[1] - ap[1]) * u + ey, ap[2] + (bp[2] - ap[2]) * u + ez];
   f.drawPos = pos;
-  f.ring.position.set(pos[0], pos[1], 0.003);
-  if (f.label) f.label.position.set(pos[0], pos[1], pos[2] + flyLabelZ(f));
+  f.ring.position.set(pos[0], pos[1], ARENA_FLOOR_DECAL_Z);
+  if (f.label) {
+    syncFlySceneLabel(f);
+    if (f.label.visible) f.label.position.set(pos[0], pos[1], pos[2] + flyLabelZ(f));
+  }
   updateWingBlur(f, { flying: u < 0.5 ? a.flying : b.flying });
 }
 function addVisualFly(row, bodyNames) {
-  const f = { id: row.id, worker: null, color: row.color, sex: row.sex || 'm', name: row.name, ready: true, last: null, prev: null, stats: {}, ...buildFlyMesh(row.color, row.sex || 'm') };
+  const f = { id: +row.id, worker: null, color: row.color, sex: row.sex || 'm', name: row.name, ready: true, last: null, prev: null, stats: {}, ...buildFlyMesh(row.color, row.sex || 'm') };
   f.bodyNames = bodyNames;
   f.bodyGroups = bodyNames.map(n => f.bodies[n] || null);
   ensureWingBlur(f);
@@ -1083,7 +1156,8 @@ function applyWatchFlyIdent(f, row) {
     const chip = el.querySelector('.fly-label-chip');
     if (chip) chip.textContent = f.name;
   }
-  if (f.ring?.material?.color) f.ring.material.color.set(f.color);
+  if (f.beacon) setFlyBeaconColor(f.beacon, f.color);
+  else if (f.ring?.material?.color) f.ring.material.color.set(f.color);
 }
 function applyWatchState(st) {
   const wasLive = watchOverlayPhase === 'live';
@@ -1856,20 +1930,82 @@ function announceRaceWinner(f, why) {
 let deadFlyMap = null;
 function ensureDeadFlyMap() {
   if (deadFlyMap) return deadFlyMap;
-  deadFlyMap = new THREE.TextureLoader().load(`${BASE}deadfly.webp`);
+  deadFlyMap = new THREE.TextureLoader().load(`${BASE}deadfly.webp`, (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    const aniso = renderer?.capabilities?.getMaxAnisotropy?.() ?? 1;
+    if (aniso > 1) tex.anisotropy = aniso;
+  });
   deadFlyMap.colorSpace = THREE.SRGBColorSpace;
   return deadFlyMap;
 }
 function easeOutCubic(t) { return 1 - (1 - t) ** 3; }
+function deadFlyBlinkWave(now) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return { op: 1, scale: 1 };
+  const u = (now % DEAD_FLY_BLINK_MS) / DEAD_FLY_BLINK_MS;
+  const wave = 0.5 + 0.5 * Math.cos(u * Math.PI * 2);
+  return {
+    op: DEAD_FLY_BLINK_OP_MIN + (1 - DEAD_FLY_BLINK_OP_MIN) * wave,
+    scale: DEAD_FLY_BLINK_SCALE_MIN + (1 - DEAD_FLY_BLINK_SCALE_MIN) * wave,
+  };
+}
+function deadFlySpriteScale(s) {
+  const tex = ensureDeadFlyMap();
+  const img = tex.image;
+  const aspect = img?.width && img?.height ? img.width / img.height : 1;
+  return aspect >= 1 ? new THREE.Vector2(s * aspect, s) : new THREE.Vector2(s, s / aspect);
+}
+function raceLabelFollowK(f) {
+  let k = 0;
+  if (raceFollow != null && f.id == raceFollow) {
+    k = raceCamTween?.mode === 'in' ? Math.min(1, raceCamTween.t) : raceCamTween?.mode === 'out' ? 0 : 1;
+  } else if (raceCamTween?.mode === 'out' && raceCamTween.wasFollow == f.id) {
+    k = 1 - Math.min(1, raceCamTween.t);
+  }
+  return k;
+}
+function deadFlyLayoutK(f) {
+  return raceLabelFollowK(f);
+}
+const deadFlyScalePos = new THREE.Vector3();
+/** Chase cam is nearer — scale by d/d₀ so DEAD_FLY_CHASE_SCREEN_MUL changes on-screen size. */
+function deadFlyTargetEndScale(f, anchor, z) {
+  const k = deadFlyLayoutK(f);
+  const overviewEnd = DEAD_FLY_SCALE_END * DEAD_FLY_OVERVIEW_MUL;
+  if (k <= 0) return overviewEnd;
+  let dRatio = 1;
+  if (raceCamHome) {
+    deadFlyScalePos.set(anchor[0], anchor[1], z);
+    const d = camera.position.distanceTo(deadFlyScalePos);
+    const d0 = raceCamHome.pos.distanceTo(deadFlyScalePos);
+    if (d0 > 1e-5) dRatio = d / d0;
+  }
+  const chaseWorld = DEAD_FLY_SCALE_END * DEAD_FLY_CHASE_SCREEN_MUL * dRatio;
+  return overviewEnd + (chaseWorld - overviewEnd) * k;
+}
+function deadFlyRestZ(anchor, f, scale) {
+  const k = deadFlyLayoutK(f);
+  const riseAboveAnchor = scale * (0.5 - DEAD_FLY_CENTER_Y);
+  const labelZ = anchor[2] + (RACE_LABEL_Z + (RACE_LABEL_Z_CHASE - RACE_LABEL_Z) * k);
+  const below = DEAD_FLY_BELOW_LABEL + (DEAD_FLY_BELOW_LABEL_CHASE - DEAD_FLY_BELOW_LABEL) * k;
+  const overview = 1 - k;
+  const scaleExcess = Math.max(0, scale - DEAD_FLY_SCALE_END);
+  const lift = overview * DEAD_FLY_OVERVIEW_Z_LIFT + overview * scaleExcess * DEAD_FLY_Z_LIFT_PER_SCALE;
+  return labelZ - below - riseAboveAnchor + lift;
+}
 function spawnDeadFlySprite(f) {
   if (!isRace || f.deathFx) return;
   const mat = new THREE.SpriteMaterial({ map: ensureDeadFlyMap(), transparent: true, depthWrite: false, opacity: 0 });
   const sprite = new THREE.Sprite(mat);
-  sprite.scale.setScalar(0.35);
+  sprite.center.set(0.5, DEAD_FLY_CENTER_Y);
+  sprite.scale.copy(deadFlySpriteScale(DEAD_FLY_SCALE_START));
   scene.add(sprite);
   const p = f.last?.pos || [0, 0, 0.13];
-  sprite.position.set(p[0], p[1], p[2] - 0.12);
-  f.deathFx = { sprite, t0: performance.now(), riseDur: 550, hoverZ: 0.28 };
+  const zStart = p[2] - 0.12;
+  sprite.position.set(p[0], p[1], zStart);
+  f.deathFx = { sprite, t0: performance.now(), riseDur: DEAD_FLY_RISE_DUR, zStart };
 }
 function updateDeadFlySprites(now) {
   for (const f of flies) {
@@ -1879,10 +2015,25 @@ function updateDeadFlySprites(now) {
     if (!anchor) continue;
     const u = Math.min(1, (now - fx.t0) / fx.riseDur);
     const ease = easeOutCubic(u);
-    fx.sprite.position.set(anchor[0], anchor[1], anchor[2] - 0.12 + (fx.hoverZ + 0.12) * ease);
-    fx.sprite.material.opacity = 0.95 * ease;
+    let zEnd = deadFlyRestZ(anchor, f, DEAD_FLY_SCALE_END);
+    let z = fx.zStart + (zEnd - fx.zStart) * ease;
+    const endScale = deadFlyTargetEndScale(f, anchor, z);
+    const scale = DEAD_FLY_SCALE_START + (endScale - DEAD_FLY_SCALE_START) * ease;
+    zEnd = deadFlyRestZ(anchor, f, scale);
+    z = fx.zStart + (zEnd - fx.zStart) * ease;
+    const blink = deadFlyBlinkWave(now);
+    fx.sprite.position.set(anchor[0], anchor[1], z);
+    fx.sprite.scale.copy(deadFlySpriteScale(scale * blink.scale));
+    fx.sprite.material.opacity = 0.95 * ease * blink.op;
     fx.sprite.quaternion.copy(camera.quaternion);
   }
+}
+function isRaceFlyDead(f) {
+  return isRace && f.last?.alive === false;
+}
+function syncFlySceneLabel(f) {
+  if (!f.label) return;
+  f.label.visible = !isRaceFlyDead(f);
 }
 function onFlyDeath(f, { winnerKnown = false } = {}) {
   if (!isRace || !f || f.diedAt) return;
@@ -1890,6 +2041,8 @@ function onFlyDeath(f, { winnerKnown = false } = {}) {
   if (!winnerKnown) raceAudio?.playOof();
   if (!isWatch && !raceWinner) announceRace(`${f.name} died!`, f.color);
   spawnDeadFlySprite(f);
+  syncFlySceneLabel(f);
+  paintRaceVitals(true);
 }
 function checkRaceFinish(f) {
   if (f?.last?.alive === false && !f.diedAt && isRace && running && !raceResetting) {
@@ -1937,9 +2090,7 @@ async function resetRace() {
 function easeOutBack(t, s = 1.7) { const u = t - 1; return u * u * ((s + 1) * u + s) + 1; }
 function easeInBack(t, s = 1.7) { return t * t * ((s + 1) * t - s); }
 function flyLabelZ(f) {
-  let k = 0;
-  if (raceFollow === f.id) k = raceCamTween?.mode === 'in' ? Math.min(1, raceCamTween.t) : 1;
-  else if (raceCamTween?.mode === 'out' && raceCamTween.wasFollow === f.id) k = 1 - Math.min(1, raceCamTween.t);
+  const k = raceLabelFollowK(f);
   return RACE_LABEL_Z + (RACE_LABEL_Z_CHASE - RACE_LABEL_Z) * k;
 }
 function chaseCam(f, outPos, outTarget) {
@@ -1949,6 +2100,7 @@ function chaseCam(f, outPos, outTarget) {
 }
 const chasePos = new THREE.Vector3(), chaseTarget = new THREE.Vector3();
 function startRaceFollow(id) {
+  id = +id;
   const same = isRace && raceFollow === id;
   selected = id;
   if (!isRace) { renderFlyList(); return; }
@@ -2076,6 +2228,7 @@ function paintRaceVitals(force = false) {
     if (!row) continue;
     row.classList.toggle('sel', f.id === selected);
     const s = f.last || {};
+    row.classList.toggle('dead', s.alive === false);
     const beh = row.querySelector('.fly-behavior');
     if (beh) beh.textContent = raceMobile() ? vitalsBehaviorLabel(s.behavior) : (s.behavior || '');
     const eBar = row.querySelector('.bar-energy > i');
@@ -2087,7 +2240,11 @@ function paintRaceVitals(force = false) {
 function renderFlyList() {
   $('#nfly').textContent = flies.length;
   $('#flies').innerHTML = flies.map(f => flyRowHtml(f)).join('');
-  $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); });
+  $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => {
+    const id = +el.dataset.id;
+    if (isRace) startRaceFollow(id);
+    else { selected = id; renderFlyList(); }
+  });
   const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f;
   $('#takeoff').textContent = f?.last?.takeoffPending ? (running ? 'Takeoff queued' : 'Takeoff queued · press Run') : 'Activate takeoff DNs';
   $('#takeoff').disabled = !f?.ready || f.last?.flying || f.last?.alive === false;
@@ -2208,26 +2365,34 @@ function animate() {
         }
         g.quaternion.copy(q); g.updateMatrix();
       }
-      f.ring.position.set(s.pos[0], s.pos[1], 0.003);
-      if (f.label) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
+      f.ring.position.set(s.pos[0], s.pos[1], ARENA_FLOOR_DECAL_Z);
+      if (f.label) {
+        syncFlySceneLabel(f);
+        if (f.label.visible) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
+      }
       updateWingBlur(f, s); f.drawnPose = s; f.drawnBlend = blend;
     } else if (f.label && s) {
-      f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
+      syncFlySceneLabel(f);
+      if (f.label.visible) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
     }
     }
     const mark = f.id === selected && raceFollow == null;
     f.ring.visible = mark;
-    if (f.glow) f.glow.visible = mark;
+    if (f.beacon) {
+      if (mark) tickFlyBeacon(f.beacon, dt);
+      else f.beacon.t = 0;
+    }
   }
   const sf = flies.find(x => x.id === selected);
   if (!isRace && sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   tickRaceCamera(dt);
-  if (isRace) updateDeadFlySprites(now);
   if (isRace) raceChaos?.tick(dt);
   if (isRace) {
     for (const f of flies) {
       const p = flyDrawPos(f);
-      if (f.label && p) f.label.position.set(p[0], p[1], p[2] + flyLabelZ(f));
+      if (!f.label || !p) continue;
+      syncFlySceneLabel(f);
+      if (f.label.visible) f.label.position.set(p[0], p[1], p[2] + flyLabelZ(f));
     }
   }
   if (isRace && raceStartWall != null && !raceWinner) paintRaceClock(formatWall(now - raceStartWall));
@@ -2239,6 +2404,7 @@ function animate() {
   updateThreat(); if (!chaosCamHold) controls.update();
   camera.position.z = Math.max(camera.position.z, 0.02);
   camera.updateMatrixWorld();
+  if (isRace) updateDeadFlySprites(now);
   pinRaceAnnounce();
   viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
   let largest = 0;

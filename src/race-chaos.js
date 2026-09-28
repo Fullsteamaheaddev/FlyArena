@@ -87,6 +87,11 @@ export function createRaceChaos(api) {
     api.scene()?.add(fxRoot);
     return fxRoot;
   }
+  function dishCakeGroup() {
+    const g = api.dishCakeGroup?.();
+    if (g) return g;
+    return api.envGroup?.() || fxGroup();
+  }
   function toastBox() {
     if (toastEl) return toastEl;
     const el = document.createElement('div');
@@ -735,8 +740,9 @@ export function createRaceChaos(api) {
   }
 
   function crumbDrop(x, y, physics) {
-    const root = fxGroup();
+    const root = dishCakeGroup();
     const mesh = makeCakeSlice(T);
+    mesh.userData.chaosCake = true;
     mesh.updateMatrixWorld(true);
     const box = new T.Box3().setFromObject(mesh);
     const restZ = -box.min.z + 0.001;

@@ -618,6 +618,16 @@ body.race #raceVitals .fly.sel {
   background: rgba(36, 32, 48, .95);
   box-shadow: 0 0 0 2px rgba(255,255,255,.7), 0 0 14px var(--fly, #fff);
 }
+body.race #raceVitals .fly.dead {
+  opacity: 0.5;
+  filter: grayscale(1);
+  border-color: var(--race-outline);
+  box-shadow: none;
+}
+body.race #raceVitals .fly.dead.sel {
+  transform: scale(1.03);
+  box-shadow: none;
+}
 body.race #raceVitals .dot { width: 14px; height: 14px; }
 body.race #raceVitals .fly-name { font-family: var(--race-title); font-weight: 400; font-size: 16px; }
 body.race .fly-label-info {
