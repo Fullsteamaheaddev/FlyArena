@@ -45,7 +45,7 @@ const idle = () => ({
 
 const wss = new WebSocketServer({ host: '0.0.0.0', port: PORT });
 let host = null, lastState = idle();
-let poolBusy = false, poolWant = null, poolState = null;
+let poolBusy = false, poolWant = null, poolState = null, poolErr = null;
 
 function send(ws, msg) {
   if (ws.readyState === 1) ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -65,7 +65,15 @@ function flyIdsOf(st) {
 function publishPool(matchId, status, winnerFly = null) {
   if (poolState && poolState.matchId === matchId && poolState.status === status) return;
   poolState = { type: 'pool', matchId, status, winnerFly };
+  poolErr = null;
   broadcast(poolState);
+}
+// An operator that cannot transact (no gas, bad key, RPC down) would otherwise leave every client
+// waiting out the open/settle grace timers, so say so instead of going quiet.
+function publishPoolError(matchId, reason) {
+  if (poolErr?.matchId === matchId && poolErr.reason === reason) return;
+  poolErr = { matchId, reason };
+  broadcast({ type: 'pool', matchId, status: poolState?.matchId === matchId ? poolState.status : null, winnerFly: poolState?.winnerFly ?? null, opError: reason });
 }
 
 // Explicit gas limits skip an eth_estimateGas round trip on every operator call.
@@ -121,7 +129,9 @@ async function kickPool() {
   poolWant = null;
   try { await syncPool(st); }
   catch (e) {
-    console.warn('pool', e?.shortMessage || e?.message || e);
+    const reason = String(e?.shortMessage || e?.message || e);
+    console.warn('pool', reason);
+    if (st.matchId) publishPoolError(st.matchId, reason);
   }
   finally {
     poolBusy = false;
@@ -149,6 +159,7 @@ wss.on('connection', ws => {
       send(ws, { type: 'hello-ok', role: 'watch' });
       send(ws, lastState);
       if (poolState && poolState.matchId === lastState.matchId) send(ws, poolState);
+      if (poolErr && poolErr.matchId === lastState.matchId) send(ws, { type: 'pool', matchId: poolErr.matchId, status: poolState?.matchId === poolErr.matchId ? poolState.status : null, winnerFly: null, opError: poolErr.reason });
       return;
     }
     if (ws.role !== 'host' || msg.type !== 'state') return;

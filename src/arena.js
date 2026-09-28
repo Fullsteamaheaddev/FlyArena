@@ -45,7 +45,7 @@ let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResettin
 let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null, watchWingPoses = null, lastSentWingPoses = null;
 const WATCH_POSE_DELAY = 250, WATCH_POSE_EXTRAP = 120, WATCH_POSE_RING = 10;
 let betClosesAt = null, poolSnap = [], lobbyTimer = null, lastPoolRead = 0, chainSettled = false, betFlyId = null, lastLobbyKind = '', lastPoolKey = '', lastLobbyTickSec = null;
-let poolStatus = null, betWindowSec = DEFAULT_WINDOW, betWindowArmed = false, lobbyStartedAt = 0, resultsAt = 0, settledAt = 0;
+let poolStatus = null, poolOpError = null, betWindowSec = DEFAULT_WINDOW, betWindowArmed = false, lobbyStartedAt = 0, resultsAt = 0, settledAt = 0;
 let resultActions = { key: '', claim: false, refund: false, note: '' }, profileSeq = 0, profileAcct = null;
 const OPEN_GRACE_MS = 25000;     // if the pool never opens (operator offline) the lobby still runs
 const SETTLE_GRACE_MS = 45000;   // nor does a stuck settle strand the results card forever
@@ -589,11 +589,7 @@ function removeFly(f) {
     f.ring.material.dispose();
   }
   if (f.label) { scene.remove(f.label); f.label.element.remove(); }
-  if (f.deathFx) {
-    scene.remove(f.deathFx.sprite);
-    f.deathFx.sprite.material.dispose();
-    f.deathFx = null;
-  }
+  clearDeadFlyFx(f);
 }
 function onWorker(f, m) {
   if (m.type === 'ready') {
@@ -606,7 +602,7 @@ function onWorker(f, m) {
     f.onPose?.(); f.onPose = null;
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
-    if (isRace) { checkRaceFinish(f); paintFlyLabel(f); paintRaceVitals(); publishMatchState(matchPhase === 'lobby'); cueSelectedTakeoff(f); }
+    if (isRace) { checkRaceFinish(f); syncFlyDeathVisual(f); paintFlyLabel(f); paintRaceVitals(); publishMatchState(matchPhase === 'lobby'); cueSelectedTakeoff(f); }
     if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
     broadcastOthers();
   } else if (m.type === 'activity') {
@@ -915,21 +911,25 @@ function setupEnterGate() {
 function settleNote() {
   if (!chainConfigured()) return 'Next race starting…';
   if (poolStatus === 3 || poolStatus === 4) return 'Settled — next race starting…';
+  if (poolOpError) return 'Pool operator offline — next race starting…';
   return 'Settling match on-chain…';
 }
 function readyForNextRace() {
-  if (!chainConfigured()) return Date.now() - resultsAt > CLAIM_WINDOW_MS;
+  const configured = chainConfigured();
+  // A settle that cannot happen is not worth SETTLE_GRACE_MS of staring at the results card.
+  if (!configured || (poolOpError && !settledAt)) return Date.now() - resultsAt > CLAIM_WINDOW_MS;
   if (settledAt) return Date.now() - settledAt > CLAIM_WINDOW_MS;
   return Date.now() - resultsAt > SETTLE_GRACE_MS;
 }
 // The relay is the pool operator; it tells everyone when the race opens, locks or settles.
 function applyPoolStatus(p) {
   if (p?.matchId == null || Number(p.matchId) !== Number(matchId)) return;
-  const was = poolStatus;
+  const was = poolStatus, wasErr = poolOpError;
   poolStatus = p.status;
+  poolOpError = p.opError || null;
   if ((poolStatus === 3 || poolStatus === 4) && !settledAt) settledAt = Date.now();
-  if (isHost && poolStatus === 1 && matchPhase === 'lobby') armBetWindow();
-  if (was === poolStatus) return;
+  if (isHost && (poolStatus === 1 || poolOpError) && matchPhase === 'lobby') armBetWindow();
+  if (was === poolStatus && wasErr === poolOpError) return;
   if (matchPhase === 'lobby') paintLobbyOverlay(true);
   else if (matchPhase === 'results') {
     paintResultActions(matchId);
@@ -1168,7 +1168,16 @@ function applyWatchState(st) {
   matchPhase = st.phase || matchPhase;
   if (st.bodyNames) watchBodyNames = st.bodyNames;
   if (st.wingPoses) watchWingPoses = st.wingPoses;
-  if (st.matchId != null && st.matchId !== matchId) { matchId = st.matchId; poolStatus = null; }
+  if (st.matchId != null && st.matchId !== matchId) {
+    for (const f of flies) {
+      clearDeadFlyFx(f);
+      delete f.diedAt;
+      syncFlySceneLabel(f);
+    }
+    matchId = st.matchId;
+    poolStatus = null;
+    poolOpError = null;
+  }
   betClosesAt = st.betClosesAt ?? null;
   if (st.pools) poolSnap = st.pools;
   if ('tickerUrl' in st) {
@@ -1197,6 +1206,7 @@ function applyWatchState(st) {
     if (!f) continue;
     if (f.last && f.last.alive !== false && row.alive === false) onFlyDeath(f, { winnerKnown: !!st.winner });
     f.prev = f.last; f.last = row;
+    syncFlyDeathVisual(f);
     cueSelectedTakeoff(f);
     const received = performance.now();
     f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received - f.recvAt)) : 1000 / 30;
@@ -1219,7 +1229,10 @@ function applyWatchState(st) {
     playWatchBed();
   }
   if (wasLive && st.phase !== 'live') raceChaos?.stopLive();
-  if (isWatch && isRace && st.phase === 'lobby') raceChaos?.reset();
+  if (isWatch && isRace && st.phase === 'lobby') {
+    raceChaos?.reset();
+    for (const f of flies) syncFlyDeathVisual(f);
+  }
   if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && !raceWinner) {
     announceRace(`${st.winner.name} wins!`, st.winner.color);
     raceAudio?.setMotion({ flying: false, walk: 0 });
@@ -1753,8 +1766,9 @@ function paintLobbyOverlay(force = false) {
   const prevAmt = card.querySelector('#betAmt')?.value;
   if (isWatch) {
     // Unknown status with a running clock means no operator is reporting: let them try anyway.
-    const open = !chainConfigured() || poolStatus === 1 || (poolStatus == null && betClosesAt != null);
+    const open = !chainConfigured() || poolStatus === 1 || (poolStatus == null && betClosesAt != null && !poolOpError);
     const note = !chainConfigured() ? 'Pool not configured (set VITE_POOL).'
+      : poolOpError && poolStatus !== 1 ? 'Pool operator offline — betting is closed this race.'
       : (open ? 'Pick a fly, then Bet.' : 'Opening the race on-chain…');
     card.innerHTML = `<h1>Sugar Run</h1><p>Winner pool — first to the sugary center, or last alive</p>
       <p class="sub" id="lobbyClock">${clock}</p>
@@ -1834,6 +1848,7 @@ async function showRaceStart() {
   lastLobbyKind = '';
   betFlyId = null;
   poolStatus = null;
+  poolOpError = null;
   betWindowArmed = false;
   lobbyStartedAt = Date.now();
   resultsAt = 0;
@@ -1999,6 +2014,12 @@ function deadFlyRestZ(anchor, f, scale) {
   const lift = overview * DEAD_FLY_OVERVIEW_Z_LIFT + overview * scaleExcess * DEAD_FLY_Z_LIFT_PER_SCALE;
   return labelZ - below - riseAboveAnchor + lift;
 }
+function clearDeadFlyFx(f) {
+  if (!f?.deathFx) return;
+  scene.remove(f.deathFx.sprite);
+  f.deathFx.sprite.material.dispose();
+  f.deathFx = null;
+}
 function spawnDeadFlySprite(f) {
   if (!isRace || f.deathFx) return;
   const mat = new THREE.SpriteMaterial({ map: ensureDeadFlyMap(), transparent: true, depthWrite: false, opacity: 0 });
@@ -2013,6 +2034,10 @@ function spawnDeadFlySprite(f) {
 }
 function updateDeadFlySprites(now) {
   for (const f of flies) {
+    if (!isRaceFlyDead(f)) {
+      syncFlyDeathVisual(f);
+      continue;
+    }
     const fx = f.deathFx;
     if (!fx) continue;
     const anchor = flyDrawPos(f) || f.last?.pos;
@@ -2038,6 +2063,14 @@ function isRaceFlyDead(f) {
 function syncFlySceneLabel(f) {
   if (!f.label) return;
   f.label.visible = !isRaceFlyDead(f);
+}
+function syncFlyDeathVisual(f) {
+  if (isRaceFlyDead(f)) return;
+  if (f.deathFx || f.diedAt) {
+    clearDeadFlyFx(f);
+    delete f.diedAt;
+  }
+  syncFlySceneLabel(f);
 }
 function onFlyDeath(f, { winnerKnown = false } = {}) {
   if (!isRace || !f || f.diedAt) return;
