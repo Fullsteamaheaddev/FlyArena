@@ -1,7 +1,8 @@
 import { makeThumb, makeHand, makeFinger, fadeGroup, prepareMeshFade, makeCakeSlice, makeLeaf } from './race-chaos-props.js';
 import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial } from './race-chaos-bolt.js';
+import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laserSessionDuration } from './race-chaos-laser.js';
 
-export const CHAOS_KINDS = ['thumb', 'spin', 'quake', 'flip', 'tilt', 'lightning', 'double', 'crumb', 'firefly', 'boop', 'puff'];
+export const CHAOS_KINDS = ['thumb', 'spin', 'quake', 'flip', 'tilt', 'lightning', 'double', 'crumb', 'firefly', 'boop', 'puff', 'laser'];
 const KINDS = CHAOS_KINDS;
 
 const COPY = {
@@ -16,6 +17,7 @@ const COPY = {
   firefly: { title: 'Firefly moment', line: () => 'Little lights drift along the rim.' },
   boop: { title: 'Gentle boop', line: name => `A tiny boop for ${name}.` },
   puff: { title: 'Dandelion puff', line: () => 'A soft puff of wind rolls through.' },
+  laser: { title: 'Laser eyes', line: () => 'Every fly shoots twin beams from the eyes.' },
 };
 
 function liveFlies(flies) {
@@ -51,9 +53,17 @@ export function paintChaosScorches(fx, fs, radius, scorches, now) {
     fx.save();
     fx.globalAlpha = 0.55 * k;
     const g = fx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, '#1a0a08');
-    g.addColorStop(0.45, '#3a1a10');
-    g.addColorStop(1, 'rgba(40,10,8,0)');
+    if (s.kind === 'laser') {
+      fx.globalAlpha = 0.7 * k;
+      g.addColorStop(0, '#2a1808');
+      g.addColorStop(0.35, '#8a4020');
+      g.addColorStop(0.7, 'rgba(60,20,10,0.35)');
+      g.addColorStop(1, 'rgba(20,8,4,0)');
+    } else {
+      g.addColorStop(0, '#1a0a08');
+      g.addColorStop(0.45, '#3a1a10');
+      g.addColorStop(1, 'rgba(40,10,8,0)');
+    }
     fx.fillStyle = g;
     fx.beginPath(); fx.arc(cx, cy, r, 0, Math.PI * 2); fx.fill();
     fx.restore();
@@ -79,6 +89,9 @@ export function createRaceChaos(api) {
   let shakes = [];
   let sceneFlashes = [];
   let sceneFlashEl = null;
+  let laserSession = null;
+  let laserPool = null;
+  let laserBurnLast = null;
 
   function radius() { return api.env()?.arena?.radius || 12.5; }
   function flies() { return api.flies() || []; }
@@ -263,6 +276,48 @@ export function createRaceChaos(api) {
   }
   function camShake(dur = 200, amp = 0.18) {
     shakes.push({ t0: now(), dur, amp });
+  }
+
+  function ensureLaserPool() {
+    if (laserPool) return laserPool;
+    laserPool = createLaserPool(T);
+    fxGroup().add(laserPool.group);
+    return laserPool;
+  }
+
+  function endLaserSession() {
+    laserSession = null;
+    laserBurnLast = null;
+    hideLaserPool(laserPool);
+  }
+
+  function tickLaserSession(t, physics) {
+    if (!laserSession || t >= laserSession.until) {
+      if (laserSession) endLaserSession();
+      return;
+    }
+    const env = api.env();
+    const arena = env?.arena || { radius: radius(), wallHeight: 8 };
+    const pool = ensureLaserPool();
+    if (!laserBurnLast) laserBurnLast = new Map();
+    tickLaserBeams(pool, liveFlies(flies()), arena, t, laserBurnLast, {
+      physics: laserSession.physics ?? physics,
+      onFlyHit: victimId => {
+        if (!laserSession?.physics || laserSession.killed.has(victimId)) return;
+        const v = flies().find(x => x.id === victimId);
+        if (!v?.worker || v.last?.alive === false) return;
+        laserSession.killed.add(victimId);
+        post(v, { op: 'kill' });
+        hideToast();
+      },
+      onBurn: (x, y) => {
+        scorches.push({ x, y, r: 0.1, until: t + 14000, kind: 'laser' });
+        if (t - lastScorchPaint > 80) {
+          lastScorchPaint = t;
+          api.repaintFloor?.();
+        }
+      },
+    });
   }
   function camPullBack(scale, dur) {
     const cam = api.camera(), ctl = api.controls();
@@ -907,6 +962,12 @@ export function createRaceChaos(api) {
         later(700, () => releaseCam(400));
         boopPad(f, a);
       }
+    } else if (kind === 'laser') {
+      const dur = laserSessionDuration();
+      laserSession = { until: now() + dur, killed: new Set(), physics };
+      laserBurnLast = new Map();
+      ensureLaserPool();
+      busyUntil = Math.max(busyUntil, now() + dur);
     } else if (kind === 'puff') {
       seeds();
       camPullBack(1.15, 800);
@@ -998,7 +1059,7 @@ export function createRaceChaos(api) {
     return {
       thumb: 1800, spin: 1600, quake: 5200, flip: 2200, tilt: 4000, lightning: 1600, double: 2800,
       crumb: CAKE_STAGGER_MS * (CAKE_SLICE_COUNT - 1) + 2800,
-      firefly: 7200, boop: 1300, puff: 5200,
+      firefly: 7200, boop: 1300, puff: 5200, laser: 11000,
     }[kind] || 1200;
   }
 
@@ -1058,6 +1119,11 @@ export function createRaceChaos(api) {
     tweens = [];
     shakes = [];
     clearSceneFlash();
+    endLaserSession();
+    if (laserPool) {
+      disposeLaserPool(laserPool);
+      laserPool = null;
+    }
     scorches = [];
     busyUntil = 0;
     dishAnim = null;
@@ -1131,6 +1197,7 @@ export function createRaceChaos(api) {
       });
     }
     updateSceneFlashEl(t);
+    tickLaserSession(t, api.isHostLive?.());
     if (scorches.length && t - lastScorchPaint > 500) {
       scorches = scorches.filter(s => t < s.until + 4000);
       lastScorchPaint = t;

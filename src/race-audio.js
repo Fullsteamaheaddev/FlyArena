@@ -243,7 +243,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   function playChaos(kind, extra = {}) {
     if (!ctx || ctx.state !== 'running' || muted) return;
     const t0 = ctx.currentTime;
-    const hold = { thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7, firefly: 7.1, boop: 1.1, puff: 5.1 }[kind] || 0.8;
+    const hold = { thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7, firefly: 7.1, boop: 1.1, puff: 5.1, laser: 7.5 }[kind] || 0.8;
     duck(true);
     setTimeout(() => duck(false), hold * 1000);
     if (kind === 'thumb') { sfxThumb(t0); playBuf(thumbBuf, t0, 0.85); }
@@ -266,6 +266,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     else if (kind === 'firefly') sfxFirefly(t0);
     else if (kind === 'boop') { sfxBoop(t0); playBuf(boopBuf, t0, 0.85); }
     else if (kind === 'puff') sfxPuff(t0);
+    else if (kind === 'laser') sfxLaser(t0);
   }
   function playBuf(buf, when, gain = 0.8) {
     if (!ctx || !buf) return;
@@ -447,6 +448,25 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     wg.gain.setValueAtTime(0.0001, t0); wg.gain.linearRampToValueAtTime(0.12, t0 + 0.18);
     wg.gain.setValueAtTime(0.08, t0 + 4.3); wg.gain.exponentialRampToValueAtTime(0.001, t0 + 5.1);
     whoosh.connect(bp); bp.connect(wg); wg.connect(master); whoosh.start(t0);
+  }
+  function sfxLaser(t0) {
+    const hum = ctx.createOscillator();
+    hum.type = 'sawtooth';
+    hum.frequency.setValueAtTime(220, t0);
+    hum.frequency.exponentialRampToValueAtTime(140, t0 + 6);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 2.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.11, t0 + 0.12);
+    g.gain.setValueAtTime(0.08, t0 + 5); g.gain.exponentialRampToValueAtTime(0.001, t0 + 7.2);
+    hum.connect(bp); bp.connect(g); g.connect(master);
+    hum.start(t0); hum.stop(t0 + 7.3);
+    const hiss = noiseSrc(7);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2400;
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0.0001, t0); hg.gain.exponentialRampToValueAtTime(0.06, t0 + 0.08);
+    hg.gain.exponentialRampToValueAtTime(0.001, t0 + 7);
+    hiss.connect(hp); hp.connect(hg); hg.connect(master); hiss.start(t0);
   }
   return { unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, playChaos, playCakeLand, setMuted, setMotion, hold };
 }
