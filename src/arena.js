@@ -683,6 +683,10 @@ function setupRaceChrome() {
     thumb: `${BASE}thumb.wav`,
     splatter1: `${BASE}splatter1.wav`,
     splatter2: `${BASE}splatter2.wav`,
+    laserToast: `${BASE}LaserToast.wav`,
+    laserBeam: `${BASE}LaserBeam.wav`,
+    laserKill: `${BASE}LaserKill.wav`,
+    theme: `${BASE}Theme.wav`,
   });
   raceChaos = createRaceChaos({
     THREE,

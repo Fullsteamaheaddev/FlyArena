@@ -1,82 +1,20 @@
 // Twin eye lasers — visuals + host-side hit tests (no sim / navigation changes).
 
-const EYE_L = { x: 0.048, y: 0.034, z: 0.018 };
-const EYE_R = { x: 0.048, y: -0.034, z: 0.018 };
-const FWD_LOCAL = { x: 1, y: 0, z: -0.06 };
+const LASER_COLOR = '#ff2222';
 const FLY_HIT_R = 0.14;
 const MAX_RANGE = 28;
 const BURN_INTERVAL_MS = 34;
+const BEAM_RADIUS = 0.022;
+const WALK_EYE_Z_TAU_MS = 180;
+const WALK_DIR_TAU_MS = 180;
+const HORIZ_EPS = 1e-4;
 
-const _o = { x: 0, y: 0, z: 0 };
-const _d = { x: 0, y: 0, z: 0 };
 const _end = { x: 0, y: 0, z: 0 };
+const MUJOCO_EYE_L = { x: -0.022, y: 0.013, z: 0 };
+const MUJOCO_EYE_R = { x: 0.022, y: 0.013, z: 0 };
 
-function norm3(v) {
-  const l = Math.hypot(v.x, v.y, v.z) || 1;
-  v.x /= l; v.y /= l; v.z /= l;
-}
-
-function eyeBeamFromFly(f, side) {
-  const head = f.bodies?.head;
-  if (!head?.matrixWorld) return null;
-  head.updateWorldMatrix(true, false);
-  const m = head.matrixWorld.elements;
-  const ex = side === 'L' ? EYE_L.x : EYE_R.x;
-  const ey = side === 'L' ? EYE_L.y : EYE_R.y;
-  const ez = side === 'L' ? EYE_L.z : EYE_R.z;
-  _o.x = m[12] + m[0] * ex + m[4] * ey + m[8] * ez;
-  _o.y = m[13] + m[1] * ex + m[5] * ey + m[9] * ez;
-  _o.z = m[14] + m[2] * ex + m[6] * ey + m[10] * ez;
-  _d.x = m[0] * FWD_LOCAL.x + m[4] * FWD_LOCAL.y + m[8] * FWD_LOCAL.z;
-  _d.y = m[1] * FWD_LOCAL.x + m[5] * FWD_LOCAL.y + m[9] * FWD_LOCAL.z;
-  _d.z = m[2] * FWD_LOCAL.x + m[6] * FWD_LOCAL.y + m[10] * FWD_LOCAL.z;
-  norm3(_d);
-  return {
-    origin: { x: _o.x, y: _o.y, z: _o.z },
-    dir: { x: _d.x, y: _d.y, z: _d.z },
-    flyId: f.id,
-    color: f.color || '#ff4466',
-    key: `${f.id}:${side}`,
-  };
-}
-
-function raySphereT(ox, oy, oz, dx, dy, dz, cx, cy, cz, r) {
-  const fx = ox - cx, fy = oy - cy, fz = oz - cz;
-  const b = 2 * (fx * dx + fy * dy + fz * dz);
-  const c = fx * fx + fy * fy + fz * fz - r * r;
-  let disc = b * b - 4 * c;
-  if (disc < 0) return null;
-  disc = Math.sqrt(disc);
-  const t0 = (-b - disc) * 0.5;
-  const t1 = (-b + disc) * 0.5;
-  if (t0 > 0.02) return t0;
-  if (t1 > 0.02) return t1;
-  return null;
-}
-
-function rayFloorT(oz, dz) {
-  if (dz >= -1e-5) return null;
-  const t = -oz / dz;
-  return t > 0.02 ? t : null;
-}
-
-function rayWallT(ox, oy, dx, dy, R) {
-  const a = dx * dx + dy * dy;
-  if (a < 1e-8) return null;
-  const b = 2 * (ox * dx + oy * dy);
-  const c = ox * ox + oy * oy - R * R;
-  let disc = b * b - 4 * a * c;
-  if (disc < 0) return null;
-  disc = Math.sqrt(disc);
-  const t0 = (-b - disc) / (2 * a);
-  const t1 = (-b + disc) / (2 * a);
-  if (t0 > 0.02) return t0;
-  if (t1 > 0.02) return t1;
-  return null;
-}
-
-function castBeam(beam, liveFlies, arenaR, wallZ) {
-  const { origin: o, dir: d, flyId } = beam;
+function castBeam(origin, dir, flyId, liveFlies, arenaR, wallZ) {
+  const o = origin, d = dir;
   let bestT = MAX_RANGE;
   let hit = {
     type: 'miss', t: bestT, victimId: null,
@@ -116,79 +54,267 @@ function castBeam(beam, liveFlies, arenaR, wallZ) {
   return hit;
 }
 
+function raySphereT(ox, oy, oz, dx, dy, dz, cx, cy, cz, r) {
+  const fx = ox - cx, fy = oy - cy, fz = oz - cz;
+  const b = 2 * (fx * dx + fy * dy + fz * dz);
+  const c = fx * fx + fy * fy + fz * fz - r * r;
+  let disc = b * b - 4 * c;
+  if (disc < 0) return null;
+  disc = Math.sqrt(disc);
+  const t0 = (-b - disc) * 0.5;
+  const t1 = (-b + disc) * 0.5;
+  if (t0 > 0.02) return t0;
+  if (t1 > 0.02) return t1;
+  return null;
+}
+
+function rayFloorT(oz, dz) {
+  if (dz >= -1e-5) return null;
+  const t = -oz / dz;
+  return t > 0.02 ? t : null;
+}
+
+function rayWallT(ox, oy, dx, dy, R) {
+  const a = dx * dx + dy * dy;
+  if (a < 1e-8) return null;
+  const b = 2 * (ox * dx + oy * dy);
+  const c = ox * ox + oy * oy - R * R;
+  let disc = b * b - 4 * a * c;
+  if (disc < 0) return null;
+  disc = Math.sqrt(disc);
+  const t0 = (-b - disc) / (2 * a);
+  const t1 = (-b + disc) / (2 * a);
+  if (t0 > 0.02) return t0;
+  if (t1 > 0.02) return t1;
+  return null;
+}
+
+/** Compound-eye centroid in head body space (matches head_red mesh vertices). */
+function ensureEyeLocals(f, pool) {
+  if (pool.eyeLocalsReady) return;
+  pool.eyeLocalsReady = true;
+  const mesh = f.meshes?.find(m => m.name === 'head_red');
+  const pos = mesh?.geometry?.attributes?.position;
+  if (!pos) return;
+  for (const [side, target, fallback] of [
+    ['L', pool.eyeLocalL, MUJOCO_EYE_L],
+    ['R', pool.eyeLocalR, MUJOCO_EYE_R],
+  ]) {
+    const sign = side === 'L' ? -1 : 1;
+    let n = 0, x = 0, y = 0, z = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const px = pos.getX(i);
+      if (Math.sign(px) !== sign) continue;
+      x += px; y += pos.getY(i); z += pos.getZ(i);
+      n++;
+    }
+    if (n > 0) target.set(x / n, y / n, z / n);
+    else target.set(fallback.x, fallback.y, fallback.z);
+  }
+}
+
+function horizontalizeDir(f, pool, dir) {
+  const hx = dir.x, hy = dir.y;
+  const h2 = hx * hx + hy * hy;
+  if (h2 >= HORIZ_EPS * HORIZ_EPS) {
+    const inv = 1 / Math.sqrt(h2);
+    dir.set(hx * inv, hy * inv, 0);
+    return;
+  }
+  const yaw = f.last?.yaw;
+  if (yaw != null && Number.isFinite(yaw)) {
+    dir.set(Math.cos(yaw), Math.sin(yaw), 0);
+    return;
+  }
+  const thorax = f.bodies?.thorax;
+  if (!thorax) return;
+  thorax.updateWorldMatrix(true, false);
+  pool.forward.set(1, 0, 0).transformDirection(thorax.matrixWorld);
+  pool.forward.z = 0;
+  if (pool.forward.lengthSq() < HORIZ_EPS * HORIZ_EPS) return;
+  pool.forward.normalize();
+  dir.copy(pool.forward);
+}
+
+function smoothWalkEyeZ(f, pool, eyeOrigin) {
+  if (!pool.walkEyeZ) pool.walkEyeZ = new Map();
+  const id = f.id;
+  if (!pool._walkStabUpdatedIds) pool._walkStabUpdatedIds = new Set();
+  if (!pool._walkStabUpdatedIds.has(id)) {
+    const dtMs = pool._beamDtMs ?? 16;
+    const alpha = 1 - Math.exp(-dtMs / WALK_EYE_Z_TAU_MS);
+    const rawZ = eyeOrigin.z;
+    let smooth = pool.walkEyeZ.get(id);
+    if (smooth == null) smooth = rawZ;
+    else smooth += alpha * (rawZ - smooth);
+    pool.walkEyeZ.set(id, smooth);
+    pool._walkStabUpdatedIds.add(id);
+  }
+  eyeOrigin.z = pool.walkEyeZ.get(id) ?? eyeOrigin.z;
+}
+
+function smoothWalkDir(f, pool, dir) {
+  if (!pool.walkDir) pool.walkDir = new Map();
+  const id = f.id;
+  if (!pool._walkDirEmaIds) pool._walkDirEmaIds = new Set();
+  if (!pool._walkDirEmaIds.has(id)) {
+    const dtMs = pool._beamDtMs ?? 16;
+    const alpha = 1 - Math.exp(-dtMs / WALK_DIR_TAU_MS);
+    const rawX = dir.x, rawY = dir.y;
+    let sm = pool.walkDir.get(id);
+    if (!sm) {
+      sm = { x: rawX, y: rawY };
+    } else {
+      sm.x += alpha * (rawX - sm.x);
+      sm.y += alpha * (rawY - sm.y);
+    }
+    pool.walkDir.set(id, sm);
+    pool._walkDirEmaIds.add(id);
+  }
+  const sm = pool.walkDir.get(id);
+  if (!sm) return;
+  const len = Math.hypot(sm.x, sm.y);
+  if (len >= HORIZ_EPS) dir.set(sm.x / len, sm.y / len, 0);
+  else horizontalizeDir(f, pool, dir);
+}
+
+function stabilizeWalkBeam(f, pool, eyeOrigin, dir) {
+  smoothWalkEyeZ(f, pool, eyeOrigin);
+  horizontalizeDir(f, pool, dir);
+  smoothWalkDir(f, pool, dir);
+}
+
+function eyeBeamFromFly(f, side, pool) {
+  const head = f.bodies?.head;
+  if (!head) return null;
+  f.group?.updateWorldMatrix(false, true);
+  head.updateWorldMatrix(true, false);
+
+  ensureEyeLocals(f, pool);
+  const { eyeLocalL, eyeLocalR, eyeOrigin, forward, dir } = pool;
+  if (side === 'L') eyeOrigin.copy(eyeLocalL);
+  else eyeOrigin.copy(eyeLocalR);
+  head.localToWorld(eyeOrigin);
+
+  forward.set(0, 1, 0);
+  forward.transformDirection(head.matrixWorld);
+  if (forward.lengthSq() < 1e-8) return null;
+  forward.normalize();
+  dir.copy(forward);
+
+  if (f.last?.flying) {
+    pool.walkEyeZ?.delete(f.id);
+    pool.walkDir?.delete(f.id);
+  } else {
+    stabilizeWalkBeam(f, pool, eyeOrigin, dir);
+  }
+
+  return {
+    origin: { x: eyeOrigin.x, y: eyeOrigin.y, z: eyeOrigin.z },
+    dir: { x: dir.x, y: dir.y, z: dir.z },
+    flyId: f.id,
+    key: `${f.id}:${side}`,
+  };
+}
+
 export function createLaserPool(T, maxBeams = 28) {
   const group = new T.Group();
   group.name = 'chaosLasers';
   const beams = [];
-  const geom = new T.CylinderGeometry(1, 1, 1, 6, 1, true);
-  geom.translate(0, 0.5, 0);
+  const geom = new T.CylinderGeometry(1, 1, 1, 8, 1, true);
   geom.rotateX(Math.PI / 2);
-  const axis = new T.Vector3(0, 0, 1);
-  const mid = new T.Vector3();
+  geom.translate(0, 0, 0.5);
+  const mat = new T.MeshBasicMaterial({
+    color: LASER_COLOR, transparent: true, opacity: 0.72, depthWrite: false,
+    blending: T.AdditiveBlending, toneMapped: false,
+  });
+  const zAxis = new T.Vector3(0, 0, 1);
+  const eyeLocalL = new T.Vector3(MUJOCO_EYE_L.x, MUJOCO_EYE_L.y, MUJOCO_EYE_L.z);
+  const eyeLocalR = new T.Vector3(MUJOCO_EYE_R.x, MUJOCO_EYE_R.y, MUJOCO_EYE_R.z);
+  const eyeOrigin = new T.Vector3();
+  const forward = new T.Vector3();
   const dir = new T.Vector3();
   const q = new T.Quaternion();
+  const alt = new T.Vector3(1, 0, 0);
   for (let i = 0; i < maxBeams; i++) {
-    const sheath = new T.Mesh(geom, new T.MeshBasicMaterial({
-      color: '#ff6688', transparent: true, opacity: 0.38, depthWrite: false,
-      blending: T.AdditiveBlending, toneMapped: false,
-    }));
-    sheath.renderOrder = 7;
-    const core = new T.Mesh(geom, new T.MeshBasicMaterial({
-      color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false,
-      blending: T.AdditiveBlending, toneMapped: false,
-    }));
-    core.renderOrder = 8;
-    sheath.scale.set(0.028, 0.028, 1);
-    core.scale.set(0.012, 0.012, 1);
-    sheath.visible = core.visible = false;
-    group.add(sheath, core);
-    beams.push({ sheath, core });
+    const mesh = new T.Mesh(geom, mat.clone());
+    mesh.renderOrder = 7;
+    mesh.visible = false;
+    group.add(mesh);
+    beams.push({ mesh });
   }
-  return { group, beams, geom, axis, mid, dir, q };
+  return {
+    group, beams, geom, zAxis, eyeLocalL, eyeLocalR, eyeOrigin, forward, dir, q, alt,
+    eyeLocalsReady: false,
+    walkEyeZ: null,
+    walkDir: null,
+    lastBeamMs: null,
+  };
 }
 
-function placeBeam(pool, slot, ax, ay, az, bx, by, bz) {
-  const { axis, mid, dir, q } = pool;
-  const { sheath, core } = slot;
-  dir.set(bx - ax, by - ay, bz - az);
-  const len = dir.length();
+export function clearLaserWalkState(pool) {
+  if (!pool) return;
+  pool.walkEyeZ?.clear();
+  pool.walkDir?.clear();
+  pool.lastBeamMs = null;
+  pool._beamDtMs = null;
+  pool._walkStabUpdatedIds = null;
+  pool._walkDirEmaIds = null;
+}
+
+function aimBeam(pool, mesh, len) {
+  const { dir, zAxis, q, alt } = pool;
   if (len < 0.02) {
-    sheath.visible = core.visible = false;
+    mesh.visible = false;
     return;
   }
-  mid.set((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5);
-  dir.normalize();
-  q.setFromUnitVectors(axis, dir);
-  sheath.position.copy(mid);
-  sheath.quaternion.copy(q);
-  sheath.scale.set(0.028, 0.028, len);
-  sheath.visible = true;
-  core.position.copy(mid);
-  core.quaternion.copy(q);
-  core.scale.set(0.012, 0.012, len);
-  core.visible = true;
+  mesh.position.copy(pool.eyeOrigin);
+  const dot = zAxis.dot(dir);
+  if (dot > 0.9999) {
+    mesh.quaternion.identity();
+  } else if (dot < -0.9999) {
+    q.setFromAxisAngle(alt, Math.PI);
+    mesh.quaternion.copy(q);
+  } else {
+    q.setFromUnitVectors(zAxis, dir);
+    mesh.quaternion.copy(q);
+  }
+  mesh.scale.set(BEAM_RADIUS, BEAM_RADIUS, len);
+  mesh.visible = true;
 }
 
 export function hideLaserPool(pool) {
   if (!pool) return;
-  for (const b of pool.beams) {
-    b.sheath.visible = false;
-    b.core.visible = false;
-  }
+  for (const b of pool.beams) b.mesh.visible = false;
+  clearLaserWalkState(pool);
 }
 
-export function tickLaserBeams(pool, liveFlies, arena, nowMs, lastBurn, callbacks) {
+export function tickLaserBeams(pool, beamFlies, arena, nowMs, lastBurn, callbacks, hitFlies = beamFlies) {
+  let dtMs = 16;
+  if (pool.lastBeamMs != null) {
+    dtMs = nowMs - pool.lastBeamMs;
+    if (dtMs < 8) dtMs = 8;
+    else if (dtMs > 50) dtMs = 50;
+  }
+  pool._beamDtMs = dtMs;
+  pool.lastBeamMs = nowMs;
+  pool._walkStabUpdatedIds = new Set();
+  pool._walkDirEmaIds = new Set();
+
   let i = 0;
-  for (const f of liveFlies) {
+  for (const f of beamFlies) {
     if (!f.bodies?.head) continue;
     for (const side of ['L', 'R']) {
-      const beam = eyeBeamFromFly(f, side);
+      const beam = eyeBeamFromFly(f, side, pool);
       if (!beam || i >= pool.beams.length) continue;
-      const hit = castBeam(beam, liveFlies, arena.radius, arena.wallHeight ?? 8);
+      const hit = castBeam(beam.origin, beam.dir, beam.flyId, hitFlies, arena.radius, arena.wallHeight ?? 8);
       const slot = pool.beams[i++];
-      slot.sheath.material.color.set(beam.color);
-      const o = beam.origin;
-      placeBeam(pool, slot, o.x, o.y, o.z, _end.x, _end.y, _end.z);
+      const len = Math.hypot(
+        _end.x - beam.origin.x,
+        _end.y - beam.origin.y,
+        _end.z - beam.origin.z,
+      );
+      aimBeam(pool, slot.mesh, len);
 
       if (hit.type === 'fly' && callbacks.physics && hit.victimId != null) {
         callbacks.onFlyHit?.(hit.victimId);
@@ -203,22 +329,16 @@ export function tickLaserBeams(pool, liveFlies, arena, nowMs, lastBurn, callback
       }
     }
   }
-  for (; i < pool.beams.length; i++) {
-    pool.beams[i].sheath.visible = false;
-    pool.beams[i].core.visible = false;
-  }
+  for (; i < pool.beams.length; i++) pool.beams[i].mesh.visible = false;
 }
 
 export function disposeLaserPool(pool) {
   if (!pool) return;
   pool.group.parent?.remove(pool.group);
   pool.geom.dispose();
-  for (const b of pool.beams) {
-    b.sheath.material.dispose();
-    b.core.material.dispose();
-  }
+  for (const b of pool.beams) b.mesh.material.dispose();
 }
 
 export function laserSessionDuration() {
-  return 5000 + Math.random() * 5000;
+  return 4000 + Math.random() * 1000;
 }

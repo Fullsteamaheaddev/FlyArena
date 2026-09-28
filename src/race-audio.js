@@ -5,8 +5,25 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   const thumbUrl = extraUrls.thumb;
   const splatter1Url = extraUrls.splatter1;
   const splatter2Url = extraUrls.splatter2;
+  const laserToastUrl = extraUrls.laserToast;
+  const laserBeamUrl = extraUrls.laserBeam;
+  const laserKillUrl = extraUrls.laserKill;
+  const themeUrl = extraUrls.theme;
   let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf, boopBuf, thunderBuf, thumbBuf, splatter1Buf, splatter2Buf;
+  let laserToastBuf, laserBeamBuf, laserKillBuf, themeBuf;
+  let laserBeamSrc, laserBeamGain;
+  let themeLoopActive = false, themeGapTimer = null, themeSrc = null;
   let currentBed = null, lastStep = 0, muted = false, keepOsc = null;
+
+  async function decodeUrl(url) {
+    if (!url || !ctx) return null;
+    try {
+      const raw = await (await fetch(url)).arrayBuffer();
+      return await ctx.decodeAudioData(raw.slice(0));
+    } catch {
+      return null;
+    }
+  }
 
   async function unlock() {
     const Ctor = window.AudioContext || window.webkitAudioContext;
@@ -63,6 +80,10 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
         splatter2Buf = await ctx.decodeAudioData(raw.slice(0));
       } catch { splatter2Buf = null; }
     }
+    if (laserToastUrl && !laserToastBuf) laserToastBuf = await decodeUrl(laserToastUrl);
+    if (laserBeamUrl && !laserBeamBuf) laserBeamBuf = await decodeUrl(laserBeamUrl);
+    if (laserKillUrl && !laserKillBuf) laserKillBuf = await decodeUrl(laserKillUrl);
+    if (themeUrl && !themeBuf) themeBuf = await decodeUrl(themeUrl);
   }
   function startBuzz() {
     const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 218;
@@ -75,19 +96,73 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     const ng = ctx.createGain(); ng.gain.value = 0.35;
     noise.connect(nbp); nbp.connect(ng); ng.connect(buzzGain); noise.start();
   }
+  function stopThemeBed(fadeOut = true) {
+    themeLoopActive = false;
+    if (themeGapTimer) { clearTimeout(themeGapTimer); themeGapTimer = null; }
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const fade = fadeOut ? 0.25 : 0;
+    if (themeSrc) {
+      try { themeSrc.stop(now + fade + 0.02); } catch {}
+      themeSrc = null;
+    }
+    if (bedGain && currentBed === 'menu' && themeBuf) {
+      const from = bedGain.gain.value;
+      bedGain.gain.cancelScheduledValues(now);
+      bedGain.gain.setValueAtTime(from, now);
+      if (fade > 0) bedGain.gain.linearRampToValueAtTime(0, now + fade);
+    }
+  }
+  function fadeStopLoopBed() {
+    if (!ctx || !musicSrc || !bedGain) return;
+    const now = ctx.currentTime, fade = 0.25;
+    const oldSrc = musicSrc, oldGain = bedGain;
+    const from = oldGain.gain.value;
+    oldGain.gain.cancelScheduledValues(now);
+    oldGain.gain.setValueAtTime(from, now);
+    oldGain.gain.linearRampToValueAtTime(0, now + fade);
+    try { oldSrc.stop(now + fade + 0.02); } catch {}
+    musicSrc = null;
+    bedGain = null;
+  }
+  function playThemeOnce() {
+    if (!themeLoopActive || currentBed !== 'menu' || !ctx || ctx.state !== 'running' || !themeBuf || !bedGain) return;
+    const src = ctx.createBufferSource();
+    src.buffer = themeBuf;
+    src.loop = false;
+    src.connect(bedGain);
+    src.onended = () => {
+      if (themeSrc === src) themeSrc = null;
+      if (themeLoopActive && currentBed === 'menu') {
+        themeGapTimer = setTimeout(playThemeOnce, 500);
+      }
+    };
+    src.start();
+    themeSrc = src;
+  }
   function playBed(kind) {
-    const buf = kind === 'menu' ? menuBuf : musicBuf;
     if (!ctx || ctx.state !== 'running') return;
+    if (kind === 'menu' && themeBuf) {
+      if (currentBed === 'menu' && themeLoopActive) return;
+      fadeStopLoopBed();
+      stopThemeBed(false);
+      const now = ctx.currentTime, fade = 0.25;
+      currentBed = 'menu';
+      themeLoopActive = true;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(1, now + fade);
+      g.connect(musicGain);
+      bedGain = g;
+      musicSrc = null;
+      playThemeOnce();
+      return;
+    }
+    stopThemeBed();
+    const buf = kind === 'menu' ? menuBuf : musicBuf;
     if (!buf || (currentBed === kind && musicSrc)) return;
     const now = ctx.currentTime, fade = 0.25;
-    if (musicSrc && bedGain) {
-      const oldSrc = musicSrc, oldGain = bedGain;
-      const from = oldGain.gain.value;
-      oldGain.gain.cancelScheduledValues(now);
-      oldGain.gain.setValueAtTime(from, now);
-      oldGain.gain.linearRampToValueAtTime(0, now + fade);
-      try { oldSrc.stop(now + fade + 0.02); } catch {}
-    }
+    fadeStopLoopBed();
     currentBed = kind;
     const src = ctx.createBufferSource();
     src.buffer = buf;
@@ -99,11 +174,49 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     musicSrc = src;
     bedGain = g;
   }
+  function stopLaserBeam() {
+    if (!ctx || !laserBeamSrc) return;
+    const now = ctx.currentTime;
+    if (laserBeamGain) {
+      const from = laserBeamGain.gain.value;
+      laserBeamGain.gain.cancelScheduledValues(now);
+      laserBeamGain.gain.setValueAtTime(from, now);
+      laserBeamGain.gain.linearRampToValueAtTime(0, now + 0.04);
+    }
+    try { laserBeamSrc.stop(now + 0.05); } catch {}
+    laserBeamSrc = null;
+    laserBeamGain = null;
+  }
+  function startLaserBeam() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    stopLaserBeam();
+    if (!laserBeamBuf) return;
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = laserBeamBuf;
+    src.loop = true;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.75, now + 0.04);
+    src.connect(g); g.connect(master);
+    src.start();
+    laserBeamSrc = src;
+    laserBeamGain = g;
+  }
+  function playLaserToast() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    playBuf(laserToastBuf, ctx.currentTime, 0.85);
+  }
+  function playLaserKill() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    playBuf(laserKillBuf, ctx.currentTime, 0.85);
+  }
   function stop() {
-    try { musicSrc?.stop(); } catch {}
-    musicSrc = null;
-    bedGain = null;
+    stopLaserBeam();
+    stopThemeBed(false);
+    fadeStopLoopBed();
     currentBed = null;
+    bedGain = null;
     lastStep = 0;
     if (ctx && buzzGain) buzzGain.gain.setTargetAtTime(0, ctx.currentTime, 0.04);
     duck(false);
@@ -243,7 +356,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   function playChaos(kind, extra = {}) {
     if (!ctx || ctx.state !== 'running' || muted) return;
     const t0 = ctx.currentTime;
-    const hold = { thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7, firefly: 7.1, boop: 1.1, puff: 5.1, laser: 7.5 }[kind] || 0.8;
+    const hold = { thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7, firefly: 7.1, boop: 1.1, puff: 5.1, laser: 1.5 }[kind] || 0.8;
     duck(true);
     setTimeout(() => duck(false), hold * 1000);
     if (kind === 'thumb') { sfxThumb(t0); playBuf(thumbBuf, t0, 0.85); }
@@ -266,7 +379,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     else if (kind === 'firefly') sfxFirefly(t0);
     else if (kind === 'boop') { sfxBoop(t0); playBuf(boopBuf, t0, 0.85); }
     else if (kind === 'puff') sfxPuff(t0);
-    else if (kind === 'laser') sfxLaser(t0);
+    else if (kind === 'laser') playLaserToast();
   }
   function playBuf(buf, when, gain = 0.8) {
     if (!ctx || !buf) return;
@@ -468,7 +581,10 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     hg.gain.exponentialRampToValueAtTime(0.001, t0 + 7);
     hiss.connect(hp); hp.connect(hg); hg.connect(master); hiss.start(t0);
   }
-  return { unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, playChaos, playCakeLand, setMuted, setMotion, hold };
+  return {
+    unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, playChaos, playCakeLand,
+    setMuted, setMotion, hold, playLaserToast, startLaserBeam, stopLaserBeam, playLaserKill,
+  };
 }
 
 function makeMusicBuffer(ctx) {
