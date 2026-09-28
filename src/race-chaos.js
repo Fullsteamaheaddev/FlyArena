@@ -1,4 +1,5 @@
 import { makeThumb, makeHand, makeFinger, fadeGroup, prepareMeshFade, makeCakeSlice, makeLeaf } from './race-chaos-props.js';
+import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial } from './race-chaos-bolt.js';
 
 export const CHAOS_KINDS = ['thumb', 'spin', 'quake', 'flip', 'tilt', 'lightning', 'double', 'crumb', 'firefly', 'boop', 'puff'];
 const KINDS = CHAOS_KINDS;
@@ -76,6 +77,8 @@ export function createRaceChaos(api) {
   let dishAnim = null, dishPhysics = false, lastDishKey = '';
   let camShot = null;
   let shakes = [];
+  let sceneFlashes = [];
+  let sceneFlashEl = null;
 
   function radius() { return api.env()?.arena?.radius || 12.5; }
   function flies() { return api.flies() || []; }
@@ -118,6 +121,53 @@ export function createRaceChaos(api) {
     toastEl.classList.remove('in');
     toastEl.hidden = true;
     clearTimeout(toastTimer);
+  }
+  function sceneFlashBox() {
+    if (sceneFlashEl) return sceneFlashEl;
+    const el = document.createElement('div');
+    el.id = 'lightningSceneFlash';
+    el.hidden = true;
+    el.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(el);
+    sceneFlashEl = el;
+    return el;
+  }
+  function clearSceneFlash() {
+    sceneFlashes = [];
+    if (sceneFlashEl) {
+      sceneFlashEl.hidden = true;
+      sceneFlashEl.style.opacity = '0';
+    }
+  }
+  function pokeSceneFlash(opts = {}) {
+    const peak = opts.hit ? 0.55 : opts.thin ? 0.28 : 0.42;
+    const dur = opts.hit ? 240 : opts.thin ? 160 : 200;
+    sceneFlashes.push({ t0: now(), peak, dur });
+    updateSceneFlashEl(now());
+  }
+  function updateSceneFlashEl(t) {
+    let op = 0;
+    const next = [];
+    for (const s of sceneFlashes) {
+      const u = (t - s.t0) / s.dur;
+      if (u >= 1) continue;
+      let v = 0;
+      if (u >= 0) {
+        if (u < 0.05) v = s.peak * (u / 0.05);
+        else v = s.peak * (1 - ((u - 0.05) / 0.95) ** 1.8);
+      }
+      op = Math.max(op, v);
+      next.push(s);
+    }
+    sceneFlashes = next;
+    const el = sceneFlashBox();
+    if (op <= 0.001) {
+      el.hidden = true;
+      el.style.opacity = '0';
+    } else {
+      el.hidden = false;
+      el.style.opacity = String(op);
+    }
   }
   function post(f, msg) { if (f?.worker) f.worker.postMessage({ type: 'chaos', ...msg }); }
   function postAll(msg) { for (const f of liveFlies(flies())) post(f, msg); }
@@ -238,96 +288,12 @@ export function createRaceChaos(api) {
     obj.parent?.remove(obj);
   }
 
-  function jagged(a, b, gens = 5, spread = 1.4) {
-    let pts = [a, b];
-    for (let g = 0; g < gens; g++) {
-      const next = [], jag = spread * Math.pow(0.52, g);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const p = pts[i], q = pts[i + 1];
-        next.push(p, {
-          x: (p.x + q.x) / 2 + (Math.random() - 0.5) * jag,
-          y: (p.y + q.y) / 2 + (Math.random() - 0.5) * jag,
-          z: (p.z + q.z) / 2 + (Math.random() - 0.5) * jag * 0.15,
-        });
-      }
-      next.push(pts[pts.length - 1]);
-      pts = next;
-    }
-    return pts;
-  }
-
-  function boltMesh(pts, radius, color, opacity) {
-    if (!pts || pts.length < 2) return null;
-    const v = pts.map(p => new T.Vector3(p.x, p.y, p.z));
-    try {
-      const curve = new T.CatmullRomCurve3(v, false, 'catmullrom', 0.35);
-      const geo = new T.TubeGeometry(curve, Math.max(12, pts.length * 2), radius, 6, false);
-      const mat = new T.MeshBasicMaterial({
-        color, transparent: true, opacity, depthWrite: false,
-        blending: T.AdditiveBlending, toneMapped: false,
-      });
-      const mesh = new T.Mesh(geo, mat);
-      mesh.renderOrder = 6;
-      return mesh;
-    } catch {
-      return null;
-    }
-  }
-
   function boltHeight() {
     const cam = api.camera();
     const ctl = api.controls();
     const md = ctl?.maxDistance || radius() * 5;
     const fov = ((cam?.fov || 40) * Math.PI) / 180;
     return md * Math.tan(fov / 2) * 1.6;
-  }
-
-  function makeBolt(x, y, { fork = true, height, thin = false, hit = false } = {}) {
-    height = height ?? boltHeight();
-    const g = new T.Group();
-    g.position.set(x, y, height);
-    const floorZ = 0.04 - height;
-    const wander = Math.min(3.4, height * 0.09);
-    const top = { x: randRange(-wander, wander), y: randRange(-wander, wander), z: 0 };
-    const bot = { x: 0, y: 0, z: floorZ };
-    const main = jagged(top, bot, 6, thin ? wander * 0.5 : wander);
-    const rCore = thin ? 0.04 : 0.05;
-    const rSheath = thin ? 0.16 : 0.22;
-    const rBloom = thin ? 0.32 : (hit ? 0.64 : 0.48);
-    const add = (mesh, kind) => {
-      if (!mesh) return;
-      mesh.userData.boltLayer = kind;
-      g.add(mesh);
-    };
-    add(boltMesh(main, rCore, '#ffffff', 1), 'core');
-    add(boltMesh(main, rSheath, '#6ec8ff', thin ? 0.42 : 0.52), 'sheath');
-    if (!thin) add(boltMesh(main, rBloom, '#b48cff', hit ? 0.28 : 0.16), 'bloom');
-    if (fork) addBoltForks(main, floorZ, rCore, rSheath, add, 0, thin ? 1 : 2);
-    return g;
-  }
-
-  function addBoltForks(pts, floorZ, rCore, rSheath, add, depth, maxDepth) {
-    const scale = Math.pow(0.58, depth);
-    const n = depth === 0 ? 3 + Math.floor(Math.random() * 3) : 1 + Math.floor(Math.random() * 2);
-    for (let i = 0; i < n; i++) {
-      const src = pts[Math.floor(pts.length * randRange(0.12 + depth * 0.1, 0.7))];
-      const remain = src.z - floorZ;
-      if (remain < 0.6) continue;
-      const ang = randRange(0, Math.PI * 2);
-      const out = remain * randRange(0.18, 0.48) * scale;
-      const end = {
-        x: src.x + Math.cos(ang) * out,
-        y: src.y + Math.sin(ang) * out,
-        z: Math.max(floorZ, src.z - remain * randRange(0.28, 0.72)),
-      };
-      const br = jagged(src, end, 4, Math.max(0.35, out * 0.45));
-      const k = 0.52 * scale;
-      add(boltMesh(br, rCore * k, '#ffffff', 0.9), 'core');
-      add(boltMesh(br, rSheath * k, '#7ecbff', 0.36), 'sheath');
-      if (depth + 1 < maxDepth && Math.random() < 0.7) {
-        addBoltForks(br, floorZ, rCore, rSheath, add, depth + 1, maxDepth);
-      }
-    }
   }
 
   function identityDish() { return { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 }; }
@@ -476,28 +442,14 @@ export function createRaceChaos(api) {
     return killed;
   }
 
-  function boltPulse(u) {
-    const t = u * 450;
-    if (t < 70) {
-      const k = t / 70;
-      return { reveal: k, core: k, glow: k, flash: k };
-    }
-    if (t < 270) {
-      const p = (t - 70) / 200;
-      const flick = Math.abs(Math.sin(p * Math.PI * 3));
-      const k = 0.12 + 0.88 * flick ** 0.35;
-      return { reveal: 1, core: k > 0.35 ? 1 : 0.18, glow: k, flash: 0.55 + 0.45 * flick };
-    }
-    const d = (t - 270) / 180;
-    return { reveal: 1, core: Math.max(0, 1 - d * 2.2), glow: 1 - d, flash: (1 - d) * 0.7 };
-  }
-
   function flashBolt(x, y, opts = {}) {
+    pokeSceneFlash(opts);
     const root = fxGroup();
-    const bolt = makeBolt(x, y, opts);
+    const height = opts.height ?? boltHeight();
+    const bolt = makeBolt(T, x, y, { ...opts, height });
     bolt.scale.set(1, 1, 0.02);
-    bolt.traverse(o => { if (o.material) o.userData.baseOp = o.material.opacity; });
     root.add(bolt);
+    const t0 = now();
     const lightPeak = opts.thin ? 18 : opts.hit ? 48 : 34;
     const light = new T.PointLight(opts.hit ? '#e8f0ff' : '#d7eeff', 0, opts.thin ? 10 : 18);
     light.position.set(x, y, 3.2);
@@ -506,22 +458,18 @@ export function createRaceChaos(api) {
     const flashR = opts.thin ? 0.7 : opts.hit ? 1.45 : 1.15;
     const flash = new T.Mesh(
       new T.CircleGeometry(flashR, 28),
-      new T.MeshBasicMaterial({ color: opts.hit ? '#ffffff' : '#e8f4ff', transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, toneMapped: false }),
+      boltGroundFlashMaterial(T, !!opts.hit),
     );
     flash.position.set(x, y, 0.03);
     root.add(flash);
     tween(450, u => {
       const e = boltPulse(u);
+      const elapsed = now() - t0;
       bolt.scale.z = Math.max(0.02, e.reveal);
       light.intensity = lightPeak * e.glow;
       flash.material.opacity = (opts.hit ? 1 : 0.85) * e.flash;
       flash.scale.setScalar(0.85 + 0.35 * e.flash);
-      bolt.traverse(o => {
-        if (!o.material) return;
-        const base = o.userData.baseOp ?? 1;
-        const layer = o.userData.boltLayer;
-        o.material.opacity = base * (layer === 'core' ? e.core : e.glow);
-      });
+      setBoltPulse(bolt, e, elapsed);
     }, () => { disposeObj(bolt); disposeObj(flash); light.parent?.remove(light); });
   }
 
@@ -1109,6 +1057,7 @@ export function createRaceChaos(api) {
   function disposeAllFx() {
     tweens = [];
     shakes = [];
+    clearSceneFlash();
     scorches = [];
     busyUntil = 0;
     dishAnim = null;
@@ -1181,6 +1130,7 @@ export function createRaceChaos(api) {
         return true;
       });
     }
+    updateSceneFlashEl(t);
     if (scorches.length && t - lastScorchPaint > 500) {
       scorches = scorches.filter(s => t < s.until + 4000);
       lastScorchPaint = t;
@@ -1205,7 +1155,15 @@ export function createRaceChaos(api) {
   function previewProp(kind) {
     const root = fxGroup();
     if (previewMesh) { disposeObj(previewMesh); previewMesh = null; }
-    const key = kind === 'boop' ? 'finger' : kind;
+    const key = kind === 'boop' ? 'finger' : kind === 'double' ? 'lightning' : kind;
+    if (key === 'lightning') {
+      previewMesh = makeBolt(T, 0, 0, { height: boltHeight() * 0.85, hit: true, fork: true });
+      previewMesh.userData.chaosPreview = true;
+      previewMesh.scale.set(1, 1, 1);
+      setBoltPulse(previewMesh, { reveal: 1, core: 1, glow: 1, flash: 1 }, 0);
+      root.add(previewMesh);
+      return key;
+    }
     const make = key === 'thumb' ? makeThumb : key === 'hand' ? makeHand : key === 'finger' ? makeFinger : null;
     if (!make) return null;
     previewMesh = make(T);

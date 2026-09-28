@@ -316,6 +316,19 @@ body.race #bpHint[hidden] { display: none; animation: none; }
   82% { transform: scale(1); opacity: 1; }
   100% { transform: scale(1); opacity: 0; }
 }
+body.race #lightningSceneFlash {
+  position: fixed; inset: 0; z-index: 2; pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: screen;
+  background: radial-gradient(
+    ellipse 85% 70% at 50% 42%,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(200, 235, 255, 0.45) 35%,
+    rgba(140, 120, 220, 0.15) 62%,
+    transparent 78%
+  );
+}
+body.race #lightningSceneFlash[hidden] { display: none; }
 body.race #chaosToast {
   position: fixed; left: 50%; top: 14%; z-index: 6; pointer-events: none;
   transform: translateX(-50%) translateY(-12px) scale(.86);
