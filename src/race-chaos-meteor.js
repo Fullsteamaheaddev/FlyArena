@@ -24,25 +24,26 @@ export function allocMeteorSmokeBatch() {
 
 export function initMeteorSmoke(THREE, parent, texture) {
   T = THREE;
-  smokeTex = texture;
+  smokeTex = texture || smokeTex;
   if (!smokeGroup) {
     smokeGroup = new THREE.Group();
     smokeGroup.name = 'meteorSmoke';
     smokeGroup.renderOrder = 5;
+  }
+  if (parent && smokeGroup.parent !== parent) {
+    smokeGroup.parent?.remove(smokeGroup);
     parent.add(smokeGroup);
   }
-  puffs = [];
-  sealedBatches.clear();
-  batchDieAt.clear();
 }
 
 export function disposeMeteorSmoke() {
-  if (!smokeGroup) return;
   for (const p of puffs) disposePuff(p);
   puffs = [];
   sealedBatches.clear();
   batchDieAt.clear();
-  while (smokeGroup.children.length) smokeGroup.remove(smokeGroup.children[0]);
+  if (!smokeGroup) return;
+  smokeGroup.parent?.remove(smokeGroup);
+  smokeGroup = null;
 }
 
 function disposePuff(p) {
@@ -55,11 +56,11 @@ function makePuffMaterial() {
   return new T.SpriteMaterial({
     map: smokeTex,
     transparent: true,
-    opacity: 0.42,
+    opacity: 0.85,
     depthWrite: false,
-    depthTest: true,
+    depthTest: false,
     blending: T.NormalBlending,
-    color: 0xd4d4dc,
+    color: 0xe8e8f0,
     toneMapped: false,
   });
 }
@@ -152,7 +153,7 @@ function spawnMeteorSmokePuff(x, y, z, scale, batchId, driftVec) {
     vx: driftVec?.vx ?? 0,
     vy: driftVec?.vy ?? 0,
     vz: driftVec?.vz ?? 0,
-    baseOpacity: 0.32,
+    baseOpacity: 0.78,
   });
 }
 

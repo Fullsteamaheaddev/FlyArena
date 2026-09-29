@@ -18,6 +18,7 @@ import { createRaceAudio } from './race-audio.js';
 import { createRaceChaos, paintChaosScorches, CHAOS_KINDS } from './race-chaos.js';
 import { preloadChaosAssets } from './race-chaos-assets.js';
 import { matchRole, isWatchPath, isRaceHostPath, matchUrl, createMatchLink, buildMatchState, packAct, unpackAct, packEyes, unpackEyes } from './match.js';
+import { fetchSiteTickerUrl, normalizeTickerHref } from './ticker-url.js';
 import {
   DEFAULT_WINDOW, chainConfigured, connectWallet, disconnectWallet, ensureWallet, restoreWallet, switchAccount, onWalletChange, getAccount, readWindow, readPools,
   openRace, lockRace, settleRace, voidRace, placeBet, claimRace, refundRace,
@@ -67,6 +68,7 @@ const X_HREF = 'https://x.com/SugarRunFun';
 const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
 let lastRaceFliesKey = '';
 let watchTickerUrl = null;
+let siteTickerUrl = '';
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
@@ -164,6 +166,7 @@ async function mainWatch() {
   flyvisMap = fvm; meta = data.meta; bodymap = bm;
   buildScene(data);
   buildBrainPanel(data);
+  await preloadChaosAssets(THREE, BASE);
   setupRaceChrome();
   setupFolds();
   setRaceBrainFolded(raceMobile(), { instant: true });
@@ -835,29 +838,54 @@ function flyTimeLine(fly) {
 }
 function tickerUrl() {
   const env = String(import.meta.env.VITE_TICKER_URL || '').trim();
-  if (env) return env;
-  try { return (localStorage.getItem(TICKER_KEY) || '').trim(); } catch { return ''; }
+  if (env) return normalizeTickerHref(env);
+  if (siteTickerUrl) return siteTickerUrl;
+  try { return normalizeTickerHref(localStorage.getItem(TICKER_KEY) || ''); } catch { return ''; }
 }
 function resolvedTickerUrl() {
-  if (isWatch && watchTickerUrl != null) return watchTickerUrl;
-  return tickerUrl();
+  const local = tickerUrl();
+  if (local) return local;
+  if (isWatch && watchTickerUrl) return normalizeTickerHref(watchTickerUrl);
+  return '';
+}
+async function loadSiteTicker() {
+  const u = await fetchSiteTickerUrl();
+  siteTickerUrl = u;
+  if (u) {
+    try { localStorage.setItem(TICKER_KEY, u); } catch {}
+  }
+  paintRaceTicker();
+  if (isHost) publishMatchState(true);
 }
 function paintRaceTicker(href) {
   const a = $('#raceTicker');
   if (!a) return;
-  const url = href != null ? String(href).trim() : resolvedTickerUrl();
+  const url = href != null ? normalizeTickerHref(href) : resolvedTickerUrl();
+  a.classList.toggle('is-off', !url);
   if (url) {
     a.href = url;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     a.removeAttribute('aria-disabled');
-    a.style.pointerEvents = '';
+    a.title = 'FLYticker';
   } else {
-    a.removeAttribute('href');
+    a.href = '#';
     a.removeAttribute('target');
     a.removeAttribute('rel');
     a.setAttribute('aria-disabled', 'true');
-    a.style.pointerEvents = 'none';
+    a.title = 'Set FLYticker URL in /admin';
+  }
+}
+function onRaceTickerClick(e) {
+  const url = resolvedTickerUrl();
+  if (!url) {
+    e.preventDefault();
+    return;
+  }
+  const a = e.currentTarget;
+  if (!a?.href || a.getAttribute('href') === '#') {
+    e.preventDefault();
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 }
 function setupRaceSocials() {
@@ -867,9 +895,18 @@ function setupRaceSocials() {
   nav.hidden = true;
   nav.setAttribute('aria-label', 'Sugar Run links');
   nav.innerHTML = `<a class="race-social race-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
-    <a class="race-social race-social-ticker" id="raceTicker" aria-label="FLYticker"><img src="${BASE}FLYticker.webp" alt="FLYticker" /></a>`;
+    <a class="race-social race-social-ticker" id="raceTicker" href="#" aria-label="FLYticker"><img src="${BASE}FLYticker.webp" alt="FLYticker" draggable="false" /></a>`;
   document.body.appendChild(nav);
+  $('#raceTicker')?.addEventListener('click', onRaceTickerClick);
   paintRaceTicker();
+  loadSiteTicker();
+  if (!isWatch) {
+    addEventListener('storage', e => {
+      if (e.key !== TICKER_KEY) return;
+      paintRaceTicker();
+      publishMatchState(true);
+    });
+  }
 }
 function showRaceSocials() {
   if ($('#enterGate')) return;
@@ -982,6 +1019,7 @@ function paintSimRate(r) {
 }
 function publishMatchState(force = false) {
   if (!isHost || !matchLink) return;
+  paintRaceTicker();
   const now = performance.now();
   sampleSimRate(now);
   if (!force && now - lastMatchSend < 1000 / 30) return;

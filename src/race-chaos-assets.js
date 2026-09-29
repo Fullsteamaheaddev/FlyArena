@@ -59,6 +59,7 @@ export async function preloadChaosAssets(THREE, baseUrl = '/') {
 }
 
 export function getChaosSmokeTexture() {
+  if (!smokeTexture) smokeTexture = createSmokePuffTexture(THREE);
   return smokeTexture;
 }
 

@@ -894,11 +894,8 @@ export function createRaceChaos(api) {
     disposeMeteorSmoke();
   }
 
-  let meteorSmokeReady = false;
   function ensureMeteorSmoke() {
-    if (meteorSmokeReady) return;
     initMeteorSmoke(T, fxGroup(), getChaosSmokeTexture());
-    meteorSmokeReady = true;
   }
 
   function chaosMesh(name) {
@@ -920,12 +917,13 @@ export function createRaceChaos(api) {
     const sy = y + Math.sin(slantAz) * slantR;
     const sz = h;
     const mesh = chaosMesh('meteor_chunk');
-    if (!mesh) return;
-    prepareMeshFade(mesh);
-    mesh.userData.meteorChunk = true;
-    mesh.position.set(sx, sy, sz);
-    orientMeteorAlong(mesh, x - sx, y - sy, zGround - sz);
-    root.add(mesh);
+    if (mesh) {
+      prepareMeshFade(mesh);
+      mesh.userData.meteorChunk = true;
+      mesh.position.set(sx, sy, sz);
+      orientMeteorAlong(mesh, x - sx, y - sy, zGround - sz);
+      root.add(mesh);
+    }
     const smokeBatch = allocMeteorSmokeBatch();
     const fallMs = 320 + Math.sqrt(Math.hypot(slantR, h)) * 38;
     let prevPx = sx;
@@ -936,16 +934,20 @@ export function createRaceChaos(api) {
       const px = sx + (x - sx) * t;
       const py = sy + (y - sy) * t;
       const pz = sz + (zGround - sz) * t;
-      mesh.position.set(px, py, pz);
-      mesh.rotation.z += 0.14;
+      if (mesh) {
+        mesh.position.set(px, py, pz);
+        mesh.rotation.z += 0.14;
+      }
       emitMeteorSmokeAlongSegment(prevPx, prevPy, prevPz, px, py, pz, smokeBatch);
       prevPx = px;
       prevPy = py;
       prevPz = pz;
     }, () => {
       const landT = now();
-      mesh.position.set(x, y, zGround);
-      mesh.rotation.z = 0;
+      if (mesh) {
+        mesh.position.set(x, y, zGround);
+        mesh.rotation.z = 0;
+      }
       burstMeteorSmoke(x, y, zGround, smokeBatch);
       sealMeteorSmokeBatch(smokeBatch, landT);
       camShake(200, opts.kill ? 0.26 : 0.18);
@@ -968,7 +970,7 @@ export function createRaceChaos(api) {
         }
       }
       later(15000, () => {
-        if (!mesh.parent || mesh.userData.meteorDespawning) return;
+        if (!mesh?.parent || mesh.userData.meteorDespawning) return;
         mesh.userData.meteorDespawning = true;
         tween(500, u => {
           fadeMeteorChunk(mesh, 1 - u);

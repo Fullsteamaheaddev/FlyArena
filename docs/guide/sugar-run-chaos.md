@@ -138,7 +138,7 @@ Do **not** build hero chaos props from Three.js primitives (except cheap particl
 2. Export **low-poly GLB** to `public/chaos/` (e.g. `ufo.glb`, `spike_trap.glb`,
    `sugar_crumb.glb`, `meteor_chunk.glb`).
 3. Load via [`src/race-chaos-assets.js`](../../src/race-chaos-assets.js) (`preloadChaosAssets`
-   from `arena.js` on race boot).
+   from `arena.js` on **host and watcher** race boot — watchers need the GLBs to replay cues).
 4. Regenerate baked meshes: `node scripts/export_chaos_props.mjs` (Z-up GLBs into
    `public/chaos/`). Refine in Blender MCP + `/local/prop-studio`, then re-export.
 5. Keep triangle budgets modest (arena already heavy).

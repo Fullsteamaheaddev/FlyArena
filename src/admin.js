@@ -3,6 +3,7 @@ import {
   adminSetToken, adminSetWindow, adminSetOperator, adminSetFeeBps, adminSetFeeRecipient,
   adminMint, readChipMeta, chipSymbol,
 } from './chain.js';
+import { fetchSiteTickerUrl, saveSiteTickerUrl } from './ticker-url.js';
 
 const $ = s => document.querySelector(s);
 const status = s => { $('#adminStatus').textContent = s; };
@@ -52,7 +53,12 @@ async function refresh() {
   $('#adminOp').value = op;
   $('#adminFee').value = feeBps / 100;
   $('#adminFeeTo').value = feeTo;
-  try { $('#adminTicker').value = localStorage.getItem('sugarRunTickerUrl') || ''; } catch { $('#adminTicker').value = ''; }
+  const siteTicker = await fetchSiteTickerUrl();
+  if (siteTicker) $('#adminTicker').value = siteTicker;
+  else {
+    try { $('#adminTicker').value = localStorage.getItem('sugarRunTickerUrl') || ''; }
+    catch { $('#adminTicker').value = ''; }
+  }
   const mint = $('#adminMint');
   if (mint) mint.textContent = `Mint ${meta.symbol || chipSymbol()}`;
 }
@@ -97,10 +103,16 @@ $('#adminSetFeeTo').onclick = async () => {
   try { if (!(await authorize())) return; await adminSetFeeRecipient($('#adminFeeTo').value.trim()); status('Fee wallet saved.'); await refresh(); }
   catch (e) { status(e.message || String(e)); }
 };
-$('#adminSetTicker').onclick = () => {
-  const url = $('#adminTicker').value.trim();
-  try { localStorage.setItem('sugarRunTickerUrl', url); } catch {}
-  status(url ? 'Ticker URL saved on this browser.' : 'Ticker URL cleared.');
+$('#adminSetTicker').onclick = async () => {
+  try {
+    if (!(await authorize())) return;
+    const url = $('#adminTicker').value.trim();
+    try { localStorage.setItem('sugarRunTickerUrl', url); } catch {}
+    await saveSiteTickerUrl(url);
+    status(url ? 'Ticker URL saved for the whole site (host and watchers).' : 'Ticker URL cleared.');
+  } catch (e) {
+    status(e.message || String(e));
+  }
 };
 $('#adminMint').onclick = async () => {
   try {
