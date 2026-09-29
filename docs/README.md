@@ -36,6 +36,7 @@ which covers the structural analysis and the model ensembles.
 ### World
 15. [Arena app](15-arena.md): workers, rendering, presets, controls
 16. [Physiology](16-physiology.md): energy, hunger, feeding, damage
+- [Sugar Run chaos events](guide/sugar-run-chaos.md): roulette kinds, host/watcher cues, cleanup, planned wildcards
 
 ### Results and status
 17. [Experiments and scripts](17-experiments.md): headless tools and the behaviour report

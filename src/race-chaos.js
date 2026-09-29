@@ -1,8 +1,20 @@
-import { makeThumb, makeHand, makeFinger, fadeGroup, prepareMeshFade, makeCakeSlice, makeLeaf } from './race-chaos-props.js';
+import {
+  makeThumb, makeHand, makeFinger, fadeGroup, fadeMeteorChunk, prepareMeshFade, makeCakeSlice, makeLeaf,
+} from './race-chaos-props.js';
+import { cloneChaosProp, getChaosSmokeTexture } from './race-chaos-assets.js';
+import { createUfoBeam, tickUfoBeam, setUfoBeamOpacity } from './race-chaos-ufo-beam.js';
+import { setUfoSaucerFade } from './ufo-rim-glow.js';
+import {
+  initMeteorSmoke, allocMeteorSmokeBatch, emitMeteorSmokeAlongSegment, sealMeteorSmokeBatch,
+  disposeMeteorSmoke, burstMeteorSmoke, orientMeteorAlong, tickMeteorSmoke,
+} from './race-chaos-meteor.js';
 import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial } from './race-chaos-bolt.js';
 import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laserSessionDuration } from './race-chaos-laser.js';
 
-export const CHAOS_KINDS = ['thumb', 'spin', 'quake', 'flip', 'tilt', 'lightning', 'double', 'crumb', 'firefly', 'boop', 'puff', 'laser'];
+export const CHAOS_KINDS = [
+  'thumb', 'spin', 'quake', 'flip', 'tilt', 'lightning', 'double', 'crumb', 'firefly', 'boop', 'puff', 'laser',
+  'meteor', 'sugarrain', 'ufo', 'spikes',
+];
 const KINDS = CHAOS_KINDS;
 
 const COPY = {
@@ -11,13 +23,17 @@ const COPY = {
   quake: { title: 'Earthquake', line: () => 'The dish rattles for five seconds.' },
   flip: { title: 'Dish flip', line: () => 'A hand boots the plate from below.' },
   tilt: { title: 'Dish tilt', line: () => 'The plate tips, then levels again.' },
-  lightning: { title: 'Lightning', line: name => name ? `Lightning finds ${name}.` : 'Three bolts scorch the sugar plate.' },
+  lightning: { title: 'Lightning', line: () => 'Three bolts scorch the arena' },
   double: { title: 'Double lightning', line: name => name ? `Lightning finds ${name}.` : 'Six bolts. Smaller, meaner.' },
-  crumb: { title: 'Cake slice', line: name => `A cake slice drops for ${name}.` },
+  crumb: { title: 'Cake rain', line: () => "It's raining cake from the heavens" },
   firefly: { title: 'Firefly moment', line: () => 'Little lights drift along the rim.' },
   boop: { title: 'Gentle boop', line: name => `A tiny boop for ${name}.` },
-  puff: { title: 'Dandelion puff', line: () => 'A soft puff of wind rolls through.' },
+  puff: { title: 'GUST', line: () => 'A gust of wind rolls through the arena' },
   laser: { title: 'Laser eyes', line: name => (name ? `${name} gets laser eyes.` : 'A fly gets laser eyes.') },
+  meteor: { title: 'Meteor shower', line: () => 'Something falls from the sky.' },
+  sugarrain: { title: 'Sugar crumbs', line: () => 'It\'s raining sugar.' },
+  ufo: { title: 'ABDUCTION', line: name => (name ? `${name} gets beamed up.` : 'A fly gets beamed up.') },
+  spikes: { title: 'Spike trap', line: () => 'Mind the floor.' },
 };
 
 function liveFlies(flies) {
@@ -92,6 +108,9 @@ export function createRaceChaos(api) {
   let laserSession = null;
   let laserPool = null;
   let laserBurnLast = null;
+  let sugarRainSession = null;
+  let ufoSession = null;
+  let spikesSession = null;
 
   function radius() { return api.env()?.arena?.radius || 12.5; }
   function flies() { return api.flies() || []; }
@@ -837,10 +856,360 @@ export function createRaceChaos(api) {
     }, () => { for (const s of bits) disposeObj(s); });
   }
 
+  function endSugarRain() {
+    if (sugarRainSession?.crumbs) {
+      for (const c of sugarRainSession.crumbs) {
+        if (c?.parent) disposeObj(c);
+      }
+    }
+    sugarRainSession = null;
+  }
+  function endUfo() {
+    if (!ufoSession) return;
+    const f = flies().find(x => x.id === ufoSession.flyId);
+    if (ufoSession.physics && f?.worker) {
+      post(f, { op: 'pin', on: false });
+      post(f, { op: 'loose', on: false });
+      post(f, { op: 'bias', ax: 0, ay: 0 });
+      post(f, { op: 'pull', on: false });
+    }
+    if (ufoSession.saucer) disposeObj(ufoSession.saucer);
+    if (ufoSession.beam) disposeObj(ufoSession.beam);
+    if (ufoSession.glow) ufoSession.glow.parent?.remove(ufoSession.glow);
+    api.audio()?.stopUfoSting?.(3);
+    ufoSession = null;
+  }
+  function endSpikes() {
+    if (!spikesSession) return;
+    if (spikesSession.mesh) disposeObj(spikesSession.mesh);
+    spikesSession = null;
+  }
+  function endWildcardSessions() {
+    endSugarRain();
+    endUfo();
+    endSpikes();
+    disposeMeteorSmoke();
+  }
+
+  let meteorSmokeReady = false;
+  function ensureMeteorSmoke() {
+    if (meteorSmokeReady) return;
+    initMeteorSmoke(T, fxGroup(), getChaosSmokeTexture());
+    meteorSmokeReady = true;
+  }
+
+  function chaosMesh(name) {
+    const m = cloneChaosProp(name);
+    if (m) return m;
+    console.warn(`[chaos] missing GLB: ${name}`);
+    return null;
+  }
+
+  function meteorImpact(strike, physics, opts = {}) {
+    ensureMeteorSmoke();
+    const { x, y } = strike;
+    const slantAz = strike.slantAz ?? Math.random() * Math.PI * 2;
+    const slantR = strike.slantR ?? randRange(4, 9);
+    const root = fxGroup();
+    const h = boltHeight() * randRange(0.82, 1.02);
+    const zGround = 0.18;
+    const sx = x + Math.cos(slantAz) * slantR;
+    const sy = y + Math.sin(slantAz) * slantR;
+    const sz = h;
+    const mesh = chaosMesh('meteor_chunk');
+    if (!mesh) return;
+    prepareMeshFade(mesh);
+    mesh.userData.meteorChunk = true;
+    mesh.position.set(sx, sy, sz);
+    orientMeteorAlong(mesh, x - sx, y - sy, zGround - sz);
+    root.add(mesh);
+    const smokeBatch = allocMeteorSmokeBatch();
+    const fallMs = 320 + Math.sqrt(Math.hypot(slantR, h)) * 38;
+    let prevPx = sx;
+    let prevPy = sy;
+    let prevPz = sz;
+    tween(fallMs, u => {
+      const t = u * u;
+      const px = sx + (x - sx) * t;
+      const py = sy + (y - sy) * t;
+      const pz = sz + (zGround - sz) * t;
+      mesh.position.set(px, py, pz);
+      mesh.rotation.z += 0.14;
+      emitMeteorSmokeAlongSegment(prevPx, prevPy, prevPz, px, py, pz, smokeBatch);
+      prevPx = px;
+      prevPy = py;
+      prevPz = pz;
+    }, () => {
+      const landT = now();
+      mesh.position.set(x, y, zGround);
+      mesh.rotation.z = 0;
+      burstMeteorSmoke(x, y, zGround, smokeBatch);
+      sealMeteorSmokeBatch(smokeBatch, landT);
+      camShake(200, opts.kill ? 0.26 : 0.18);
+      pokeSceneFlash({ thin: !opts.kill });
+      scorches.push({ x, y, r: opts.kill ? 0.65 : 0.45, until: now() + 15000 });
+      api.repaintFloor?.();
+      if (physics) {
+        const killR = opts.kill ? 0.92 : 0;
+        const impulseR = 1.65;
+        for (const f of liveFlies(flies())) {
+          const p = f.last.pos;
+          const d = Math.hypot(p[0] - x, p[1] - y);
+          if (opts.kill && d < killR && (p[2] || 0) < 0.58) {
+            post(f, { op: 'kill' });
+            hideToast();
+          } else if (d < impulseR && d > 0.02) {
+            const k = (1 - d / impulseR) * 14;
+            post(f, { op: 'impulse', vx: ((p[0] - x) / d) * k, vy: ((p[1] - y) / d) * k, vz: 3 + k * 0.35 });
+          }
+        }
+      }
+      later(15000, () => {
+        if (!mesh.parent || mesh.userData.meteorDespawning) return;
+        mesh.userData.meteorDespawning = true;
+        tween(500, u => {
+          fadeMeteorChunk(mesh, 1 - u);
+        }, () => {
+          fadeMeteorChunk(mesh, 0);
+          mesh.visible = false;
+          disposeObj(mesh);
+        });
+      });
+    });
+  }
+
+  function meteorShower(payload, physics) {
+    let strikes = payload.strikes?.length
+      ? payload.strikes.slice()
+      : [{ x: payload.x, y: payload.y, slantAz: payload.slantAz, slantR: payload.slantR }, ...(payload.points || [])];
+    const lateDrop = 3;
+    if (strikes.length > 7) strikes = strikes.slice(0, strikes.length - lateDrop);
+    let hit = payload.hitIndex;
+    if (hit != null && hit >= strikes.length) hit = null;
+    strikes.forEach((st, i) => {
+      const go = () => meteorImpact(st, physics, { kill: hit === i });
+      if (i === 0) go();
+      else later(160 * i + randRange(0, 80), go);
+    });
+    camPullBack(1.1, 600);
+    later(5600, () => releaseCam(500));
+  }
+
+  function startSugarRain(physics) {
+    endSugarRain();
+    const dur = 5200;
+    const t0 = now();
+    sugarRainSession = { until: t0 + dur, nextCrumb: t0, nextBump: t0 + 180, physics: !!physics, crumbs: [] };
+    busyUntil = Math.max(busyUntil, t0 + dur);
+    camPullBack(1.06, 700);
+    later(dur, () => {
+      endSugarRain();
+      releaseCam(500);
+    });
+  }
+
+  function spawnSugarCrumb(x, y) {
+    const root = fxGroup();
+    const mesh = chaosMesh('sugar_crumb');
+    if (!mesh) return;
+    mesh.scale.setScalar(randRange(0.85, 1.15));
+    const z0 = boltHeight() * randRange(0.55, 0.95);
+    mesh.position.set(x, y, z0);
+    root.add(mesh);
+    sugarRainSession?.crumbs?.push(mesh);
+    const spin = randRange(4, 9);
+    tween(900 + randRange(0, 400), u => {
+      mesh.position.z = z0 + (0.12 - z0) * (u * u);
+      mesh.rotation.z += spin * 0.02;
+    }, () => {
+      tween(800, u => fadeGroup(mesh, 0.85 * (1 - u)), () => disposeObj(mesh));
+    });
+  }
+
+  function tickSugarRain(t) {
+    if (!sugarRainSession || t >= sugarRainSession.until) {
+      if (sugarRainSession) endSugarRain();
+      return;
+    }
+    while (t >= sugarRainSession.nextCrumb) {
+      const [x, y] = randomInDish(0.4);
+      spawnSugarCrumb(x, y);
+      sugarRainSession.nextCrumb += randRange(55, 95);
+    }
+    if (sugarRainSession.physics && t >= sugarRainSession.nextBump) {
+      for (const f of liveFlies(flies())) {
+        post(f, { op: 'impulse', vx: randRange(-4, 4), vy: randRange(-4, 4), vz: randRange(-2.5, -0.5) });
+      }
+      sugarRainSession.nextBump += 220;
+    }
+  }
+
+  const UFO_BEAM_XY = 1.25;
+  const UFO_SPIN_RAD_PER_SEC = 1.15;
+  const UFO_SAUCER_TOP0 = 7.0;
+  const UFO_SAUCER_HOVER_Z = 3.2;
+  /** Fraction of approach tween (2200 ms) used for saucer fade-in. */
+  const UFO_FADE_IN_FRAC = 0.08;
+  /** Fraction of exit tween (1800 ms) at the end used for saucer fade-out. */
+  const UFO_FADE_OUT_FRAC = 0.18;
+  /** Fly thorax z = saucer.z − this (inside the belly mesh). */
+  const UFO_FLY_INSIDE_Z = 0.3;
+
+  function tickUfoAbductFly() {
+    if (!ufoSession?.abducting || !ufoSession.physics) return;
+    const f = flies().find(x => x.id === ufoSession.flyId);
+    const saucer = ufoSession.saucer;
+    if (!f?.worker || !saucer) return;
+    const { x: sx, y: sy, z: sz } = saucer.position;
+    post(f, {
+      op: 'pull',
+      x: sx,
+      y: sy,
+      z: sz - UFO_FLY_INSIDE_Z,
+      k: 0.72,
+    });
+  }
+
+  function placeUfoBeam(beam, x, y, floorZ, topZ, opacity = 0.5) {
+    const len = Math.max(0.5, topZ - floorZ);
+    beam.position.set(x, y, floorZ);
+    beam.scale.set(UFO_BEAM_XY, UFO_BEAM_XY, len);
+    setUfoBeamOpacity(beam, opacity);
+  }
+
+  function ufoAbduct(payload, physics) {
+    endUfo();
+    const f = flies().find(x => x.id === payload.flyId);
+    const p0 = f?.last?.pos || [payload.x, payload.y, 0.13];
+    const root = fxGroup();
+    const saucer = chaosMesh('ufo');
+    if (!saucer) return;
+    setUfoSaucerFade(saucer, 0);
+    const beam = createUfoBeam(T, 1);
+    const glow = new T.PointLight('#88ffdd', 0, 16);
+    glow.position.set(p0[0], p0[1], 2.5);
+    root.add(saucer, beam, glow);
+    const top0 = UFO_SAUCER_TOP0;
+    saucer.position.set(p0[0], p0[1], top0);
+    placeUfoBeam(beam, p0[0], p0[1], 0.05, top0 - 0.35, 0);
+    const dur = 6800;
+    const t0 = now();
+    ufoSession = {
+      until: t0 + dur,
+      flyId: payload.flyId,
+      saucer,
+      beam,
+      glow,
+      physics: !!physics,
+      spinRadPerSec: UFO_SPIN_RAD_PER_SEC,
+      lastSpinT: t0,
+      abducting: false,
+    };
+    busyUntil = Math.max(busyUntil, t0 + dur);
+    const ufoCamPull = 1.95;
+    easeCamTo(
+      new T.Vector3(p0[0] + 4.2 * ufoCamPull, p0[1] - 3.6 * ufoCamPull, 5.8 * ufoCamPull),
+      new T.Vector3(p0[0], p0[1], 0.2),
+      420,
+    );
+    if (physics && f?.worker) {
+      post(f, { op: 'ground' });
+      post(f, { op: 'loose', on: true });
+      post(f, { op: 'spin', on: true, wz: 10, turns: 0.45 });
+      later(350, () => {
+        if (ufoSession) ufoSession.abducting = true;
+      });
+    }
+    tween(2200, u => {
+      const p = f?.last?.pos || p0;
+      const k = easeInOut(u);
+      const top = top0 + (UFO_SAUCER_HOVER_Z - top0) * k;
+      saucer.position.set(p[0], p[1], top);
+      const fadeIn = Math.min(1, u / UFO_FADE_IN_FRAC);
+      setUfoSaucerFade(saucer, fadeIn);
+      const beamCore = 0.5 + k * 0.32;
+      placeUfoBeam(beam, p[0], p[1], 0.05, top - 0.35, beamCore * fadeIn);
+      if (ufoSession?.glow) {
+        ufoSession.glow.position.set(p[0], p[1], 0.35 + k * 1.05);
+        ufoSession.glow.intensity = (12 + k * 33) * fadeIn;
+      }
+      tickUfoBeam(beam, now());
+    }, () => {
+      later(1400, () => {
+        if (ufoSession) ufoSession.abducting = false;
+        if (physics && f?.worker) {
+          post(f, { op: 'pull', on: false });
+          post(f, { op: 'spin', on: false });
+          post(f, { op: 'bias', ax: 0, ay: 0 });
+          post(f, { op: 'impulse', vx: randRange(-5, 5), vy: randRange(-5, 5), vz: -8 });
+          later(400, () => post(f, { op: 'loose', on: false }));
+        }
+        tween(1800, u => {
+          const p = f?.last?.pos || p0;
+          const top = UFO_SAUCER_HOVER_Z + u * 6;
+          saucer.position.set(p[0], p[1], top);
+          const fadeStart = 1 - UFO_FADE_OUT_FRAC;
+          const fadeOut = u < fadeStart ? 1 : 1 - easeInOut((u - fadeStart) / UFO_FADE_OUT_FRAC);
+          setUfoSaucerFade(saucer, fadeOut);
+          placeUfoBeam(beam, p[0], p[1], 0.05, top - 0.2, 0.55 * fadeOut);
+          if (ufoSession?.glow) ufoSession.glow.intensity = 18 * fadeOut;
+        }, () => endUfo());
+        later(1600, () => releaseCam(500));
+      });
+    });
+  }
+
+  function spikeTrap(payload, physics) {
+    endSpikes();
+    const { x, y } = payload;
+    const half = payload.half || 1.08;
+    const mesh = chaosMesh('spike_trap');
+    if (!mesh) return;
+    mesh.position.set(x, y, -0.55);
+    mesh.rotation.z = payload.yaw || 0;
+    fxGroup().add(mesh);
+    const riseMs = 520;
+    const armedMs = 2200;
+    const t0 = now();
+    spikesSession = {
+      mesh, x, y, half, physics: !!physics, armed: false, armedUntil: 0, lastHit: 0,
+      until: t0 + riseMs + armedMs + 600,
+    };
+    busyUntil = Math.max(busyUntil, spikesSession.until);
+    tween(riseMs, u => {
+      mesh.position.z = -0.55 + (0.02 - -0.55) * easeInOut(u);
+    }, () => {
+      spikesSession.armed = true;
+      spikesSession.armedUntil = now() + armedMs;
+      if (physics) spikeTrapHits();
+      later(armedMs, () => {
+        spikesSession.armed = false;
+        tween(480, u => {
+          mesh.position.z = 0.02 + (-0.55 - 0.02) * easeInOut(u);
+        }, () => endSpikes());
+      });
+    });
+    easeCamTo(new T.Vector3(x + 4.37, y - 2.99, 2.76), new T.Vector3(x, y, 0.15), 380);
+    later(2800, () => releaseCam(450));
+  }
+
+  function spikeTrapHits() {
+    if (!spikesSession?.armed || !spikesSession.physics) return;
+    const { x, y, half } = spikesSession;
+    for (const f of liveFlies(flies())) {
+      const p = f.last?.pos;
+      if (!p) continue;
+      if (Math.abs(p[0] - x) > half || Math.abs(p[1] - y) > half) continue;
+      if ((p[2] || 0) > 0.58) continue;
+      post(f, { op: 'kill' });
+      hideToast();
+    }
+  }
+
   function playEvent(kind, payload, physics) {
     const name = payload.name || 'a fly';
     const copy = COPY[kind];
-    const line = kind === 'lightning' || kind === 'double'
+    const line = kind === 'double'
       ? copy.line(payload.hitBolt != null ? payload.name : '')
       : copy.line(name);
     showToast(copy.title, line);
@@ -983,22 +1352,50 @@ export function createRaceChaos(api) {
         const env = api.env();
         savedWind = env.wind ? [...env.wind] : [0, 0];
         savedRadial = env.windRadial ?? 0;
-        const PUFF_RADIAL = 14;
-        const PUFF_BIAS = 85;
-        env.windRadial = (savedRadial || 0) - PUFF_RADIAL;
+        const PUFF_RADIAL_OUT = 58;
+        const PUFF_BIAS = 320;
+        const gust = Math.random() * Math.PI * 2;
+        env.wind = [savedWind[0] + Math.cos(gust) * 42, savedWind[1] + Math.sin(gust) * 42];
+        env.windRadial = (savedRadial || 0) - PUFF_RADIAL_OUT;
+        postEvery({ op: 'loose', on: true });
         for (const f of liveFlies(flies())) {
           const p = f.last?.pos;
           if (!p) continue;
-          const rad = Math.hypot(p[0], p[1]);
-          if (rad < 0.05) continue;
-          post(f, { op: 'bias', ax: (p[0] / rad) * PUFF_BIAS, ay: (p[1] / rad) * PUFF_BIAS });
+          const rad = Math.hypot(p[0], p[1]) || 1;
+          const ux = p[0] / rad;
+          const uy = p[1] / rad;
+          post(f, { op: 'bias', ax: ux * PUFF_BIAS, ay: uy * PUFF_BIAS });
+          post(f, { op: 'impulse', vx: ux * randRange(14, 22), vy: uy * randRange(14, 22), vz: randRange(2, 6) });
         }
         api.syncEnv?.();
+        const t0 = now();
+        const gustBump = () => {
+          if (now() > t0 + 4800) return;
+          for (const f of liveFlies(flies())) {
+            const p = f.last?.pos;
+            if (!p) continue;
+            const rad = Math.hypot(p[0], p[1]) || 1;
+            const ux = p[0] / rad;
+            const uy = p[1] / rad;
+            post(f, { op: 'impulse', vx: ux * randRange(10, 18), vy: uy * randRange(10, 18), vz: randRange(0, 4) });
+          }
+          later(260, gustBump);
+        };
+        later(320, gustBump);
         later(5000, () => {
           restoreWind();
           postEvery({ op: 'bias', ax: 0, ay: 0 });
+          postEvery({ op: 'loose', on: false });
         });
       }
+    } else if (kind === 'meteor') {
+      meteorShower(payload, physics);
+    } else if (kind === 'sugarrain') {
+      startSugarRain(physics);
+    } else if (kind === 'ufo') {
+      ufoAbduct(payload, physics);
+    } else if (kind === 'spikes') {
+      spikeTrap(payload, physics);
     }
   }
 
@@ -1014,6 +1411,59 @@ export function createRaceChaos(api) {
       x = pts[0].x;
       y = pts[0].y;
       extra = pts.slice(1);
+    } else if (kind === 'meteor') {
+      const n = 8 + Math.floor(Math.random() * 4);
+      const strikes = [];
+      for (let i = 0; i < n; i++) {
+        const [px, py] = randomInDish(1);
+        strikes.push({ x: px, y: py, slantAz: Math.random() * Math.PI * 2, slantR: randRange(4, 9) });
+      }
+      let hitIndex = null;
+      let mFlyId = null;
+      let mName = '';
+      let mColor = '#fff';
+      if (live.length && Math.random() < 0.15) {
+        const victim = pick(live);
+        hitIndex = Math.floor(Math.random() * n);
+        const pos = { x: victim.last.pos[0], y: victim.last.pos[1] };
+        strikes[hitIndex] = { ...strikes[hitIndex], x: pos.x, y: pos.y };
+        mFlyId = victim.id;
+        mName = victim.name || '';
+        mColor = victim.color || '#fff';
+      }
+      x = strikes[0].x;
+      y = strikes[0].y;
+      return {
+        kind, flyId: mFlyId, name: mName, color: mColor, x, y, yaw: Math.random() * Math.PI * 2, deg: 0,
+        points: strikes.slice(1), strikes, hitIndex, hitBolt: null, killed: hitIndex != null,
+      };
+    } else if (kind === 'spikes') {
+      [x, y] = randomInDish(1.4);
+      return {
+        kind, flyId: null, name: '', color: '#fff', x, y,
+        yaw: Math.random() * Math.PI * 2, half: randRange(0.98, 1.23), deg: 0,
+        points: [], hitBolt: null, killed: false,
+      };
+    } else if (kind === 'ufo') {
+      const victim = live.length ? pick(live) : null;
+      let ufoId = null;
+      let ufoName = '';
+      let ufoColor = '#fff';
+      if (victim?.last) {
+        x = victim.last.pos[0];
+        y = victim.last.pos[1];
+        ufoId = victim.id;
+        ufoName = victim.name || '';
+        ufoColor = victim.color || '#fff';
+      }
+      return {
+        kind, flyId: ufoId, name: ufoName, color: ufoColor, x, y, yaw: 0, deg: 0, points: [], hitBolt: null, killed: false,
+      };
+    } else if (kind === 'sugarrain') {
+      return {
+        kind, flyId: null, name: '', color: '#fff', x: 0, y: 0, yaw: 0, deg: 0,
+        points: [], hitBolt: null, killed: false,
+      };
     } else {
       const extraNeed = kind === 'double' ? 5 : 2;
       const minFromFirst = kind === 'double' ? 2.4 : 4;
@@ -1067,6 +1517,7 @@ export function createRaceChaos(api) {
       thumb: 1800, spin: 1600, quake: 5200, flip: 2200, tilt: 4000, lightning: 1600, double: 2800,
       crumb: CAKE_STAGGER_MS * (CAKE_SLICE_COUNT - 1) + 2800,
       firefly: 7200, boop: 1300, puff: 5200, laser: 5200,
+      meteor: 5600, sugarrain: 5400, ufo: 7000, spikes: 3600,
     }[kind] || 1200;
   }
 
@@ -1090,6 +1541,9 @@ export function createRaceChaos(api) {
         yaw: payload.yaw, deg: payload.deg,
         points: payload.points,
         hitBolt: payload.hitBolt,
+        hitIndex: payload.hitIndex,
+        half: payload.half,
+        strikes: payload.strikes,
         killed: payload.killed,
       });
     }
@@ -1127,6 +1581,7 @@ export function createRaceChaos(api) {
     shakes = [];
     clearSceneFlash();
     endLaserSession();
+    endWildcardSessions();
     if (laserPool) {
       disposeLaserPool(laserPool);
       laserPool = null;
@@ -1139,6 +1594,10 @@ export function createRaceChaos(api) {
     restoreWind();
     clearCakeDespawns();
     stripCake();
+    const cakes = dishCakeGroup();
+    if (cakes && cakes !== fxRoot) {
+      while (cakes.children.length) disposeObj(cakes.children[0]);
+    }
     resetEnvPose();
     if (previewMesh) { disposeObj(previewMesh); previewMesh = null; }
     if (fxRoot) {
@@ -1205,6 +1664,21 @@ export function createRaceChaos(api) {
     }
     updateSceneFlashEl(t);
     tickLaserSession(t, api.isHostLive?.());
+    tickMeteorSmoke(t);
+    if (ufoSession?.saucer && ufoSession.spinRadPerSec) {
+      const dt = (t - (ufoSession.lastSpinT ?? t)) / 1000;
+      ufoSession.saucer.rotation.z += ufoSession.spinRadPerSec * dt;
+      ufoSession.lastSpinT = t;
+    }
+    if (ufoSession?.beam) tickUfoBeam(ufoSession.beam, t);
+    tickUfoAbductFly();
+    tickSugarRain(t);
+    if (spikesSession?.armed && spikesSession.physics && t < spikesSession.armedUntil) {
+      if (t - spikesSession.lastHit > 90) {
+        spikesSession.lastHit = t;
+        spikeTrapHits();
+      }
+    }
     if (scorches.length && t - lastScorchPaint > 500) {
       scorches = scorches.filter(s => t < s.until + 4000);
       lastScorchPaint = t;

@@ -89,6 +89,9 @@ export class FlyAgent {
     this.chaosSpinLeft = 0;
     this.chaosLoose = false;
     this.chaosBias = [0, 0];
+    this.chaosPull = false;
+    this.pullTarget = null;
+    this.pullK = 0.5;
     this.dishMocap = -1;
     this.dishPose = { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 };
     try { this.dishMocap = M.body_mocapid[M.body('arena').id]; } catch { this.dishMocap = -1; }
@@ -163,6 +166,19 @@ export class FlyAgent {
     }
     if (op === 'bias') {
       this.chaosBias = [m.ax || 0, m.ay || 0];
+      return;
+    }
+    if (op === 'pull') {
+      if (m.on === false) {
+        this.chaosPull = false;
+        this.pullTarget = null;
+        return;
+      }
+      this.chaosPull = true;
+      this.pullTarget = [m.x ?? 0, m.y ?? 0, m.z ?? 0];
+      this.pullK = m.k ?? 0.5;
+      this.releaseClaws();
+      if (this.flight.active) this.flight.end();
       return;
     }
     if (op === 'kill') {
@@ -334,6 +350,28 @@ export class FlyAgent {
     }
     this.dropUprightIfNeeded();
     this.nudgeOffMazeTop();
+    if (this.chaosPull && this.pullTarget) {
+      const [tx, ty, tz] = this.pullTarget;
+      const dx = tx - d.qpos[0];
+      const dy = ty - d.qpos[1];
+      const dz = tz - d.qpos[2];
+      const k = this.pullK ?? 0.5;
+      d.qvel[0] += dx * k * 0.1;
+      d.qvel[1] += dy * k * 0.1;
+      d.qvel[2] += dz * k * 0.15;
+      const cap = 7;
+      for (let i = 0; i < 3; i++) {
+        if (Math.abs(d.qvel[i]) > cap) d.qvel[i] = cap * Math.sign(d.qvel[i]);
+      }
+      if (Math.hypot(dx, dy, dz) < 0.07) {
+        d.qpos[0] += dx * 0.45;
+        d.qpos[1] += dy * 0.45;
+        d.qpos[2] += dz * 0.45;
+        d.qvel[0] *= 0.45;
+        d.qvel[1] *= 0.45;
+        d.qvel[2] *= 0.3;
+      }
+    }
     const dtSub = 1000 * M.opt.timestep;
     const [bx, by] = this.chaosBias;
     for (let s = 0; s < this.physPerMs; s++) {

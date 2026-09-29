@@ -283,6 +283,22 @@ export function fadeGroup(obj, opacity) {
   });
 }
 
+/** Rock + emissive shell fade together (avoids z-fight / layer pop). */
+export function fadeMeteorChunk(obj, opacity) {
+  const a = Math.max(0, Math.min(1, opacity));
+  obj?.traverse?.(o => {
+    if (!o.isMesh) return;
+    eachMat(o, m => {
+      m.transparent = true;
+      m.depthWrite = false;
+      m.opacity = a;
+      if (m.emissive && m.userData._emissiveBase != null) {
+        m.emissiveIntensity = m.userData._emissiveBase * a;
+      }
+    });
+  });
+}
+
 export function makeCakeSlice(T) {
   const g = new T.Group();
   const R = 1.35, theta = 1.02, a0 = -theta / 2, a1 = theta / 2;
@@ -422,3 +438,4 @@ export function makeLeaf(T, color = '#8fd14f') {
   g.add(stalk);
   return g;
 }
+

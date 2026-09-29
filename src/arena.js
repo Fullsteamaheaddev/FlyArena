@@ -16,6 +16,7 @@ import { parseFlyVis } from './flyvis.js';
 import { buildGroups } from './sim/groups.js';
 import { createRaceAudio } from './race-audio.js';
 import { createRaceChaos, paintChaosScorches, CHAOS_KINDS } from './race-chaos.js';
+import { preloadChaosAssets } from './race-chaos-assets.js';
 import { matchRole, isWatchPath, isRaceHostPath, matchUrl, createMatchLink, buildMatchState, packAct, unpackAct, packEyes, unpackEyes } from './match.js';
 import {
   DEFAULT_WINDOW, chainConfigured, connectWallet, disconnectWallet, ensureWallet, restoreWallet, switchAccount, onWalletChange, getAccount, readWindow, readPools,
@@ -89,17 +90,21 @@ function killFly(id) {
   return { id: f.id, name: f.name, color: f.color };
 }
 
-function loadLocalChaosHarness() {
+function skipChaosLobby() {
+  if (!chaosTestMode || !isHost) return false;
+  startRace();
+  raceChaos?.holdRoulette?.();
+  return true;
+}
+
+async function loadLocalChaosHarness() {
   if (!chaosTestMode) return;
   window.fireChaos = fireChaos;
   window.killFly = killFly;
   window.previewChaosProp = (kind) => raceChaos?.previewProp?.(kind);
   window.CHAOS_KINDS = CHAOS_KINDS;
-  const s = document.createElement('script');
-  s.type = 'module';
-  s.src = '/local/chaos-harness.js';
-  s.onerror = () => console.info('[chaos test] fireChaos("lightning")  killFly()  kinds:', CHAOS_KINDS.join(', '));
-  document.head.appendChild(s);
+  const { mountChaosTestPanel } = await import('./dev/chaos-test-panel.js');
+  mountChaosTestPanel();
 }
 
 async function main() {
@@ -131,16 +136,18 @@ async function main() {
   buildScene(data);
   buildUI();
   $('#loading').remove();
-  if (isRace) setupRaceChrome();
+  if (isRace) {
+    await preloadChaosAssets(THREE, BASE);
+    setupRaceChrome();
+  }
   await spawnPresetFlies();
   if (isRace) {
     await waitRacePoses();
-    await showRaceStart();
-    if (chaosTestMode && isHost) { startRace(); raceChaos?.holdRoulette?.(); }
+    if (!skipChaosLobby()) await showRaceStart();
   }
   if (PRESET.autoThreat) setInterval(() => { if (!running || !flies.length) return; const live = flies.filter(f => f.last?.alive !== false); if (!live.length) return; selected = live[Math.floor(Math.random() * live.length)].id; launchThreat(); }, PRESET.autoThreat * 1000);
   window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, addFly, rebuildEnv, checkRaceFinish, resetRace, startRaceFollow, stopRaceFollow, announceRace, fireChaos, killFly, startRace, previewChaosProp: (kind) => raceChaos?.previewProp?.(kind), get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; }, get raceChaos() { return raceChaos; }, chaosKinds: CHAOS_KINDS };
-  loadLocalChaosHarness();
+  await loadLocalChaosHarness();
   animate();
 }
 
@@ -171,7 +178,7 @@ async function mainWatch() {
     syncBpHint();
   }
   window.__arena = { camera, controls, flies, env, THREE, renderer, scene, gtao, composer, metrics, resolution, batches, visual, rebuildEnv, startRaceFollow, stopRaceFollow, announceRace, fireChaos, startRace, get raceFollow() { return raceFollow; }, get raceAudio() { return raceAudio; }, get raceChaos() { return raceChaos; }, chaosKinds: CHAOS_KINDS };
-  loadLocalChaosHarness();
+  await loadLocalChaosHarness();
   animate();
 }
 
@@ -648,18 +655,18 @@ function buildUI() {
   setInterval(() => { if (foodDirty) { foodDirty = false; syncEnv(); envGroup.children.forEach(m => { if (m.userData.food) m.material.opacity = 0.35 + 0.65 * Math.min(1, m.userData.food.amount / 5); }); } renderFlyList(); }, 500);
 }
 function loadRaceHistory() {
-  try { const a = JSON.parse(localStorage.getItem(RACE_HISTORY_KEY) || '[]'); return Array.isArray(a) ? a.slice(0, 3) : []; }
+  try { const a = JSON.parse(localStorage.getItem(RACE_HISTORY_KEY) || '[]'); return Array.isArray(a) ? a.slice(0, 1) : []; }
   catch { return []; }
 }
 function saveRaceResult(row) {
-  const rows = [row, ...loadRaceHistory()].slice(0, 3);
+  const rows = [row];
   try { localStorage.setItem(RACE_HISTORY_KEY, JSON.stringify(rows)); } catch {}
   return rows;
 }
 function raceHistoryHtml(rows) {
-  if (!rows.length) return '';
-  return `<h2 class="hist">Last races</h2><ol class="race-hist">${rows.map(r =>
-    `<li><i style="background:${r.color}"></i><b>${r.name}</b><span>${r.wall}</span></li>`).join('')}</ol>`;
+  const r = rows?.[0];
+  if (!r) return '';
+  return `<h2 class="hist">Last race</h2><ol class="race-hist"><li><i style="background:${r.color}"></i><b>${r.name}</b><span>${r.wall}</span></li></ol>`;
 }
 function setupRaceChrome() {
   document.body.classList.add('race');
@@ -683,6 +690,7 @@ function setupRaceChrome() {
     laserBeam: `${BASE}LaserBeam.wav`,
     laserKill: `${BASE}LaserKill.wav`,
     theme: `${BASE}Theme.wav`,
+    xfiles: `${BASE}xfiles.wav`,
   });
   raceChaos = createRaceChaos({
     THREE,
@@ -1053,7 +1061,9 @@ function applyWatchOverlay(st) {
     const reset = settleNote();
     if (watchOverlayPhase !== 'results') {
       const note = w.why === 'last' ? 'last remaining' : w.why === 'died' ? 'last to die' : '';
+      card.dataset.kind = 'results';
       card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${st.clock?.wall || ''}</p><p class="flyt">${flyTimeLine(st.clock?.fly)}</p>
+        ${raceHistoryHtml(loadRaceHistory())}
         <div class="bet-actions"></div>
         <p id="betNote" class="flyt"></p>
         <p id="raceReset">${reset}</p>`;
@@ -1461,6 +1471,7 @@ function showRaceOverlayCard(card, { flyColor, enter = true } = {}) {
   const overlay = $('#raceOverlay');
   card.style.removeProperty('--fly');
   if (flyColor) card.style.setProperty('--fly', flyColor);
+  overlay.classList.toggle('results-panel', card.dataset.kind === 'results');
   overlay.hidden = false;
   if (!enter && overlay.classList.contains('show')) return;
   overlay.classList.remove('show');
@@ -1739,6 +1750,7 @@ async function refreshProfile() {
   }
 }
 function paintLobbyOverlay(force = false) {
+  if (chaosTestMode || matchPhase !== 'lobby') return;
   const card = $('#raceCard');
   if (!card) return;
   const clock = lobbyClockLabel();
@@ -1931,6 +1943,7 @@ function announceRaceWinner(f, why) {
   raceChaos?.reset();
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   const card = $('#raceCard');
+  card.dataset.kind = 'results';
   const note = why === 'last' ? 'last remaining' : why === 'died' ? 'last to die' : '';
   card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${wall}</p><p class="flyt">${flyTimeLine(fly)}</p>${raceHistoryHtml(hist)}<p id="raceReset">${settleNote()}</p>`;
   publishMatchState(true);
@@ -2120,8 +2133,7 @@ async function resetRace() {
   rebuildEnv();
   await spawnPresetFlies();
   await waitRacePoses();
-  await showRaceStart();
-  if (chaosTestMode && isHost) { startRace(); raceChaos?.holdRoulette?.(); }
+  if (!skipChaosLobby()) await showRaceStart();
   raceResetting = false;
 }
 function easeOutBack(t, s = 1.7) { const u = t - 1; return u * u * ((s + 1) * u + s) + 1; }

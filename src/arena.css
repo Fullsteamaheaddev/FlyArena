@@ -63,6 +63,16 @@ a { color: var(--acc); }
 
 #raceOverlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 5; pointer-events: none; }
 #raceOverlay[hidden] { display: none; }
+body.race #raceOverlay.results-panel {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+  justify-items: center;
+}
+body.race #raceOverlay.results-panel .race-card {
+  grid-row: 2;
+  pointer-events: auto;
+}
 .race-card { pointer-events: auto; min-width: 280px; max-width: 420px; padding: 28px 32px; text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(12px); box-shadow: 0 12px 40px rgba(0,0,0,.45); }
 .race-card h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; }
 .race-card p { margin: 0 0 18px; color: var(--dim); }
@@ -71,8 +81,8 @@ a { color: var(--acc); }
 .race-card .win-time { color: #fff; font-variant-numeric: tabular-nums; font-size: 22px; margin-bottom: 6px; }
 .race-card .flyt { font-size: 13px; margin-bottom: 18px; font-variant-numeric: tabular-nums; }
 .race-card h2.hist { margin: 4px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; }
-.race-card .race-hist { list-style: none; margin: 0 0 16px; padding: 8px 0 0; border-top: 1px solid var(--line); text-align: left; }
-.race-card .race-hist li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; color: inherit; }
+.race-card .race-hist { list-style: none; margin: 0 0 10px; padding: 6px 0 0; border-top: 1px solid var(--line); text-align: left; }
+.race-card .race-hist li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 13px; margin: 0; color: inherit; }
 .race-card .race-hist i { width: 10px; height: 10px; border-radius: 50%; display: block; }
 .race-card .race-hist span { font-variant-numeric: tabular-nums; color: var(--dim); }
 body.race .race-card .race-hist b { font-family: var(--race-title); font-weight: 400; font-size: 16px; }
@@ -256,6 +266,9 @@ body.race #raceOverlay.show .race-card {
   animation: raceCardEnter .45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
     raceCardIdle 2.6s ease-in-out .45s infinite;
 }
+body.race #raceOverlay.results-panel.show .race-card {
+  animation: raceCardEnter .45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
 @keyframes raceCardEnter {
   0% { transform: scale(0.82); }
   70% { transform: scale(1.08); }
@@ -392,6 +405,30 @@ body.race .race-card {
   max-width: 462px;
   padding: 30px 34px;
   box-sizing: border-box;
+}
+body.race #raceCard[data-kind="results"] {
+  width: min(340px, calc(100vw - 32px));
+  max-width: 340px;
+  padding: 20px 22px 18px;
+}
+body.race #raceCard[data-kind="results"] h1 {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+body.race #raceCard[data-kind="results"] p {
+  margin-bottom: 10px;
+}
+body.race #raceCard[data-kind="results"] p.win-time {
+  margin-bottom: 6px;
+}
+body.race #raceCard[data-kind="results"] h2.hist {
+  margin: 2px 0 4px;
+}
+body.race #raceCard[data-kind="results"] .race-hist {
+  margin-bottom: 8px;
+}
+body.race #raceCard[data-kind="results"] #raceReset {
+  margin: 0;
 }
 body.race .race-card #lobbyClock {
   min-height: 2.4em;

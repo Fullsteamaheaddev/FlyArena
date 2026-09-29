@@ -9,9 +9,12 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   const laserBeamUrl = extraUrls.laserBeam;
   const laserKillUrl = extraUrls.laserKill;
   const themeUrl = extraUrls.theme;
+  const xfilesUrl = extraUrls.xfiles;
   let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf, boopBuf, thunderBuf, thumbBuf, splatter1Buf, splatter2Buf;
+  let xfilesBuf;
   let laserToastBuf, laserBeamBuf, laserKillBuf, themeBuf;
   let laserBeamSrc, laserBeamGain;
+  let xfilesSrc, xfilesGain;
   let themeLoopActive = false, themeGapTimer = null, themeSrc = null;
   let currentBed = null, lastStep = 0, muted = false, keepOsc = null;
 
@@ -84,6 +87,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     if (laserBeamUrl && !laserBeamBuf) laserBeamBuf = await decodeUrl(laserBeamUrl);
     if (laserKillUrl && !laserKillBuf) laserKillBuf = await decodeUrl(laserKillUrl);
     if (themeUrl && !themeBuf) themeBuf = await decodeUrl(themeUrl);
+    if (xfilesUrl && !xfilesBuf) xfilesBuf = await decodeUrl(xfilesUrl);
   }
   function startBuzz() {
     const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 218;
@@ -174,6 +178,36 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     musicSrc = src;
     bedGain = g;
   }
+  function stopUfoSting(fadeSec = 3) {
+    if (!ctx || !xfilesSrc) return;
+    const now = ctx.currentTime;
+    const fade = Math.max(0.02, fadeSec);
+    if (xfilesGain) {
+      const from = Math.max(xfilesGain.gain.value, 0.0001);
+      xfilesGain.gain.cancelScheduledValues(now);
+      xfilesGain.gain.setValueAtTime(from, now);
+      xfilesGain.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+    }
+    const src = xfilesSrc;
+    xfilesSrc = null;
+    xfilesGain = null;
+    try { src.stop(now + fade + 0.05); } catch {}
+  }
+  function startUfoSting() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    stopUfoSting(0.02);
+    if (!xfilesBuf) return;
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = xfilesBuf;
+    src.loop = false;
+    const g = ctx.createGain();
+    g.gain.value = 0.88;
+    src.connect(g); g.connect(master);
+    src.start(now);
+    xfilesSrc = src;
+    xfilesGain = g;
+  }
   function stopLaserBeam() {
     if (!ctx || !laserBeamSrc) return;
     const now = ctx.currentTime;
@@ -197,7 +231,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     src.loop = true;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.75, now + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.375, now + 0.04);
     src.connect(g); g.connect(master);
     src.start();
     laserBeamSrc = src;
@@ -212,6 +246,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     playBuf(laserKillBuf, ctx.currentTime, 0.85);
   }
   function stop() {
+    stopUfoSting(0.02);
     stopLaserBeam();
     stopThemeBed(false);
     fadeStopLoopBed();
@@ -356,7 +391,11 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   function playChaos(kind, extra = {}) {
     if (!ctx || ctx.state !== 'running' || muted) return;
     const t0 = ctx.currentTime;
-    const hold = { thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7, firefly: 7.1, boop: 1.1, puff: 5.1, laser: 1.5 }[kind] || 0.8;
+    const hold = {
+      thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7,
+      firefly: 7.1, boop: 1.1, puff: 5.1, laser: 1.5,
+      meteor: 3.2, sugarrain: 5.3, ufo: 6.8, spikes: 3.4,
+    }[kind] || 0.8;
     duck(true);
     setTimeout(() => duck(false), hold * 1000);
     if (kind === 'thumb') { sfxThumb(t0); playBuf(thumbBuf, t0, 0.85); }
@@ -380,6 +419,18 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     else if (kind === 'boop') { sfxBoop(t0); playBuf(boopBuf, t0, 0.85); }
     else if (kind === 'puff') sfxPuff(t0);
     else if (kind === 'laser') playLaserToast();
+    else if (kind === 'meteor') {
+      for (let i = 0; i < 5; i++) sfxBolt(t0 + i * 0.28, 0.65);
+      playBuf(thunderBuf, t0, 0.55);
+    }
+    else if (kind === 'sugarrain') sfxCrumb(t0);
+    else if (kind === 'ufo') startUfoSting();
+    else if (kind === 'spikes') {
+      const thud = ctx.createOscillator(); thud.type = 'triangle';
+      thud.frequency.setValueAtTime(220, t0); thud.frequency.exponentialRampToValueAtTime(90, t0 + 0.12);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
+      thud.connect(g); g.connect(master); thud.start(t0); thud.stop(t0 + 0.22);
+    }
   }
   function playBuf(buf, when, gain = 0.8) {
     if (!ctx || !buf) return;
@@ -584,6 +635,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   return {
     unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, playChaos, playCakeLand,
     setMuted, setMotion, hold, playLaserToast, startLaserBeam, stopLaserBeam, playLaserKill,
+    startUfoSting, stopUfoSting,
   };
 }
 
