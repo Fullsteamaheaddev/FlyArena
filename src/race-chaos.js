@@ -86,6 +86,9 @@ export function paintChaosScorches(fx, fs, radius, scorches, now) {
   }
 }
 
+/** Random idle gap between chaos roulette fires (ms). */
+const CHAOS_ROULETTE_GAP_MS = [5000, 15000];
+
 export function createRaceChaos(api) {
   const T = api.THREE;
   let lastKind = null, nextAt = 0, busyUntil = 0, startedAt = 0;
@@ -1279,8 +1282,9 @@ export function createRaceChaos(api) {
       if (physics) {
         postAll({ op: 'ground' });
         postAll({ op: 'loose', on: true });
-        postAll({ op: 'bias', ax: -Math.cos(yaw) * 22, ay: -Math.sin(yaw) * 22 });
+        postAll({ op: 'slip', on: true });
         later(3800, () => {
+          postAll({ op: 'slip', on: false });
           postAll({ op: 'loose', on: false });
           postAll({ op: 'bias', ax: 0, ay: 0 });
         });
@@ -1571,7 +1575,7 @@ export function createRaceChaos(api) {
 
   function arm() {
     startedAt = now();
-    nextAt = startedAt + randRange(8000, 15000);
+    nextAt = startedAt + randRange(...CHAOS_ROULETTE_GAP_MS);
     lastKind = null;
     busyUntil = 0;
   }
@@ -1614,6 +1618,7 @@ export function createRaceChaos(api) {
     postEvery({ op: 'pin', on: false });
     postEvery({ op: 'spin', on: false });
     postEvery({ op: 'loose', on: false });
+    postEvery({ op: 'slip', on: false });
     postEvery({ op: 'bias', ax: 0, ay: 0 });
     api.repaintFloor?.();
   }
@@ -1623,6 +1628,7 @@ export function createRaceChaos(api) {
     postEvery({ op: 'pin', on: false });
     postEvery({ op: 'spin', on: false });
     postEvery({ op: 'loose', on: false });
+    postEvery({ op: 'slip', on: false });
     postEvery({ op: 'bias', ax: 0, ay: 0 });
     nextAt = Infinity;
   }
@@ -1688,7 +1694,7 @@ export function createRaceChaos(api) {
     if (t < busyUntil || t < nextAt) return;
     const kind = pickKind();
     fire(kind, buildPayload(kind), true);
-    nextAt = t + randRange(10000, 20000);
+    nextAt = t + randRange(...CHAOS_ROULETTE_GAP_MS);
   }
 
   function playCue(c) {

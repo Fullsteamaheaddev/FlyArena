@@ -86,7 +86,10 @@ export class Motor {
     // courtship circuit readout: pIP10 and DNp13 sit downstream of the pheromone pathways (2 hops from the
     // cVA and tarsal pheromone receptors); both roughly double their rate near another fly
     const court = Math.max(0, Math.min(1, 0.5 * Math.max(0, this.wmean(this.dn.courtP) - R0.courtPBase) / R0.courtPScale + 0.5 * Math.max(0, this.wmean(this.dn.courtDN) - R0.courtDNBase) / R0.courtDNScale));
-    this.cmd = { v: extra.pin ? 0 : v, turn: extra.pin ? 0 : Math.max(-0.6, Math.min(0.6, (this.turnF - this.turnBase) / R0.turnScale)), drive: fwd, back, groom, grooming, escape: this.mean(this.dn.escape), takeoff: this.wmean(this.dn.takeoff), court };
+    let cv = extra.pin ? 0 : v;
+    let ct = extra.pin ? 0 : Math.max(-0.6, Math.min(0.6, (this.turnF - this.turnBase) / R0.turnScale));
+    if (extra.slip) { cv *= 0.15; ct *= 0.15; }
+    this.cmd = { v: cv, turn: ct, drive: fwd, back, groom, grooming, escape: this.mean(this.dn.escape), takeoff: this.wmean(this.dn.takeoff), court };
     if (this.mode === 'connectome') {
       for (const leg of LEGS) for (const sd of SIDES) {
         for (const j of ['coxa', 'coxa_abduct', 'coxa_twist', 'femur', 'femur_twist', 'tibia', 'tarsus', 'tarsus2']) set(`${j}_${leg}_${sd}`, muscleCtrl(`${j}_${leg}_${sd}`));

@@ -231,7 +231,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     src.loop = true;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.375, now + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.1875, now + 0.04);
     src.connect(g); g.connect(master);
     src.start();
     laserBeamSrc = src;

@@ -21,7 +21,7 @@ rules, and the four GLB-backed wildcards (`meteor`, `sugarrain`, `ufo`, `spikes`
 2. **Tick (host only)** — While `isHostLive()`, if not `busyUntil` and `now >= nextAt`,
    `pickKind()` chooses a kind (never the same as the previous kind), `buildPayload(kind)`
    fills targets and geometry, then `fire(kind, payload, true)`.
-3. **Interval** — After each fire, `nextAt = now + randRange(10_000, 20_000)` ms.
+3. **Interval** — After each fire, `nextAt = now + randRange(5_000, 15_000)` ms (same range for the first event after `arm()`).
 4. **Cue sync** — On host fires with `physics: true`, `setCue({ id, kind, flyId, name,
    x, y, yaw, deg, points, hitBolt, … })` runs. Match snapshots include `chaosCue`
    (`src/match.js`, `src/arena.js`). Watchers call `playCue(c)` → `fire(c.kind, c, false)`:
@@ -96,7 +96,7 @@ reset.
 | `spin` | Spin cycle | `spin` on one fly | Ring VFX |
 | `quake` | Earthquake | 5 s dish quake, `loose`, random impulses | Dust spheres |
 | `flip` | Dish flip | Hand boot, dish flip, brief `loose` | Side cam |
-| `tilt` | Dish tilt | Dish tilt ~4 s, horizontal `bias` | |
+| `tilt` | Dish tilt | ~4 s dish tip; `loose` + `slip` (low floor friction, gravity slide on the plate) | |
 | `lightning` | Lightning | 3 bolts; ~25% one bolt targets a fly → `kill` | Scorches |
 | `double` | Double lightning | 6 thinner bolts; same kill odds | |
 | `crumb` | Cake slice | 12 staggered drops; splat **kill** in radius; leaves vinegar cake patches | `race-chaos-props` slice |

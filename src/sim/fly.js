@@ -54,6 +54,9 @@ export class FlyAgent {
     // geoms: albedo for vision; which bodies count as "self body" for bristle contact
     this.geomKind = []; for (let g = 0; g < M.ngeom; g++) { const n = M.geom(g).name; this.geomKind.push(n === 'floor' ? 'floor' : n.startsWith('wall') ? 'wall' : n.startsWith('food') ? 'food' : n.startsWith('bitter') ? 'bitter' : n.startsWith('hazard') ? 'hazard' : n.startsWith('obst') ? 'obst' : n.startsWith('proxy') ? 'fly' : n.startsWith('threat') ? 'threat' : 'self'); }
     this.floorGeom = M.geom('floor').id;
+    const fi = this.floorGeom * 3;
+    const fr = M.geom_friction;
+    this.floorFriction0 = [fr[fi], fr[fi + 1], fr[fi + 2]];
     this.threatMocap = M.body_mocapid[M.body('threat').id];
     // brain
     this.brain = brain || createBrain(data, size, brainOpts, sign);   // wasm brain can be injected (shared connectome memory)
@@ -88,6 +91,7 @@ export class FlyAgent {
     this.chaosSpinWz = 0;
     this.chaosSpinLeft = 0;
     this.chaosLoose = false;
+    this.chaosSlip = false;
     this.chaosBias = [0, 0];
     this.chaosPull = false;
     this.pullTarget = null;
@@ -100,6 +104,21 @@ export class FlyAgent {
     const act = this.motor.act, d = this.mjd;
     for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
   }
+  setSlipFriction(on) {
+    const M = this.model;
+    const i = this.floorGeom * 3;
+    const fr = M.geom_friction;
+    const b = this.floorFriction0;
+    if (on) {
+      fr[i] = 0.06;
+      fr[i + 1] = 0.005;
+      fr[i + 2] = 0.0001;
+    } else {
+      fr[i] = b[0];
+      fr[i + 1] = b[1];
+      fr[i + 2] = b[2];
+    }
+  }
   dieKnockover() {
     if (!this.alive) return;
     const d = this.mjd;
@@ -109,6 +128,8 @@ export class FlyAgent {
     this.chaosSpin = false;
     this.chaosSpinLeft = 0;
     this.chaosBias = [0, 0];
+    this.chaosSlip = false;
+    this.setSlipFriction(false);
     d.qvel[2] += 6;
     d.qvel[4] += (Math.random() > 0.5 ? 1 : -1) * (26 + Math.random() * 8);
     this.health = 0;
@@ -134,6 +155,12 @@ export class FlyAgent {
       return;
     }
     if (op === 'loose') { this.chaosLoose = m.on !== false; if (this.chaosLoose) this.releaseClaws(); return; }
+    if (op === 'slip') {
+      this.chaosSlip = m.on !== false;
+      if (this.chaosSlip) this.releaseClaws();
+      this.setSlipFriction(this.chaosSlip);
+      return;
+    }
     if (op === 'ground') { if (this.flight.active) this.flight.end(); return; }
     if (op === 'dish') {
       const id = this.dishMocap;
@@ -326,7 +353,8 @@ export class FlyAgent {
       court: this.intrinsic?.state === 'court' ? { sing: !!this.intrinsic.courtSing, side: this.intrinsic.courtSide } : null,
       contact: st.bodyContact.left || st.bodyContact.right || st.antTouch.left || st.antTouch.right,
       pin: pinned || spinning,
-      loose: this.chaosLoose || spinning });
+      loose: this.chaosLoose || spinning,
+      slip: this.chaosSlip });
     if (pinned) {
       this.cmd.v = 0; this.cmd.turn = 0;
       d.qvel[0] = 0; d.qvel[1] = 0;
@@ -374,8 +402,35 @@ export class FlyAgent {
     }
     const dtSub = 1000 * M.opt.timestep;
     const [bx, by] = this.chaosBias;
+    const slipSlide = this.chaosSlip && !this.flight.active;
+    let slipAx = 0;
+    let slipAy = 0;
+    let slipAz = 0;
+    if (slipSlide) {
+      const o = this.dishPose;
+      const N = dishNormal(o.qw, o.qx, o.qy, o.qz);
+      const g = M.opt.gravity;
+      const dot = g[0] * N[0] + g[1] * N[1] + g[2] * N[2];
+      const k = 0.92;
+      slipAx = (g[0] - dot * N[0]) * k;
+      slipAy = (g[1] - dot * N[1]) * k;
+      slipAz = (g[2] - dot * N[2]) * k;
+    }
     for (let s = 0; s < this.physPerMs; s++) {
       if (bx || by) { d.qvel[0] += bx * M.opt.timestep; d.qvel[1] += by * M.opt.timestep; }
+      if (slipSlide) {
+        const dt = M.opt.timestep;
+        d.qvel[0] += slipAx * dt;
+        d.qvel[1] += slipAy * dt;
+        d.qvel[2] += slipAz * dt;
+        const hs = Math.hypot(d.qvel[0], d.qvel[1]);
+        const cap = 40;
+        if (hs > cap) {
+          const sc = cap / hs;
+          d.qvel[0] *= sc;
+          d.qvel[1] *= sc;
+        }
+      }
       if (spinning && this.chaosSpin) d.qvel[5] = this.chaosSpinWz;
       if (this.flight.active) this.flight.substep(dtSub);
       mj.mj_step(M, d);
