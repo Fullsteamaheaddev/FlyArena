@@ -55,7 +55,7 @@ function makePuffMaterial() {
   return new T.SpriteMaterial({
     map: smokeTex,
     transparent: true,
-    opacity: 0.36,
+    opacity: 0.42,
     depthWrite: false,
     depthTest: true,
     blending: T.NormalBlending,
@@ -218,7 +218,8 @@ export function tickMeteorSmoke(t) {
       continue;
     }
     const remain = p.dieAt - t;
-    const fade = remain < FADE_TAIL_MS ? remain / FADE_TAIL_MS : 1;
+    const fadeRaw = remain < FADE_TAIL_MS ? remain / FADE_TAIL_MS : 1;
+    const fade = Math.round(fadeRaw * 3) / 3;
     const age = (t - p.bornAt) / 1000;
     p.mesh.material.opacity = p.baseOpacity * fade;
     if (!p.frozen) {

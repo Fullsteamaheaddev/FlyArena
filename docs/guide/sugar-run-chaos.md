@@ -156,7 +156,7 @@ These ship in `CHAOS_KINDS` alongside the original twelve (**16 kinds**, equal r
 
 - **Fantasy:** Dense meteor shower — mostly chaos, occasionally lethal.
 - **VFX:** ~5–8 GLB chunks on **slanted** paths (`slantAz`, `slantR` per strike in
-  `strikes[]` / `chaosCue`), soft light-grey billboard smoke (procedural puff texture)
+  `strikes[]` / `chaosCue`), cell-shaded grey billboard smoke (stepped procedural puff texture)
   (per-impact batch; sealed to linger ≥5 s after landing), chunk rests ~15 s then fades,
   scorch on impact.
 - **Physics (host):** Impulse/kill at impact `(x,y)` as before; ~15% one strike targets a fly.
