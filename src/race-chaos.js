@@ -836,7 +836,7 @@ export function createRaceChaos(api) {
 
   function crumbDrop(x, y, physics) {
     const root = dishCakeGroup();
-    const mesh = makeCakeSlice(T);
+    const mesh = chaosMesh('cake_slice') || makeCakeSlice(T);
     mesh.userData.chaosCake = true;
     mesh.updateMatrixWorld(true);
     const box = new T.Box3().setFromObject(mesh);

@@ -12,7 +12,26 @@ if (!globalThis.FileReader) {
     }
   };
 }
+if (!globalThis.document) {
+  globalThis.document = {
+    createElement() {
+      return {
+        width: 4,
+        height: 1,
+        getContext() {
+          return {
+            createImageData(w, h) {
+              return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+            },
+            putImageData() {},
+          };
+        },
+      };
+    },
+  };
+}
 import * as THREE from 'three';
+import { makeCakeSlice } from '../src/race-chaos-props.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import fs from 'fs';
@@ -261,6 +280,15 @@ function chippedCubeGeo(s = 0.072) {
 }
 
 /** Bitten sugar cube. One mesh, big flat faces, one diagonal cut. */
+function buildCakeSlice() {
+  const root = makeCakeSlice(THREE);
+  root.name = 'CakeSlice';
+  root.traverse(o => {
+    if (o.name === 'CelOutline') o.removeFromParent();
+  });
+  return root;
+}
+
 function buildSugarCrumb() {
   const root = new THREE.Group();
   root.name = 'SugarCrumb';
@@ -301,6 +329,7 @@ const jobs = {
   spike_trap: buildSpikeTrap,
   meteor_chunk: buildMeteorChunk,
   sugar_crumb: buildSugarCrumb,
+  cake_slice: buildCakeSlice,
 };
 const pick = process.argv[2];
 for (const [name, build] of Object.entries(jobs)) {

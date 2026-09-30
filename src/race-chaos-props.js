@@ -2,7 +2,10 @@
 // patch that follows the tube surface and knuckle creases.
 // Thumb/finger local axes: contact at origin, shaft toward +Z, nail (dorsal) +X.
 // Hand local axes: palm in XY, fingers toward +Y, back of hand -Z.
-import { celRamp, celOutline, celOutlineMat } from './cel-shade.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { celRamp, celRampCake, celOutline, celOutlineMat } from './cel-shade.js';
+
+const CAKE_INK = '#120c14';
 
 function toonMat(T, color, glow = 0.16) {
   return new T.MeshToonMaterial({ color, gradientMap: celRamp(), transparent: true, opacity: 1, emissive: color, emissiveIntensity: glow });
@@ -10,13 +13,55 @@ function toonMat(T, color, glow = 0.16) {
 
 function cakeToonMat(T, color, glow = 0.16) {
   const m = new T.MeshToonMaterial({
-    color, gradientMap: celRamp(), emissive: color, emissiveIntensity: glow,
-    transparent: true, opacity: 1, depthWrite: true,
+    color,
+    gradientMap: celRampCake(),
+    emissive: color,
+    emissiveIntensity: glow,
+    flatShading: true,
+    transparent: true,
+    opacity: 1,
+    depthWrite: true,
   });
   m.polygonOffset = true;
   m.polygonOffsetFactor = 1;
   m.polygonOffsetUnits = 1;
   return m;
+}
+
+function mergeWorldGeometries(T, meshes) {
+  const parts = [];
+  for (const mesh of meshes) {
+    if (!mesh?.geometry) continue;
+    mesh.updateMatrix();
+    let g = mesh.geometry.clone();
+    if (g.index) g = g.toNonIndexed();
+    g.applyMatrix4(mesh.matrix);
+    parts.push(g);
+  }
+  if (!parts.length) return null;
+  return mergeGeometries(parts);
+}
+
+/** One inverted-hull ink line around every visible cake part (layers, drips, sprinkles, cherry). */
+export function attachCakeSilhouette(root, T) {
+  root?.traverse?.(o => {
+    if (o.name === 'CelOutline') o.removeFromParent();
+  });
+  const meshes = [];
+  root?.traverse?.(o => {
+    if (o.isMesh && o.name !== 'CelOutline') meshes.push(o);
+  });
+  root?.updateMatrixWorld?.(true);
+  const shellGeo = mergeWorldGeometries(T, meshes);
+  if (!shellGeo) return null;
+  const inkMat = celOutlineMat(T, CAKE_INK);
+  inkMat.depthWrite = false;
+  const ink = new T.Mesh(shellGeo, inkMat);
+  ink.name = 'CelOutline';
+  ink.scale.setScalar(1.062);
+  ink.renderOrder = 20;
+  root.add(ink);
+  return ink;
 }
 
 function decal(mat, T, bias) {
@@ -296,32 +341,36 @@ export function makeCakeSlice(T) {
 
   const LAYER_EPS = 0.0025;
 
+  const layerMeshes = [];
+
   function layer(r, depth, color, glow, z, order = 0) {
     const geo = new T.ExtrudeGeometry(sector(r), { depth, bevelEnabled: false, curveSegments: 30 });
+    geo.computeVertexNormals();
     const mesh = new T.Mesh(geo, cakeToonMat(T, color, glow));
     mesh.position.z = z;
     mesh.renderOrder = order;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     g.add(mesh);
+    layerMeshes.push(mesh);
     return mesh;
   }
 
   // Victoria slice: two sponge layers around jam, a thin icing lid on top.
   const hSponge = 0.2, hJam = 0.05, hIcing = 0.038;
   let z = 0;
-  layer(R, hSponge, '#e0b269', 0.05, z, 0);
+  layer(R, hSponge, '#e0b269', 0.02, z, 0);
   z += hSponge + LAYER_EPS;
-  layer(R * 0.995, hJam, '#dc3f74', 0.1, z, 1);
+  layer(R * 0.995, hJam, '#c82d62', 0.04, z, 1);
   z += hJam + LAYER_EPS;
-  layer(R, hSponge, '#f0cd97', 0.05, z, 2);
+  layer(R, hSponge, '#f0cd97', 0.02, z, 2);
   z += hSponge + LAYER_EPS;
   const icingZ = z;
-  layer(R * 1.008, hIcing, '#ff9ec8', 0.14, icingZ, 3);
+  layer(R * 1.008, hIcing, '#ff9ec8', 0.06, icingZ, 3);
   const icingTop = icingZ + hIcing;
 
   // Icing skirt on the curved crust only (below the lid plane — avoids z-fighting on top).
-  const dripMat = cakeToonMat(T, '#ff9ec8', 0.14);
+  const dripMat = cakeToonMat(T, '#ff9ec8', 0.06);
   dripMat.polygonOffsetFactor = -2;
   dripMat.polygonOffsetUnits = -2;
   const dripGeo = new T.SphereGeometry(0.048, 12, 8);
@@ -350,7 +399,7 @@ export function makeCakeSlice(T) {
     const a = a0 + (a1 - a0) * v;
     const x = Math.cos(a) * R * u, y = Math.sin(a) * R * u;
     if (Math.hypot(x - cherryX, y) < cherryR + 0.11) continue;
-    const sm = cakeToonMat(T, spr[placed % spr.length], 0.18);
+    const sm = cakeToonMat(T, spr[placed % spr.length], 0.08);
     sm.polygonOffsetFactor = -4;
     sm.polygonOffsetUnits = -4;
     const s = new T.Mesh(sprGeo, sm);
@@ -362,44 +411,25 @@ export function makeCakeSlice(T) {
     placed++;
   }
 
-  const cherry = new T.Mesh(new T.SphereGeometry(cherryR, 14, 12), cakeToonMat(T, '#d8304f', 0.16));
+  const cherry = new T.Mesh(new T.SphereGeometry(cherryR, 14, 12), cakeToonMat(T, '#d8304f', 0.05));
   cherry.position.set(cherryX, 0, cherryZ);
   cherry.scale.set(1, 1, 0.88);
   cherry.renderOrder = 6;
   cherry.castShadow = true;
   g.add(cherry);
   const stemLen = 0.15;
-  const stem = new T.Mesh(new T.CylinderGeometry(0.012, 0.018, stemLen, 6), cakeToonMat(T, '#4e8f2a', 0.1));
+  const stem = new T.Mesh(new T.CylinderGeometry(0.012, 0.018, stemLen, 6), cakeToonMat(T, '#4e8f2a', 0.03));
   stem.renderOrder = 6;
   stem.position.set(cherry.position.x + 0.02, 0, cherryZ + cherryR * 0.72 + stemLen * 0.38);
   stem.rotation.set(Math.PI / 2, 0.42, 0);
   g.add(stem);
-
-  celOutline(cherry, { scale: 1.14, T });
 
   g.updateMatrixWorld(true);
   const box = new T.Box3().setFromObject(g);
   const c = box.getCenter(new T.Vector3());
   for (const ch of g.children) { ch.position.x -= c.x; ch.position.y -= c.y; }
 
-  // One silhouette hull for the whole slice: the layers sit 0.0025 apart, so per-layer
-  // outlines would poke through each other. The sector is offset outward by `e` on all
-  // three sides (arc plus both flanks) so the tip gets a line too.
-  const e = 0.045;
-  const hull = new T.Shape();
-  const apex = -e / Math.sin(theta / 2), rh = R + e;
-  hull.moveTo(apex, 0);
-  hull.lineTo(apex + rh * Math.cos(a0), rh * Math.sin(a0));
-  hull.absarc(0, 0, rh, a0, a1, false);
-  hull.lineTo(apex, 0);
-  const ol = new T.Mesh(
-    new T.ExtrudeGeometry(hull, { depth: icingTop + 2 * e, bevelEnabled: false, curveSegments: 30 }),
-    celOutlineMat(T),
-  );
-  ol.name = 'CelOutline';
-  ol.position.set(-c.x, -c.y, -e);
-  ol.renderOrder = -1;
-  g.add(ol);
+  attachCakeSilhouette(g, T);
   return g;
 }
 

@@ -2,23 +2,37 @@
 import * as THREE from 'three';
 
 let rampTex = null;
+let rampCakeTex = null;
 
-export function celRamp() {
-  if (rampTex) return rampTex;
+function makeRampTex(levels) {
   const c = document.createElement('canvas');
-  c.width = 4; c.height = 1;
-  const x = c.getContext('2d'), img = x.createImageData(4, 1);
-  const g = [48, 118, 190, 255];
-  for (let i = 0; i < 4; i++) {
-    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = g[i];
+  c.width = levels.length;
+  c.height = 1;
+  const x = c.getContext('2d'), img = x.createImageData(levels.length, 1);
+  for (let i = 0; i < levels.length; i++) {
+    const v = levels[i];
+    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
     img.data[i * 4 + 3] = 255;
   }
   x.putImageData(img, 0, 0);
-  rampTex = new THREE.CanvasTexture(c);
-  rampTex.minFilter = THREE.NearestFilter;
-  rampTex.magFilter = THREE.NearestFilter;
-  rampTex.colorSpace = THREE.NoColorSpace;
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.NoColorSpace;
+  return tex;
+}
+
+export function celRamp() {
+  if (rampTex) return rampTex;
+  rampTex = makeRampTex([48, 118, 190, 255]);
   return rampTex;
+}
+
+/** Steeper bands for pastel props (cake) so toon steps read under race lighting. */
+export function celRampCake() {
+  if (rampCakeTex) return rampCakeTex;
+  rampCakeTex = makeRampTex([22, 72, 138, 205, 255]);
+  return rampCakeTex;
 }
 
 export function celMat(color, glow = 0) {
@@ -62,17 +76,17 @@ function meshHeight(o) {
 }
 
 /** The ink used by every inverted-hull outline. */
-export function celOutlineMat(T = THREE) {
-  return new T.MeshBasicMaterial({ color: '#2a1812', side: T.BackSide });
+export function celOutlineMat(T = THREE, color = '#2a1812') {
+  return new T.MeshBasicMaterial({ color, side: T.BackSide });
 }
 
 /**
  * Attach an inverted-hull outline to `mesh`. The hull is the same geometry scaled
  * about the mesh origin, so it only works on origin-centred geometry.
  */
-export function celOutline(mesh, { scale = 1.035, name = 'CelOutline', T = THREE } = {}) {
+export function celOutline(mesh, { scale = 1.035, name = 'CelOutline', T = THREE, color } = {}) {
   mesh.getObjectByName(name)?.removeFromParent();
-  const ol = new T.Mesh(mesh.geometry, celOutlineMat(T));
+  const ol = new T.Mesh(mesh.geometry, celOutlineMat(T, color));
   ol.name = name;
   if (typeof scale === 'number') ol.scale.setScalar(scale); else ol.scale.set(...scale);
   ol.renderOrder = -1;

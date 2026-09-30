@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinnedRoot } from 'three/addons/utils/SkeletonUtils.js';
 import { createSmokePuffTexture } from './race-chaos-smoke-tex.js';
 import { applyCelShading } from './cel-shade.js';
+import { attachCakeSilhouette } from './race-chaos-props.js';
 import { applyUfoRimGlow } from './ufo-rim-glow.js';
 
 const PATHS = {
@@ -10,6 +11,7 @@ const PATHS = {
   spike_trap: 'chaos/spike_trap.glb',
   meteor_chunk: 'chaos/meteor_chunk.glb',
   sugar_crumb: 'chaos/sugar_crumb.glb',
+  cake_slice: 'chaos/cake_slice.glb',
 };
 
 const templates = {};
@@ -42,7 +44,10 @@ export function cloneChaosProp(name) {
   if (!t) return null;
   const root = cloneSkinnedRoot(t);
   if (name === 'ufo') applyUfoRimGlow(root, { sceneLights: true });
-  else applyCelShading(root);
+  else if (name === 'cake_slice') {
+    applyCelShading(root, { outline: false });
+    attachCakeSilhouette(root, THREE);
+  } else applyCelShading(root);
   root.traverse(o => {
     if (!o.isMesh) return;
     const isOutline = o.name === 'CelOutline' || o.name === 'UfoCelOutline';
