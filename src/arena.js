@@ -93,10 +93,25 @@ async function setRaceEnv(id) {
   return true;
 }
 /** Camera range, home view, shadow depth and ambience for the current map. */
+function raceOverviewMaxDist() {
+  const R = env.arena.radius;
+  // desert overview sits at ~1.95 R; R*5 lets people pull back past the walls
+  return env.map === 'desert' ? R * 2.3 : R * 5;
+}
+function applyRaceZoomLimit() {
+  if (!controls) return;
+  const R = env.arena.radius;
+  const max = (isRace && raceFollow == null) ? raceOverviewMaxDist() : R * 5;
+  controls.maxDistance = max;
+  const dist = camera.position.distanceTo(controls.target);
+  if (dist > max && dist > 1e-6) {
+    camera.position.lerpVectors(controls.target, camera.position, max / dist);
+  }
+}
 function fitRaceView() {
   const R = env.arena.radius;
   camera.far = Math.max(100, R * 8); camera.updateProjectionMatrix();
-  controls.maxDistance = R * 5;
+  applyRaceZoomLimit();
   sun.shadow.camera.far = Math.max(20, R * 3); sun.shadow.camera.updateProjectionMatrix();
   shadowExtent = 0; shadowDirty = true;
   raceCamHome = { pos: new THREE.Vector3(R * 1.3, 0, R * 1.45), target: new THREE.Vector3(0, 0, 0.1) };
@@ -364,6 +379,7 @@ function buildScene(data) {
   else camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5;
+  applyRaceZoomLimit();
   controls.maxPolarAngle = Math.PI / 2 - 0.02;
   if (isRace) raceCamHome = { pos: camera.position.clone(), target: controls.target.clone() };
   hemiLight = new THREE.HemisphereLight(isRace ? '#f0d4ff' : '#f4f2ed', isRace ? '#4a2060' : '#514432', 0.22); scene.add(hemiLight);
@@ -486,7 +502,7 @@ function rebuildEnv() {
   }
   if (!desertScene) {
     floorMesh = new THREE.Mesh(new THREE.CircleGeometry(R + 0.1, 96), floorMat);
-    floorMesh.receiveShadow = true; envGroup.add(floorMesh);
+    floorMesh.receiveShadow = true; floorMesh.userData.laserSurface = 'floor'; envGroup.add(floorMesh);
     wallMesh = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true), wallMat);
     wallMesh.rotation.x = Math.PI / 2; wallMesh.position.z = env.arena.wallHeight / 2; envGroup.add(wallMesh);
   }
@@ -2121,7 +2137,8 @@ function deadFlyTargetEndScale(f, anchor, z) {
 function deadFlyRestZ(anchor, f, scale) {
   const k = deadFlyLayoutK(f);
   const riseAboveAnchor = scale * (0.5 - DEAD_FLY_CENTER_Y);
-  const labelZ = anchor[2] + (RACE_LABEL_Z + (RACE_LABEL_Z_CHASE - RACE_LABEL_Z) * k);
+  const z0 = env.map === 'desert' ? RACE_LABEL_Z * 1.15 : RACE_LABEL_Z;
+  const labelZ = anchor[2] + (z0 + (RACE_LABEL_Z_CHASE - z0) * k);
   const below = DEAD_FLY_BELOW_LABEL + (DEAD_FLY_BELOW_LABEL_CHASE - DEAD_FLY_BELOW_LABEL) * k;
   const overview = 1 - k;
   const scaleExcess = Math.max(0, scale - DEAD_FLY_SCALE_END);
@@ -2242,7 +2259,8 @@ function easeOutBack(t, s = 1.7) { const u = t - 1; return u * u * ((s + 1) * u 
 function easeInBack(t, s = 1.7) { return t * t * ((s + 1) * t - s); }
 function flyLabelZ(f) {
   const k = raceLabelFollowK(f);
-  return RACE_LABEL_Z + (RACE_LABEL_Z_CHASE - RACE_LABEL_Z) * k;
+  const z0 = env.map === 'desert' ? RACE_LABEL_Z * 1.15 : RACE_LABEL_Z;
+  return z0 + (RACE_LABEL_Z_CHASE - z0) * k;
 }
 function chaseCam(f, outPos, outTarget) {
   const p = flyDrawPos(f) || f.last.pos, yaw = f.last.yaw || 0;
@@ -2261,18 +2279,21 @@ function startRaceFollow(id) {
   renderFlyList();
   const f = flies.find(x => x.id === id);
   if (f?.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
+  applyRaceZoomLimit();
   if (isWatch && f && (f.lastGroups || f.lastEyes) && groups.length) onActivity(f, { groups: f.lastGroups || [], eyes: f.lastEyes, t: f.last?.t || 0 });
 }
 function stopRaceFollow() {
   if (!isRace || (raceFollow == null && raceCamTween?.mode !== 'in')) return;
   const wasFollow = raceFollow;
   raceFollow = null;
+  applyRaceZoomLimit();
   if (!raceCamHome) return;
   raceCamTween = { mode: 'out', t: 0, dur: 0.5, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), wasFollow };
 }
 function snapRaceOverview() {
   raceFollow = null;
   raceCamTween = null;
+  applyRaceZoomLimit();
   if (!raceCamHome) return;
   camera.position.copy(raceCamHome.pos);
   controls.target.copy(raceCamHome.target);

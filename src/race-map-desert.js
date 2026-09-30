@@ -125,7 +125,7 @@ function wispTexture() {
   const x = c.getContext('2d'), img = x.createImageData(w, h), d = img.data;
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     const u = i / w * Math.PI * 2, v = j / h;
-    const n = 0.7 + 0.25 * Math.sin(3 * u + 6 * v) + 0.2 * Math.sin(7 * u - 4 * v + 1.3) + 0.15 * Math.sin(13 * u + 2);
+    const n = 0.22 + 0.12 * Math.sin(3 * u + 6 * v) + 0.08 * Math.sin(7 * u - 4 * v + 1.3) + 0.05 * Math.sin(13 * u + 2);
     const p = (j * w + i) * 4, a = Math.max(0, Math.min(1, n));
     d[p] = 255; d[p + 1] = 255; d[p + 2] = 255; d[p + 3] = a * 255;
   }
@@ -259,7 +259,7 @@ function trailRibbon(a, env, len = SPAWN_D - 1, width = 2.4) {
       const s = (j / nS - 0.5) * width, x = d * ux + s * nx, y = d * uy + s * ny;
       pos.push(x, y, groundAt([x, y], env) + 0.035);
       const across = Math.exp(-((s / (width * 0.32)) ** 2));
-      col.push(0.66, 1, 0.38, 0.95 * along * across);
+      col.push(0.55, 0.9, 0.32, 0.14 * along * across);
       uv.push(d / 5, j / nS);
     }
   }
@@ -303,7 +303,7 @@ export function buildDesertScene(envGroup, env, ctx) {
   own.push(sandN);
   const sandMat = new THREE.MeshStandardMaterial({ map: ft, normalMap: sandN, normalScale: new THREE.Vector2(0.35, 0.35), roughness: 0.96 });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(2 * H, 2 * H), sandMat);
-  floor.receiveShadow = true; root.add(floor);
+  floor.receiveShadow = true; floor.userData.laserSurface = 'floor'; root.add(floor);
   const floorPaint = { fx, fs, ft, paintBase: () => fx.drawImage(base, 0, 0) };
 
   // --- sandstone walls, coping and corner towers (inner face exactly at +-H) ---
@@ -342,10 +342,10 @@ export function buildDesertScene(envGroup, env, ctx) {
   for (const w of env.waterPools || []) {
     const rim = new THREE.Mesh(new THREE.RingGeometry(w.r - 0.05, w.r + 0.18, 64), rimMat);
     rim.position.set(w.x, w.y, 0.02); rim.receiveShadow = true; rim.userData.shareMat = true; root.add(rim);
-    const m = new THREE.Mesh(new THREE.CircleGeometry(w.r, 64), waterMat); m.position.set(w.x, w.y, 0.03); m.receiveShadow = true; m.userData.shareMat = true; root.add(m);
+    const m = new THREE.Mesh(new THREE.CircleGeometry(w.r, 64), waterMat); m.position.set(w.x, w.y, 0.03); m.receiveShadow = true; m.userData.shareMat = true; m.userData.laserIgnore = true; root.add(m);
     for (let k = 0; k < 2; k++) {
       const rm = new THREE.MeshBasicMaterial({ color: '#dff6f2', transparent: true, opacity: 0, depthWrite: false, ...lift(-6) });
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48), rm); ring.position.set(w.x, w.y, 0.04); ring.renderOrder = 2; root.add(ring);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.988, 1, 48), rm); ring.position.set(w.x, w.y, 0.04); ring.renderOrder = 2; ring.userData.laserIgnore = true; root.add(ring);
       rippleMats.push({ ring, rm, r: w.r, phase: k * 0.5 + (w.x * 0.13 + w.y * 0.07) % 1 });
     }
   }
@@ -353,12 +353,12 @@ export function buildDesertScene(envGroup, env, ctx) {
 
   // --- visible odor: a flowing ribbon per lane and a glow over the sugar ---
   const wisp = wispTexture(); own.push(wisp);
-  const trailMat = new THREE.MeshBasicMaterial({ map: wisp, vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-  for (const a of LANE_ANGLES) { const m = new THREE.Mesh(trailRibbon(a, env), trailMat); m.renderOrder = 2; m.userData.shareMat = true; root.add(m); }
+  const trailMat = new THREE.MeshBasicMaterial({ map: wisp, vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+  for (const a of LANE_ANGLES) { const m = new THREE.Mesh(trailRibbon(a, env), trailMat); m.renderOrder = 2; m.userData.shareMat = true; m.userData.laserIgnore = true; root.add(m); }
   own.push(trailMat);
-  const glowTex = radialTexture([[0, 'rgba(180,255,110,0.8)'], [0.5, 'rgba(180,255,110,0.3)'], [1, 'rgba(180,255,110,0)']]); own.push(glowTex);
+  const glowTex = radialTexture([[0, 'rgba(180,255,110,0.12)'], [0.5, 'rgba(180,255,110,0.04)'], [1, 'rgba(180,255,110,0)']]); own.push(glowTex);
   const glow = new THREE.Mesh(new THREE.CircleGeometry(3.4, 48), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
-  glow.position.z = 0.03; glow.renderOrder = 2; root.add(glow);
+  glow.position.z = 0.03; glow.renderOrder = 2; glow.userData.laserIgnore = true; root.add(glow);
 
   // --- props: one InstancedMesh per template mesh ---
   const byKind = new Map();
@@ -402,8 +402,8 @@ export function buildDesertScene(envGroup, env, ctx) {
     };
     const post = add(postGeo, lampStoneMat, z0 + l.h / 2, true); post.scale.z = l.h;
     add(bowlGeo, lampIronMat, z0 + l.h + 0.08, true);
-    const flame = add(flameGeo, flameMat, fz); flame.renderOrder = 3;
-    const ember = add(emberGeo, emberMat, fz - 0.06); ember.renderOrder = 3;
+    const flame = add(flameGeo, flameMat, fz); flame.renderOrder = 3; flame.userData.laserIgnore = true;
+    const ember = add(emberGeo, emberMat, fz - 0.06); ember.renderOrder = 3; ember.userData.laserIgnore = true;
     const halo = new THREE.Sprite(haloMat.clone());   // per-lamp so each flickers on its own
     own.push(halo.material);
     halo.position.set(l.x, l.y, fz + 0.05); halo.scale.setScalar(l.light ? 2.4 : 1.6); halo.renderOrder = 3; root.add(halo);
@@ -487,10 +487,10 @@ export function buildDesertScene(envGroup, env, ctx) {
     swayUniforms.uWind.value.set(wind.dirX, wind.dirY, wind.strength);
     waterN.offset.set((ts * 0.02) % 1, (ts * 0.013) % 1);
     wisp.offset.x = (wisp.offset.x - 0.12 * (0.7 + wind.strength * 0.3) * dt) % 1;
-    glow.material.opacity = 0.75 + 0.25 * Math.sin(ts * 1.6);
+    glow.material.opacity = 0.16 + 0.05 * Math.sin(ts * 1.6);
     for (const rp of rippleMats) {
-      const u = (t / 3.2 + rp.phase) % 1, s = 0.2 + u * rp.r * 0.9;
-      rp.ring.scale.set(s, s, 1); rp.rm.opacity = 0.22 * (1 - u) * Math.min(1, u * 6);
+      const u = (t / 8.5 + rp.phase) % 1, s = 0.2 + u * rp.r * 0.9;
+      rp.ring.scale.set(s, s, 1); rp.rm.opacity = 0.14 * (1 - u) * Math.min(1, u * 6);
     }
     // lamp flicker: one wobble drives the flame, the ember, the halo and the point light together
     for (const lf of lampFx) {

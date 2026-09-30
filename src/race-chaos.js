@@ -10,7 +10,7 @@ import {
   disposeMeteorSmoke, burstMeteorSmoke, orientMeteorAlong, tickMeteorSmoke,
 } from './race-chaos-meteor.js';
 import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial } from './race-chaos-bolt.js';
-import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laserSessionDuration } from './race-chaos-laser.js';
+import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laserSessionDuration, collectLaserSolids } from './race-chaos-laser.js';
 
 export const CHAOS_KINDS = [
   'thumb', 'spin', 'quake', 'flip', 'tilt', 'lightning', 'double', 'crumb', 'firefly', 'boop', 'puff', 'laser',
@@ -112,11 +112,15 @@ export function createRaceChaos(api) {
   let laserSession = null;
   let laserPool = null;
   let laserBurnLast = null;
+  let laserDecals = [];
+  let laserDecalGeo = null;
   let sugarRainSession = null;
   let ufoSession = null;
   let spikesSession = null;
 
   function radius() { return api.env()?.arena?.radius || 12.5; }
+  /** Linear size vs the 12.5 cm dish. Desert inscribed radius is 25 → 2×. */
+  function arenaScale() { return radius() / 12.5; }
   // scorch decals read larger on the big square map; kill radii stay fly-sized
   function scorchScale() { return api.env()?.arena?.shape === 'square' ? 1.5 : 1; }
   /** keep the rim rise of a tilt the same as on the 12.5 cm dish, whatever the arena size */
@@ -316,6 +320,53 @@ export function createRaceChaos(api) {
     return laserPool;
   }
 
+  function addLaserDecal(hit) {
+    if (!hit) return;
+    if (!laserDecalGeo) laserDecalGeo = new T.CircleGeometry(1, 16);
+    const mesh = new T.Mesh(laserDecalGeo, new T.MeshBasicMaterial({
+      color: '#14110e', transparent: true, opacity: 0.88, depthWrite: false, side: T.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, toneMapped: false,
+    }));
+    const n = new T.Vector3(hit.nx || 0, hit.ny || 0, hit.nz == null ? 1 : hit.nz);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    n.normalize();
+    mesh.position.set(hit.x, hit.y, hit.z || 0);
+    mesh.position.addScaledVector(n, 0.018);
+    mesh.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), n);
+    mesh.scale.setScalar(0.14);
+    mesh.renderOrder = 4;
+    if (laserDecals.length >= 48) {
+      const old = laserDecals.shift();
+      old.mesh.parent?.remove(old.mesh);
+      old.mesh.material.dispose();
+    }
+    (api.envGroup?.() || fxGroup()).add(mesh);
+    laserDecals.push({ mesh, until: now() + 14000 });
+  }
+
+  function tickLaserDecals(t) {
+    laserDecals = laserDecals.filter(d => {
+      const k = d.until > t ? 1 : Math.max(0, 1 - (t - d.until) / 4000);
+      if (k <= 0) {
+        d.mesh.parent?.remove(d.mesh);
+        d.mesh.material.dispose();
+        return false;
+      }
+      d.mesh.material.opacity = 0.88 * k;
+      return true;
+    });
+  }
+
+  function clearLaserDecals() {
+    for (const d of laserDecals) {
+      d.mesh.parent?.remove(d.mesh);
+      d.mesh.material.dispose();
+    }
+    laserDecals = [];
+    laserDecalGeo?.dispose();
+    laserDecalGeo = null;
+  }
+
   function endLaserSession() {
     api.audio()?.stopLaserBeam?.();
     laserSession = null;
@@ -337,6 +388,7 @@ export function createRaceChaos(api) {
     const beamFlies = shooterId == null ? [] : allLive.filter(f => f.id === shooterId);
     tickLaserBeams(pool, beamFlies, arena, t, laserBurnLast, {
       physics: laserSession.physics ?? physics,
+      solids: collectLaserSolids(env),
       onFlyHit: victimId => {
         if (!laserSession?.physics || laserSession.killed.has(victimId)) return;
         const v = flies().find(x => x.id === victimId);
@@ -346,7 +398,11 @@ export function createRaceChaos(api) {
         api.audio()?.playLaserKill?.();
         hideToast();
       },
-      onBurn: (x, y) => {
+      onBurn: (x, y, type, hit) => {
+        if (type === 'wall' || type === 'solid') {
+          addLaserDecal(hit);
+          return;
+        }
         scorches.push({ x, y, r: 0.1, until: t + 14000, kind: 'laser' });
         if (t - lastScorchPaint > 80) {
           lastScorchPaint = t;
@@ -831,17 +887,19 @@ export function createRaceChaos(api) {
   function handUnder() {
     const root = fxGroup();
     const mesh = makeHand(T);
-    mesh.position.set(0, -2.2, -2.4);
+    const s = arenaScale() * 1.17;
+    mesh.scale.setScalar(s);
+    mesh.position.set(0, -2.2 * s, -2.4 * s);
     mesh.rotation.set(0, 0, 0);
     mesh.rotateX(0.18);
     root.add(mesh);
     tween(240, u => {
       const k = easeInOut(u);
-      mesh.position.z = -2.4 + k * 2.55;
-      mesh.position.y = -2.2 + k * 1.4;
+      mesh.position.z = -2.4 * s + k * 2.55 * s;
+      mesh.position.y = -2.2 * s + k * 1.4 * s;
     }, () => {
       later(160, () => tween(320, u => {
-        mesh.position.z = 0.15 - u * 2.8;
+        mesh.position.z = 0.15 * s - u * 2.8 * s;
         fadeGroup(mesh, 1 - u);
       }, () => disposeObj(mesh)));
     });
@@ -1596,6 +1654,7 @@ export function createRaceChaos(api) {
     clearSceneFlash();
     endLaserSession();
     endWildcardSessions();
+    clearLaserDecals();
     if (laserPool) {
       disposeLaserPool(laserPool);
       laserPool = null;
@@ -1680,6 +1739,7 @@ export function createRaceChaos(api) {
     }
     updateSceneFlashEl(t);
     tickLaserSession(t, api.isHostLive?.());
+    tickLaserDecals(t);
     tickMeteorSmoke(t);
     if (ufoSession?.saucer && ufoSession.spinRadPerSec) {
       const dt = (t - (ufoSession.lastSpinT ?? t)) / 1000;
