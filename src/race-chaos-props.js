@@ -2,7 +2,7 @@
 // patch that follows the tube surface and knuckle creases.
 // Thumb/finger local axes: contact at origin, shaft toward +Z, nail (dorsal) +X.
 // Hand local axes: palm in XY, fingers toward +Y, back of hand -Z.
-import { celRamp } from './cel-shade.js';
+import { celRamp, celOutline, celOutlineMat } from './cel-shade.js';
 
 function toonMat(T, color, glow = 0.16) {
   return new T.MeshToonMaterial({ color, gradientMap: celRamp(), transparent: true, opacity: 1, emissive: color, emissiveIntensity: glow });
@@ -310,18 +310,18 @@ export function makeCakeSlice(T) {
   // Victoria slice: two sponge layers around jam, a thin icing lid on top.
   const hSponge = 0.2, hJam = 0.05, hIcing = 0.038;
   let z = 0;
-  layer(R, hSponge, '#e0b269', 0.1, z, 0);
+  layer(R, hSponge, '#e0b269', 0.05, z, 0);
   z += hSponge + LAYER_EPS;
-  layer(R * 0.995, hJam, '#dc3f74', 0.2, z, 1);
+  layer(R * 0.995, hJam, '#dc3f74', 0.1, z, 1);
   z += hJam + LAYER_EPS;
-  layer(R, hSponge, '#f0cd97', 0.1, z, 2);
+  layer(R, hSponge, '#f0cd97', 0.05, z, 2);
   z += hSponge + LAYER_EPS;
   const icingZ = z;
-  layer(R * 1.008, hIcing, '#ff9ec8', 0.28, icingZ, 3);
+  layer(R * 1.008, hIcing, '#ff9ec8', 0.14, icingZ, 3);
   const icingTop = icingZ + hIcing;
 
   // Icing skirt on the curved crust only (below the lid plane — avoids z-fighting on top).
-  const dripMat = cakeToonMat(T, '#ff9ec8', 0.28);
+  const dripMat = cakeToonMat(T, '#ff9ec8', 0.14);
   dripMat.polygonOffsetFactor = -2;
   dripMat.polygonOffsetUnits = -2;
   const dripGeo = new T.SphereGeometry(0.048, 12, 8);
@@ -350,7 +350,7 @@ export function makeCakeSlice(T) {
     const a = a0 + (a1 - a0) * v;
     const x = Math.cos(a) * R * u, y = Math.sin(a) * R * u;
     if (Math.hypot(x - cherryX, y) < cherryR + 0.11) continue;
-    const sm = cakeToonMat(T, spr[placed % spr.length], 0.35);
+    const sm = cakeToonMat(T, spr[placed % spr.length], 0.18);
     sm.polygonOffsetFactor = -4;
     sm.polygonOffsetUnits = -4;
     const s = new T.Mesh(sprGeo, sm);
@@ -362,23 +362,44 @@ export function makeCakeSlice(T) {
     placed++;
   }
 
-  const cherry = new T.Mesh(new T.SphereGeometry(cherryR, 14, 12), cakeToonMat(T, '#d8304f', 0.32));
+  const cherry = new T.Mesh(new T.SphereGeometry(cherryR, 14, 12), cakeToonMat(T, '#d8304f', 0.16));
   cherry.position.set(cherryX, 0, cherryZ);
   cherry.scale.set(1, 1, 0.88);
   cherry.renderOrder = 6;
   cherry.castShadow = true;
   g.add(cherry);
   const stemLen = 0.15;
-  const stem = new T.Mesh(new T.CylinderGeometry(0.012, 0.018, stemLen, 6), cakeToonMat(T, '#4e8f2a', 0.18));
+  const stem = new T.Mesh(new T.CylinderGeometry(0.012, 0.018, stemLen, 6), cakeToonMat(T, '#4e8f2a', 0.1));
   stem.renderOrder = 6;
   stem.position.set(cherry.position.x + 0.02, 0, cherryZ + cherryR * 0.72 + stemLen * 0.38);
   stem.rotation.set(Math.PI / 2, 0.42, 0);
   g.add(stem);
 
+  celOutline(cherry, { scale: 1.14, T });
+
   g.updateMatrixWorld(true);
   const box = new T.Box3().setFromObject(g);
   const c = box.getCenter(new T.Vector3());
   for (const ch of g.children) { ch.position.x -= c.x; ch.position.y -= c.y; }
+
+  // One silhouette hull for the whole slice: the layers sit 0.0025 apart, so per-layer
+  // outlines would poke through each other. The sector is offset outward by `e` on all
+  // three sides (arc plus both flanks) so the tip gets a line too.
+  const e = 0.045;
+  const hull = new T.Shape();
+  const apex = -e / Math.sin(theta / 2), rh = R + e;
+  hull.moveTo(apex, 0);
+  hull.lineTo(apex + rh * Math.cos(a0), rh * Math.sin(a0));
+  hull.absarc(0, 0, rh, a0, a1, false);
+  hull.lineTo(apex, 0);
+  const ol = new T.Mesh(
+    new T.ExtrudeGeometry(hull, { depth: icingTop + 2 * e, bevelEnabled: false, curveSegments: 30 }),
+    celOutlineMat(T),
+  );
+  ol.name = 'CelOutline';
+  ol.position.set(-c.x, -c.y, -e);
+  ol.renderOrder = -1;
+  g.add(ol);
   return g;
 }
 
@@ -392,12 +413,14 @@ export function makeLeaf(T, color = '#8fd14f') {
   const geo = new T.ExtrudeGeometry(blade, {
     depth: 0.05, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 1, curveSegments: 16,
   });
-  const mesh = new T.Mesh(geo, toonMat(T, color, 0.16));
+  const mesh = new T.Mesh(geo, toonMat(T, color, 0.08));
   mesh.castShadow = true;
   g.add(mesh);
+  // the blade is nearly flat, so the outline needs a much bigger z factor to read edge-on
+  celOutline(mesh, { scale: [1.06, 1.05, 1.6], T });
 
   // Midrib, tapering to the tip, half-sunk into the blade's top face.
-  const veinMat = toonMat(T, '#4e8f2a', 0.12);
+  const veinMat = toonMat(T, '#4e8f2a', 0.06);
   const vein = new T.Mesh(new T.CylinderGeometry(0.006, 0.016, 0.86, 5), veinMat);
   vein.position.set(0, 0.02, 0.062);
   g.add(vein);
@@ -415,9 +438,10 @@ export function makeLeaf(T, color = '#8fd14f') {
     }
   }
 
-  const stalk = new T.Mesh(new T.CylinderGeometry(0.02, 0.026, 0.22, 6), toonMat(T, '#5d9c33', 0.12));
+  const stalk = new T.Mesh(new T.CylinderGeometry(0.02, 0.026, 0.22, 6), toonMat(T, '#5d9c33', 0.06));
   stalk.position.set(0, -0.55, 0.025);
   g.add(stalk);
+  celOutline(stalk, { scale: [1.32, 1.04, 1.32], T });
   return g;
 }
 

@@ -61,14 +61,28 @@ function meshHeight(o) {
   return b ? b.max.z - b.min.z : 0;
 }
 
-function addOutline(o, name) {
-  o.getObjectByName(name)?.removeFromParent();
-  if (meshHeight(o) < 0.04) return;
-  const ol = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial({ color: '#2a1812', side: THREE.BackSide }));
+/** The ink used by every inverted-hull outline. */
+export function celOutlineMat(T = THREE) {
+  return new T.MeshBasicMaterial({ color: '#2a1812', side: T.BackSide });
+}
+
+/**
+ * Attach an inverted-hull outline to `mesh`. The hull is the same geometry scaled
+ * about the mesh origin, so it only works on origin-centred geometry.
+ */
+export function celOutline(mesh, { scale = 1.035, name = 'CelOutline', T = THREE } = {}) {
+  mesh.getObjectByName(name)?.removeFromParent();
+  const ol = new T.Mesh(mesh.geometry, celOutlineMat(T));
   ol.name = name;
-  ol.scale.setScalar(1.035);
+  if (typeof scale === 'number') ol.scale.setScalar(scale); else ol.scale.set(...scale);
   ol.renderOrder = -1;
-  o.add(ol);
+  mesh.add(ol);
+  return ol;
+}
+
+function addOutline(o, name) {
+  if (meshHeight(o) < 0.04) { o.getObjectByName(name)?.removeFromParent(); return; }
+  celOutline(o, { name });
 }
 
 /**

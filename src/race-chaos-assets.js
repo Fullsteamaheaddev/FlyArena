@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { clone as cloneSkinnedRoot } from 'three/addons/utils/SkeletonUtils.js';
 import { createSmokePuffTexture } from './race-chaos-smoke-tex.js';
 import { applyCelShading } from './cel-shade.js';
 import { applyUfoRimGlow } from './ufo-rim-glow.js';
@@ -40,7 +40,7 @@ export function getChaosSmokeTexture() {
 export function cloneChaosProp(name) {
   const t = templates[name];
   if (!t) return null;
-  const root = SkeletonUtils.clone(t);
+  const root = cloneSkinnedRoot(t);
   if (name === 'ufo') applyUfoRimGlow(root, { sceneLights: true });
   else applyCelShading(root);
   root.traverse(o => {

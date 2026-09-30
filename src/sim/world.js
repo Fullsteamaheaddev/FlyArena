@@ -63,7 +63,7 @@ export const PRESETS = {
   },
 };
 
-// Sugar Run maps. `dish` is the original plate; `desert` is the 80 cm square (src/sim/maps/desert.js).
+// Sugar Run maps. `dish` is the original plate; `desert` is the 50 cm night square (src/sim/maps/desert.js).
 export const RACE_MAPS = {
   dish: { label: 'Dish', flySpots: PRESETS.race.flySpots, env: PRESETS.race.env },
   desert: { label: 'Desert', flySpots: desertSpots(), env: () => desertEnv(DEFAULT_ENV) },

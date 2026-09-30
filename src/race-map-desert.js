@@ -1,13 +1,16 @@
 // Sugar Run desert map: render-only scene dressing. Physics, senses and fairness live in
-// src/sim/maps/desert.js; this draws the sand, walls, dunes, water, props, odor trails and
-// ambient motion (palm sway, dust, tumbleweeds, hawk shadow) on top of the same env.
+// src/sim/maps/desert.js; this draws the sand, walls, water, props, odor trails, the night sky
+// and ambient motion (palm sway, dust, tumbleweeds, lamp flicker) on top of the same env.
 import * as THREE from 'three';
 import { groundAt } from './sim/senses.js';
 import { LANE_ANGLES, SPAWN_D } from './sim/maps/desert.js';
 import { mapPropMeshes } from './race-map-assets.js';
 import { hawkAt } from './race-wind.js';
 
-const SAND = '#d7b078';
+// Night palette: the sand is lit by the moon, so the painted base stays dark and the warm
+// lamp pools below are what the eye reads as light.
+const SAND = '#4a3b28';
+const LAMP_WARM = '#ffb257';
 let baseCache = null;
 
 function rng(seed) {
@@ -154,17 +157,17 @@ function hawkTexture() {
 function paintDesertBase(fx, fs, env) {
   const H = env.arena.half, px = fs / (2 * H), X = x => fs / 2 + x * px, Y = y => fs / 2 - y * px, r = rng(7);
   const g = fx.createRadialGradient(fs / 2, fs / 2, 0, fs / 2, fs / 2, fs * 0.72);
-  g.addColorStop(0, '#e3c28c'); g.addColorStop(0.5, SAND); g.addColorStop(1, '#c49860');
+  g.addColorStop(0, '#59462e'); g.addColorStop(0.5, SAND); g.addColorStop(1, '#312619');
   fx.fillStyle = g; fx.fillRect(0, 0, fs, fs);
   for (let k = 0; k < 1400; k++) {
-    fx.fillStyle = r() < 0.5 ? `rgba(180,135,80,${0.05 + r() * 0.07})` : `rgba(240,212,160,${0.05 + r() * 0.08})`;
+    fx.fillStyle = r() < 0.5 ? `rgba(30,24,16,${0.06 + r() * 0.08})` : `rgba(150,128,96,${0.04 + r() * 0.06})`;
     fx.beginPath(); fx.ellipse(r() * fs, r() * fs, (0.4 + r() * 3.5) * px, (0.2 + r() * 1.5) * px, r() * Math.PI, 0, 6.283); fx.fill();
   }
   // wind ripples
   fx.lineWidth = Math.max(1, px * 0.06);
   for (let y = -H; y < H; y += 0.42) {
     const ph = r() * 6.283, amp = 0.12 + r() * 0.1;
-    fx.strokeStyle = `rgba(150,105,60,${0.07 + r() * 0.05})`;
+    fx.strokeStyle = `rgba(22,18,12,${0.08 + r() * 0.06})`;
     fx.beginPath();
     for (let x = -H; x <= H; x += 0.5) { const yy = y + amp * Math.sin(x * 0.9 + ph) + 0.25 * Math.sin(x * 0.13 + y * 0.2); x === -H ? fx.moveTo(X(x), Y(yy)) : fx.lineTo(X(x), Y(yy)); }
     fx.stroke();
@@ -172,16 +175,16 @@ function paintDesertBase(fx, fs, env) {
   // packed-sand lanes from the spawns to the plaza
   fx.lineCap = 'round';
   for (const a of LANE_ANGLES) {
-    fx.strokeStyle = 'rgba(238,212,165,0.22)'; fx.lineWidth = 3.2 * px;
+    fx.strokeStyle = 'rgba(150,126,92,0.18)'; fx.lineWidth = 3.2 * px;
     fx.beginPath(); fx.moveTo(X(3 * Math.cos(a)), Y(3 * Math.sin(a))); fx.lineTo(X((SPAWN_D + 1) * Math.cos(a)), Y((SPAWN_D + 1) * Math.sin(a))); fx.stroke();
     const sx = SPAWN_D * Math.cos(a), sy = SPAWN_D * Math.sin(a);
-    fx.fillStyle = 'rgba(196,170,130,0.9)'; fx.beginPath(); fx.arc(X(sx), Y(sy), 1.3 * px, 0, 6.283); fx.fill();
-    fx.strokeStyle = 'rgba(120,90,55,0.6)'; fx.lineWidth = 0.12 * px; fx.beginPath(); fx.arc(X(sx), Y(sy), 1.3 * px, 0, 6.283); fx.stroke();
+    fx.fillStyle = 'rgba(112,94,70,0.9)'; fx.beginPath(); fx.arc(X(sx), Y(sy), 1.3 * px, 0, 6.283); fx.fill();
+    fx.strokeStyle = 'rgba(214,180,128,0.45)'; fx.lineWidth = 0.12 * px; fx.beginPath(); fx.arc(X(sx), Y(sy), 1.3 * px, 0, 6.283); fx.stroke();
     fx.beginPath(); fx.arc(X(sx), Y(sy), 0.8 * px, 0, 6.283); fx.stroke();
   }
   // stone plaza round the sugar
-  fx.fillStyle = '#cdb088'; fx.beginPath(); fx.arc(X(0), Y(0), 3.2 * px, 0, 6.283); fx.fill();
-  fx.strokeStyle = 'rgba(110,80,50,0.55)'; fx.lineWidth = 0.1 * px;
+  fx.fillStyle = '#4c3d2a'; fx.beginPath(); fx.arc(X(0), Y(0), 3.2 * px, 0, 6.283); fx.fill();
+  fx.strokeStyle = 'rgba(16,12,8,0.5)'; fx.lineWidth = 0.1 * px;
   for (const rr of [1.1, 2.1, 3.2]) { fx.beginPath(); fx.arc(X(0), Y(0), rr * px, 0, 6.283); fx.stroke(); }
   for (let k = 0; k < 24; k++) {
     const a = k / 24 * Math.PI * 2, r0 = (k & 1) ? 1.1 : 2.1;
@@ -190,11 +193,11 @@ function paintDesertBase(fx, fs, env) {
   // wet sand round the pools, grass tufts
   for (const w of env.waterPools || []) {
     const wg = fx.createRadialGradient(X(w.x), Y(w.y), w.r * 0.8 * px, X(w.x), Y(w.y), (w.r + 1.4) * px);
-    wg.addColorStop(0, 'rgba(110,80,45,0.75)'); wg.addColorStop(1, 'rgba(110,80,45,0)');
+    wg.addColorStop(0, 'rgba(24,18,10,0.8)'); wg.addColorStop(1, 'rgba(24,18,10,0)');
     fx.fillStyle = wg; fx.beginPath(); fx.arc(X(w.x), Y(w.y), (w.r + 1.4) * px, 0, 6.283); fx.fill();
     for (let k = 0; k < 60; k++) {
       const a = r() * 6.283, d = w.r + 0.2 + r() * 1.2;
-      fx.fillStyle = `rgba(${90 + r() * 30},${120 + r() * 30},55,${0.4 + r() * 0.3})`;
+      fx.fillStyle = `rgba(${40 + r() * 24},${62 + r() * 28},38,${0.4 + r() * 0.3})`;
       fx.beginPath(); fx.arc(X(w.x + d * Math.cos(a)), Y(w.y + d * Math.sin(a)), (0.08 + r() * 0.14) * px, 0, 6.283); fx.fill();
     }
   }
@@ -202,16 +205,28 @@ function paintDesertBase(fx, fs, env) {
   for (const p of env.props || []) {
     const sz = p.kind === 'pyramid' ? p.base * 0.75 : p.kind === 'palm' ? 0.9 : p.kind === 'arch' ? p.w * 0.6 : (p.r || p.h * 0.4 || 0.5) * 1.3;
     const sg = fx.createRadialGradient(X(p.x), Y(p.y), 0, X(p.x), Y(p.y), sz * px);
-    sg.addColorStop(0, 'rgba(70,45,20,0.28)'); sg.addColorStop(1, 'rgba(70,45,20,0)');
+    sg.addColorStop(0, 'rgba(8,6,4,0.4)'); sg.addColorStop(1, 'rgba(8,6,4,0)');
     fx.fillStyle = sg; fx.beginPath(); fx.arc(X(p.x), Y(p.y), sz * px, 0, 6.283); fx.fill();
   }
   // wall footing shade
   const edge = 1.2 * px;
   for (const [x0, y0, x1, y1] of [[0, 0, 0, edge], [0, fs, 0, fs - edge], [0, 0, edge, 0], [fs, 0, fs - edge, 0]]) {
     const lg = fx.createLinearGradient(x0, y0, x1, y1);
-    lg.addColorStop(0, 'rgba(70,45,20,0.35)'); lg.addColorStop(1, 'rgba(70,45,20,0)');
+    lg.addColorStop(0, 'rgba(6,5,3,0.5)'); lg.addColorStop(1, 'rgba(6,5,3,0)');
     fx.fillStyle = lg; fx.fillRect(0, 0, fs, fs);
   }
+  // warm pools of lamp light: the painted half of the night lighting, so every lamp reads
+  // as lit even where no real point light reaches
+  fx.globalCompositeOperation = 'lighter';
+  for (const l of env.lamps || []) {
+    const rad = (l.light ? 5.2 : 3.4) * px;
+    const lg = fx.createRadialGradient(X(l.x), Y(l.y), 0, X(l.x), Y(l.y), rad);
+    lg.addColorStop(0, 'rgba(255,164,72,0.62)');
+    lg.addColorStop(0.35, 'rgba(226,126,48,0.3)');
+    lg.addColorStop(1, 'rgba(180,90,30,0)');
+    fx.fillStyle = lg; fx.beginPath(); fx.arc(X(l.x), Y(l.y), rad, 0, 6.283); fx.fill();
+  }
+  fx.globalCompositeOperation = 'source-over';
 }
 
 // ---------------- placement ----------------
@@ -232,20 +247,6 @@ function propZ(p, env) {
   const g = groundAt([p.x, p.y], env);
   const sink = p.kind.startsWith('rock') || p.kind === 'pebble' ? 0.12 * p.h : p.kind === 'reed' ? 0 : 0.02;
   return g - sink;
-}
-
-function dune(u) {
-  const theta = Math.acos(Math.max(-1, Math.min(1, -u.zc / u.Rs)));
-  const g = new THREE.SphereGeometry(u.Rs, 72, 18, 0, Math.PI * 2, 0, theta);
-  g.rotateX(Math.PI / 2);
-  g.translate(u.x, u.y, u.zc);
-  return g;
-}
-function worldUV(g, H) {
-  const p = g.attributes.position, uv = new Float32Array(p.count * 2);
-  for (let i = 0; i < p.count; i++) { uv[i * 2] = (p.getX(i) + H) / (2 * H); uv[i * 2 + 1] = (p.getY(i) + H) / (2 * H); }
-  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  return g;
 }
 
 function trailRibbon(a, env, len = SPAWN_D - 1, width = 2.4) {
@@ -305,15 +306,9 @@ export function buildDesertScene(envGroup, env, ctx) {
   floor.receiveShadow = true; root.add(floor);
   const floorPaint = { fx, fs, ft, paintBase: () => fx.drawImage(base, 0, 0) };
 
-  // --- dunes share the floor texture through world-space UVs ---
-  for (const u of env.dunes || []) {
-    const m = new THREE.Mesh(worldUV(dune(u), H), sandMat);
-    m.receiveShadow = true; m.castShadow = true; m.userData.shareMat = true; root.add(m);
-  }
-
   // --- sandstone walls, coping and corner towers (inner face exactly at +-H) ---
   const stone = sandstoneTexture(); stone.anisotropy = aniso; own.push(stone);
-  const wallH = env.arena.wallHeight, T = 0.8, L = 2 * H + 2 * T;
+  const wallH = env.arena.wallHeight, T = 0.6, L = 2 * H + 2 * T;
   const wallMat = new THREE.MeshStandardMaterial({ map: stone, roughness: 0.9 });
   const copeMat = new THREE.MeshStandardMaterial({ color: '#e0c08e', roughness: 0.85 });
   for (const [x, y, rz] of [[H + T / 2, 0, Math.PI / 2], [-(H + T / 2), 0, Math.PI / 2], [0, H + T / 2, 0], [0, -(H + T / 2), 0]]) {
@@ -322,16 +317,17 @@ export function buildDesertScene(envGroup, env, ctx) {
     const w = new THREE.Mesh(g, wallMat); w.position.set(x, y, wallH / 2); w.rotation.z = rz; w.castShadow = w.receiveShadow = true; w.userData.shareMat = true; root.add(w);
     const c = new THREE.Mesh(new THREE.BoxGeometry(L + 0.2, T + 0.3, 0.25), copeMat); c.position.set(x, y, wallH + 0.12); c.rotation.z = rz; c.castShadow = c.receiveShadow = true; c.userData.shareMat = true; root.add(c);
     for (let k = -6; k <= 6; k++) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, T + 0.3, 0.4), copeMat); m.userData.shareMat = true;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.7, T + 0.24, 0.32), copeMat); m.userData.shareMat = true;
       const along = k * (2 * H / 13);
-      m.position.set(rz ? x : along, rz ? along : y, wallH + 0.45); m.rotation.z = rz; m.castShadow = true; root.add(m);
+      m.position.set(rz ? x : along, rz ? along : y, wallH + 0.38); m.rotation.z = rz; m.castShadow = true; root.add(m);
     }
   }
   const towerMat = new THREE.MeshStandardMaterial({ color: '#c89b62', roughness: 0.9 });
+  const towerH = wallH + 1.2;
   for (const [sx, sy] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
     const cx = sx * (H + T / 2), cy = sy * (H + T / 2);
-    const t = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.4, wallH + 1.6), towerMat); t.position.set(cx, cy, (wallH + 1.6) / 2); t.castShadow = t.receiveShadow = true; t.userData.shareMat = true; root.add(t);
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(1.9, 1.4, 4), copeMat); cap.rotation.x = Math.PI / 2; cap.rotation.y = Math.PI / 4; cap.position.set(cx, cy, wallH + 1.6 + 0.7); cap.castShadow = true; cap.userData.shareMat = true; root.add(cap);
+    const t = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, towerH), towerMat); t.position.set(cx, cy, towerH / 2); t.castShadow = t.receiveShadow = true; t.userData.shareMat = true; root.add(t);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(1.45, 1.1, 4), copeMat); cap.rotation.x = Math.PI / 2; cap.rotation.y = Math.PI / 4; cap.position.set(cx, cy, towerH + 0.55); cap.castShadow = true; cap.userData.shareMat = true; root.add(cap);
   }
   own.push(wallMat, copeMat, towerMat);
 
@@ -383,6 +379,39 @@ export function buildDesertScene(envGroup, env, ctx) {
     }
   }
 
+  // --- warm lamps: stone post, iron bowl, unlit flame + glow sprite; a few carry a real light ---
+  const lampStoneMat = new THREE.MeshStandardMaterial({ color: '#6b5335', roughness: 0.92 });
+  const lampIronMat = new THREE.MeshStandardMaterial({ color: '#2b2118', roughness: 0.7, metalness: 0.4 });
+  // the ember is additive over the flame, so the flame itself stays orange or the core blows to white
+  const flameMat = new THREE.MeshBasicMaterial({ color: '#ffa63c', toneMapped: false });
+  const emberMat = new THREE.MeshBasicMaterial({ color: '#e0620f', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  const haloTex = radialTexture([[0, 'rgba(255,152,70,0.6)'], [0.3, 'rgba(255,120,44,0.3)'], [1, 'rgba(255,100,28,0)']]);
+  const haloMat = new THREE.SpriteMaterial({ map: haloTex, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  const postGeo = new THREE.CylinderGeometry(0.1, 0.15, 1, 8); postGeo.rotateX(Math.PI / 2);
+  const bowlGeo = new THREE.CylinderGeometry(0.3, 0.16, 0.22, 10); bowlGeo.rotateX(Math.PI / 2);
+  const flameGeo = new THREE.ConeGeometry(0.19, 0.42, 7); flameGeo.rotateX(-Math.PI / 2);
+  const emberGeo = new THREE.SphereGeometry(0.26, 10, 8);
+  own.push(haloTex, lampStoneMat, lampIronMat, flameMat, emberMat, haloMat, postGeo, bowlGeo, flameGeo, emberGeo);
+  const lampFx = [];
+  for (const l of env.lamps || []) {
+    const z0 = groundAt([l.x, l.y], env), fz = z0 + l.h + 0.3;
+    const add = (geo, mat, z, cast) => {
+      const m = keep(new THREE.Mesh(geo, mat));   // geometry and material are shared, disposed via `own`
+      m.position.set(l.x, l.y, z); m.castShadow = !!cast; root.add(m);
+      return m;
+    };
+    const post = add(postGeo, lampStoneMat, z0 + l.h / 2, true); post.scale.z = l.h;
+    add(bowlGeo, lampIronMat, z0 + l.h + 0.08, true);
+    const flame = add(flameGeo, flameMat, fz); flame.renderOrder = 3;
+    const ember = add(emberGeo, emberMat, fz - 0.06); ember.renderOrder = 3;
+    const halo = new THREE.Sprite(haloMat.clone());   // per-lamp so each flickers on its own
+    own.push(halo.material);
+    halo.position.set(l.x, l.y, fz + 0.05); halo.scale.setScalar(l.light ? 2.4 : 1.6); halo.renderOrder = 3; root.add(halo);
+    const light = l.light ? new THREE.PointLight(LAMP_WARM, 0, 18, 2) : null;
+    if (light) { light.position.set(l.x, l.y, fz + 0.1); root.add(light); }
+    lampFx.push({ flame, ember, halo, light, phase: (l.x * 0.7 + l.y * 1.3) % 6.283, peak: 13 });
+  }
+
   // --- tumbleweeds roll along the wall bands (render only, clear of every structure) ---
   const tumble = [];
   for (const tm of mapPropMeshes('tumbleweed')) {
@@ -397,7 +426,7 @@ export function buildDesertScene(envGroup, env, ctx) {
   for (let i = 0; i < DUST; i++) { dustPos[i * 3] = (dr() * 2 - 1) * H; dustPos[i * 3 + 1] = (dr() * 2 - 1) * H; dustPos[i * 3 + 2] = 0.05 + dr() * dr() * 2.5; dustSeed[i] = dr(); }
   const dustGeo = new THREE.BufferGeometry(); dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3).setUsage(THREE.DynamicDrawUsage));
   const dustTex = radialTexture([[0, 'rgba(255,236,200,1)'], [1, 'rgba(255,236,200,0)']]); own.push(dustTex);
-  const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ map: dustTex, size: 0.09, sizeAttenuation: true, transparent: true, opacity: 0.5, depthWrite: false, color: '#f1d8a8' }));
+  const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ map: dustTex, size: 0.09, sizeAttenuation: true, transparent: true, opacity: 0.5, depthWrite: false, color: '#9a8560' }));
   dust.frustumCulled = false; dust.renderOrder = 3; root.add(dust);
 
   // --- hawk shadow ---
@@ -405,30 +434,49 @@ export function buildDesertScene(envGroup, env, ctx) {
   const hawk = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ map: hawkTex, transparent: true, opacity: 0.32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   hawk.visible = false; hawk.renderOrder = 2; root.add(hawk);
 
-  // --- sky dome only: no sand or dunes outside the 80 cm walls ---
-  const sky = new THREE.SphereGeometry(290, 32, 16); sky.rotateX(Math.PI / 2);
-  const skyCol = new Float32Array(sky.attributes.position.count * 3), top = new THREE.Color('#5d9ad8'), mid = new THREE.Color('#cfe2f2'), hor = new THREE.Color('#f4dcb4'), cc = new THREE.Color();
+  // --- night sky dome, stars and a low moon: no sand outside the 50 cm walls ---
+  const SKY_R = 180;
+  const sky = new THREE.SphereGeometry(SKY_R, 32, 16); sky.rotateX(Math.PI / 2);
+  const skyCol = new Float32Array(sky.attributes.position.count * 3), top = new THREE.Color('#05070f'), mid = new THREE.Color('#0d1730'), hor = new THREE.Color('#2e2237'), cc = new THREE.Color();
   for (let i = 0; i < sky.attributes.position.count; i++) {
-    const z = Math.max(0, sky.attributes.position.getZ(i) / 290);
+    const z = Math.max(0, sky.attributes.position.getZ(i) / SKY_R);
     if (z < 0.12) cc.copy(hor).lerp(mid, z / 0.12); else cc.copy(mid).lerp(top, Math.pow((z - 0.12) / 0.88, 0.6)); skyCol[i * 3] = cc.r; skyCol[i * 3 + 1] = cc.g; skyCol[i * 3 + 2] = cc.b;
   }
   sky.setAttribute('color', new THREE.BufferAttribute(skyCol, 3));
   const skyMesh = new THREE.Mesh(sky, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, depthWrite: false, fog: false }));
   skyMesh.renderOrder = -1; skyRoot.add(skyMesh);
 
-  // --- lighting: warm high sun, blue sky fill, haze ---
+  const STARS = 900, sr = rng(4242), starPos = new Float32Array(STARS * 3), starCol = new Float32Array(STARS * 3);
+  for (let i = 0; i < STARS; i++) {
+    const a = sr() * 6.283, el = Math.pow(sr(), 0.65) * 1.45, R = SKY_R * 0.94;
+    starPos[i * 3] = R * Math.cos(el) * Math.cos(a); starPos[i * 3 + 1] = R * Math.cos(el) * Math.sin(a); starPos[i * 3 + 2] = R * Math.sin(el) + 4;
+    const b = 0.45 + sr() * 0.55, warm = sr() < 0.25;
+    starCol[i * 3] = b; starCol[i * 3 + 1] = b * (warm ? 0.9 : 0.97); starCol[i * 3 + 2] = b * (warm ? 0.76 : 1);
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  starGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
+  const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ size: 1.5, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, fog: false, toneMapped: false }));
+  stars.renderOrder = -1; skyRoot.add(stars);
+
+  const moonTex = radialTexture([[0, 'rgba(255,255,248,1)'], [0.44, 'rgba(236,240,255,0.95)'], [0.5, 'rgba(150,180,235,0.35)'], [1, 'rgba(110,150,220,0)']]);
+  const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  moon.position.set(-SKY_R * 0.62, SKY_R * 0.55, SKY_R * 0.4); moon.scale.setScalar(34); moon.renderOrder = -1; skyRoot.add(moon);
+  own.push(starGeo, stars.material, moonTex, moon.material);
+
+  // --- lighting: dim moonlight from the sky, warmth from the lamps ---
   const saved = {
     bg: scene.background, fog: scene.fog, envI: scene.environmentIntensity,
     hemi: hemi && { sky: hemi.color.clone(), ground: hemi.groundColor.clone(), i: hemi.intensity },
     sun: sun && { c: sun.color.clone(), i: sun.intensity },
     rim: rim && { c: rim.color.clone(), i: rim.intensity },
   };
-  scene.background = new THREE.Color('#f0d6ae');
-  scene.fog = new THREE.Fog('#efd5ab', 110, 285);
-  scene.environmentIntensity = 0.32;
-  if (hemi) { hemi.color.set('#cfe3ff'); hemi.groundColor.set('#b98a52'); hemi.intensity = 0.55; }
-  if (sun) { sun.color.set('#fff0d6'); sun.intensity = 3.1; }
-  if (rim) { rim.color.set('#ffd9a8'); rim.intensity = 0.45; }
+  scene.background = new THREE.Color('#070a14');
+  scene.fog = new THREE.Fog('#0b1020', 46, 150);
+  scene.environmentIntensity = 0.05;
+  if (hemi) { hemi.color.set('#3f5f92'); hemi.groundColor.set('#231a11'); hemi.intensity = 0.3; }
+  if (sun) { sun.color.set('#a6bdea'); sun.intensity = 0.55; }
+  if (rim) { rim.color.set('#ff9c46'); rim.intensity = 0.35; }
 
   let lastT = null;
   function update(nowMs, wind, tSec) {
@@ -444,14 +492,23 @@ export function buildDesertScene(envGroup, env, ctx) {
       const u = (t / 3.2 + rp.phase) % 1, s = 0.2 + u * rp.r * 0.9;
       rp.ring.scale.set(s, s, 1); rp.rm.opacity = 0.22 * (1 - u) * Math.min(1, u * 6);
     }
+    // lamp flicker: one wobble drives the flame, the ember, the halo and the point light together
+    for (const lf of lampFx) {
+      const f = 0.82 + 0.18 * Math.sin(ts * 9.3 + lf.phase) + 0.1 * Math.sin(ts * 21.7 + lf.phase * 2.3);
+      lf.flame.scale.set(0.92 + 0.12 * f, 0.92 + 0.12 * f, 0.82 + 0.3 * f);
+      lf.flame.rotation.z = 0.12 * Math.sin(ts * 3.1 + lf.phase) + wind.dirX * wind.strength * 0.25;
+      lf.ember.scale.setScalar(0.85 + 0.2 * f);
+      lf.halo.material.opacity = 0.55 + 0.2 * f;
+      if (lf.light) lf.light.intensity = lf.peak * (0.78 + 0.22 * f);
+    }
     // tumbleweeds: move with the wind component along their band, wrap with a fade
     for (const tw of tumble) {
       const horiz = tw.band < 2, along = horiz ? wind.dirX : wind.dirY;
       const v = (0.12 + wind.strength * 0.35) * (along >= 0 ? 1 : -1);
-      const span = 64;
+      const span = 2 * H + 14;
       tw.dist = (tw.dist ?? tw.phase * span) + v * dt;
       const u = ((tw.dist / span) % 1 + 1) % 1, s = (u - 0.5) * span;
-      const side = (tw.band & 1) ? 1 : -1, off = side * (H - 2.6);
+      const side = (tw.band & 1) ? 1 : -1, off = side * (H - 1.7);
       const x = horiz ? s : off, y = horiz ? off : s, r = 0.38;
       const hop = Math.abs(Math.sin(ts * 1.2 + tw.phase * 9)) * 0.08 * Math.min(1, wind.strength);
       tw.m.position.set(x, y, groundAt([x, y], env) + r + hop);
