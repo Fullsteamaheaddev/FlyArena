@@ -2,6 +2,7 @@ import {
   makeThumb, makeHand, makeFinger, fadeGroup, fadeMeteorChunk, prepareMeshFade, makeCakeSlice, makeLeaf,
 } from './race-chaos-props.js';
 import { cloneChaosProp, getChaosSmokeTexture } from './race-chaos-assets.js';
+import { celMat } from './cel-shade.js';
 import { createUfoBeam, tickUfoBeam, setUfoBeamOpacity } from './race-chaos-ufo-beam.js';
 import { setUfoSaucerFade } from './ufo-rim-glow.js';
 import {
@@ -116,6 +117,14 @@ export function createRaceChaos(api) {
   let spikesSession = null;
 
   function radius() { return api.env()?.arena?.radius || 12.5; }
+  // scorch decals read larger on the big square map; kill radii stay fly-sized
+  function scorchScale() { return api.env()?.arena?.shape === 'square' ? 1.5 : 1; }
+  /** keep the rim rise of a tilt the same as on the 12.5 cm dish, whatever the arena size */
+  function tiltDeg(deg) {
+    const R = api.env()?.arena?.radius || 12.5;
+    if (R <= 12.5) return deg;
+    return Math.asin(Math.min(1, 12.5 * Math.sin(deg * Math.PI / 180) / R)) * 180 / Math.PI;
+  }
   function flies() { return api.flies() || []; }
   function now() { return performance.now(); }
   function fxGroup() {
@@ -517,7 +526,7 @@ export function createRaceChaos(api) {
       }
     }
     if (killed) hideToast();
-    scorches.push({ x: sx, y: sy, r: opts.r || (opts.hit ? 0.7 : 0.55), until: now() + 16000 });
+    scorches.push({ x: sx, y: sy, r: (opts.r || (opts.hit ? 0.7 : 0.55)) * scorchScale(), until: now() + 16000 });
     api.repaintFloor?.();
     flashBolt(sx, sy, opts);
     camShake(200, opts.thin ? 0.12 : opts.hit ? 0.28 : 0.2);
@@ -706,7 +715,7 @@ export function createRaceChaos(api) {
     const root = fxGroup();
     for (let i = 0; i < n; i++) {
       const a = randRange(0, Math.PI * 2);
-      const mat = new T.MeshStandardMaterial({ color: '#d6ff7a', emissive: '#b6ff4a', emissiveIntensity: 1.4, roughness: 0.3, transparent: true });
+      const mat = celMat('#d6ff7a', 1.4);
       const s = new T.Mesh(new T.SphereGeometry(0.09, 12, 10), mat);
       const light = new T.PointLight('#c8ff6a', 1.6, 2.4);
       s.add(light);
@@ -843,10 +852,9 @@ export function createRaceChaos(api) {
     const root = fxGroup();
     for (let i = 0; i < 16; i++) {
       const [x, y] = randomInDish(2);
-      const s = new T.Mesh(
-        new T.SphereGeometry(randRange(0.05, 0.12), 8, 8),
-        new T.MeshStandardMaterial({ color: '#c4b8a0', transparent: true, opacity: 0.45, roughness: 1 }),
-      );
+      const mat = celMat('#c4b8a0', 0);
+      mat.opacity = 0.45;
+      const s = new T.Mesh(new T.SphereGeometry(randRange(0.05, 0.12), 8, 8), mat);
       s.position.set(x, y, randRange(0.08, 0.35));
       root.add(s);
       bits.push(s);
@@ -952,7 +960,7 @@ export function createRaceChaos(api) {
       sealMeteorSmokeBatch(smokeBatch, landT);
       camShake(200, opts.kill ? 0.26 : 0.18);
       pokeSceneFlash({ thin: !opts.kill });
-      scorches.push({ x, y, r: opts.kill ? 0.65 : 0.45, until: now() + 15000 });
+      scorches.push({ x, y, r: (opts.kill ? 0.65 : 0.45) * scorchScale(), until: now() + 15000 });
       api.repaintFloor?.();
       if (physics) {
         const killR = opts.kill ? 0.92 : 0;
@@ -1511,7 +1519,7 @@ export function createRaceChaos(api) {
       color,
       x, y,
       yaw: Math.random() * Math.PI * 2,
-      deg: randRange(28, 40),
+      deg: tiltDeg(randRange(28, 40)),
       points: extra,
       hitBolt,
       killed: hitBolt != null,

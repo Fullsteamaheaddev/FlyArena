@@ -115,6 +115,8 @@ export class Senses {
       const f = onPatch(st.labellum, env.food), b = onPatch(st.labellum, env.bitterPatches);
       if (f && f.amount > 0) { st.sugar = Math.max(st.sugar, f.sugar); this.set(this.taste.labellum.sugar, 180 * H(f.sugar * st.sugarGain, 0.2)); this.set(this.taste.labellum.water, 120 * H(f.water, 0.2)); if (st.proboscisOut) this.set(this.taste.peg.sugar, 150 * H(f.sugar, 0.2)); }
       if (b) this.set(this.taste.labellum.bitter, 180 * H(b.bitter * st.bitterGain, 0.2));
+      const w = poolAt(st.labellum, env);
+      if (w) this.set(this.taste.labellum.water, 120 * H(w.water ?? 1, 0.2));
     }
     for (const leg of ['T1', 'T2', 'T3']) for (const sd of ['left', 'right']) {
       const key = `${leg}_${sd}`, touch = st.touch[key];
@@ -226,10 +228,38 @@ export function onObstacleTop(p, env, inset = 0.04) {
     obstacleDist(p, o) < -inset && p[2] > o.sz - 0.05 && p[2] < o.sz + 0.28);
 }
 
+/** distance (cm) from p to the arena wall and the outward wall normal; circle or square arena. */
+export function wallGap(p, env) {
+  const a = env.arena, x = p[0], y = p[1];
+  if (a.shape === 'square') {
+    return Math.abs(x) >= Math.abs(y)
+      ? { gap: a.half - Math.abs(x), nx: Math.sign(x) || 1, ny: 0 }
+      : { gap: a.half - Math.abs(y), nx: 0, ny: Math.sign(y) || 1 };
+  }
+  const r = Math.hypot(x, y) || 1e-6;
+  return { gap: a.radius - r, nx: x / r, ny: y / r };
+}
+
+/** height (cm) of the walkable ground under p: 0 on the floor, the sphere-cap surface on a dune. */
+export function groundAt(p, env) {
+  let z = 0;
+  for (const u of env.dunes || []) {
+    const dx = p[0] - u.x, dy = p[1] - u.y, d2 = dx * dx + dy * dy;
+    if (d2 < u.r * u.r) z = Math.max(z, u.zc + Math.sqrt(u.Rs * u.Rs - d2));
+  }
+  return z;
+}
+
+/** the water pool under p, if any */
+export function poolAt(p, env) {
+  for (const w of env.waterPools || []) if (Math.hypot(p[0] - w.x, p[1] - w.y) < w.r) return w;
+  return null;
+}
+
 /** horizontal clearance (cm) from point p to the nearest wall, obstacle or other fly; negative = inside.
  *  With a height z, obstacles and flies that are not at that height are ignored. */
 export function clearance(p, env, others = [], z = null) {
-  const [x, y] = p; let d = env.arena.radius - Math.hypot(x, y);
+  const [x, y] = p; let d = wallGap(p, env).gap;
   for (const o of env.obstacles) {
     if (z !== null && z > o.sz + 0.05) continue;
     d = Math.min(d, obstacleDist([x, y], o));

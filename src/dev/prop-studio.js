@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { applyCelShading } from '../cel-shade.js';
 import { applyUfoRimGlow, ensureUfoHullOpaque } from '../ufo-rim-glow.js';
 
 const mount = document.getElementById('view');
@@ -17,11 +18,14 @@ scene.background = new THREE.Color('#eceef2');
 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 80);
 camera.up.set(0, 0, 1);
-camera.position.set(0, -4.5, 0.1);
+camera.position.set(2.8, -2.6, 1.4);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.target.set(0, 0, 0.1);
+controls.target.set(0, 0, 0.12);
+
+const fitCenter = new THREE.Vector3();
+let fitRadius = 1.2;
 
 const ambient = new THREE.AmbientLight(0xf0f2f8, 0.48);
 scene.add(ambient);
@@ -78,6 +82,7 @@ function collectMeshes(root) {
   root.traverse(o => {
     if (!o.isMesh) return;
     if (o.parent?.name === 'RimGlowHalos') return;
+    if (o.name === 'UfoCelOutline' || o.name === 'CelOutline') return;
     let label = meshPathLabel(o, root);
     const n = tally.get(label) || 0;
     tally.set(label, n + 1);
@@ -126,12 +131,41 @@ function disposeProp(root) {
   clearMeshHighlight();
   root.traverse(o => {
     if (!o.isMesh) return;
-    if (o.parent?.name === 'RimGlowHalos') return;
-    o.geometry?.dispose?.();
-    const m = o.material;
-    if (Array.isArray(m)) m.forEach(x => x.dispose?.());
-    else m?.dispose?.();
+    if (o.name !== 'CelOutline' && o.name !== 'UfoCelOutline') return;
+    if (Array.isArray(o.material)) o.material.forEach(m => m?.dispose?.());
+    else o.material?.dispose?.();
   });
+}
+
+function frameProp(root) {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  if (box.isEmpty()) return;
+  box.getCenter(fitCenter);
+  const size = box.getSize(new THREE.Vector3());
+  fitRadius = Math.max(size.x, size.y, size.z, 0.08) * 0.5;
+  viewThreeQ();
+}
+
+function viewSide() {
+  const d = Math.max(fitRadius * 3.2, 0.4);
+  camera.position.set(fitCenter.x, fitCenter.y - d, fitCenter.z);
+  controls.target.copy(fitCenter);
+}
+function viewLow() {
+  const d = Math.max(fitRadius * 3.4, 0.4);
+  camera.position.set(fitCenter.x + d * 0.45, fitCenter.y + d * 0.35, fitCenter.z - d * 0.72);
+  controls.target.copy(fitCenter);
+}
+function viewThreeQ() {
+  const d = Math.max(fitRadius * 3.6, 0.4);
+  camera.position.set(fitCenter.x + d * 0.85, fitCenter.y - d * 0.78, fitCenter.z + d * 0.42);
+  controls.target.copy(fitCenter);
+}
+function viewTop() {
+  const d = Math.max(fitRadius * 4.2, 0.5);
+  camera.position.set(fitCenter.x, fitCenter.y, fitCenter.z + d);
+  controls.target.copy(fitCenter);
 }
 
 async function loadProp(name) {
@@ -140,14 +174,17 @@ async function loadProp(name) {
     disposeProp(propRoot);
     propRoot = null;
   }
-  const gltf = await loader.loadAsync(`/chaos/${name}.glb`);
+  const gltf = await loader.loadAsync(`/chaos/${name}.glb?t=${Date.now()}`);
   propRoot = gltf.scene;
-  ambient.intensity = name === 'ufo' ? 0.22 : 0.48;
+  ambient.intensity = 0.48;
   if (name === 'ufo') {
     applyUfoRimGlow(propRoot, { sceneLights: false });
     ensureUfoHullOpaque(propRoot);
+  } else {
+    applyCelShading(propRoot);
   }
   scene.add(propRoot);
+  frameProp(propRoot);
   refreshMeshMenu();
 }
 
@@ -159,24 +196,13 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
+new ResizeObserver(resize).observe(mount);
 resize();
 
-document.getElementById('side').onclick = () => {
-  camera.position.set(0, -3.2, 0.04);
-  controls.target.set(0, 0, 0.04);
-};
-document.getElementById('low').onclick = () => {
-  camera.position.set(1.35, 1.05, -2.15);
-  controls.target.set(0, 0, -0.07);
-};
-document.getElementById('threeQ').onclick = () => {
-  camera.position.set(2.8, -2.6, 1.4);
-  controls.target.set(0, 0, 0.12);
-};
-document.getElementById('top').onclick = () => {
-  camera.position.set(0, 0, 4.5);
-  controls.target.set(0, 0, 0);
-};
+document.getElementById('side').onclick = viewSide;
+document.getElementById('low').onclick = viewLow;
+document.getElementById('threeQ').onclick = viewThreeQ;
+document.getElementById('top').onclick = viewTop;
 document.getElementById('reload').onclick = () => loadProp(document.getElementById('prop').value);
 document.getElementById('prop').onchange = () => loadProp(document.getElementById('prop').value);
 document.getElementById('spin').oninput = e => {

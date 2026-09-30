@@ -2,33 +2,15 @@
 // patch that follows the tube surface and knuckle creases.
 // Thumb/finger local axes: contact at origin, shaft toward +Z, nail (dorsal) +X.
 // Hand local axes: palm in XY, fingers toward +Y, back of hand -Z.
-let rampTex = null;
-
-function toonRamp(T) {
-  if (rampTex) return rampTex;
-  const c = document.createElement('canvas');
-  c.width = 4; c.height = 1;
-  const x = c.getContext('2d'), img = x.createImageData(4, 1);
-  const g = [48, 118, 190, 255];
-  for (let i = 0; i < 4; i++) {
-    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = g[i];
-    img.data[i * 4 + 3] = 255;
-  }
-  x.putImageData(img, 0, 0);
-  rampTex = new T.CanvasTexture(c);
-  rampTex.minFilter = T.NearestFilter;
-  rampTex.magFilter = T.NearestFilter;
-  rampTex.colorSpace = T.NoColorSpace;
-  return rampTex;
-}
+import { celRamp } from './cel-shade.js';
 
 function toonMat(T, color, glow = 0.16) {
-  return new T.MeshToonMaterial({ color, gradientMap: toonRamp(T), transparent: true, opacity: 1, emissive: color, emissiveIntensity: glow });
+  return new T.MeshToonMaterial({ color, gradientMap: celRamp(), transparent: true, opacity: 1, emissive: color, emissiveIntensity: glow });
 }
 
 function cakeToonMat(T, color, glow = 0.16) {
   const m = new T.MeshToonMaterial({
-    color, gradientMap: toonRamp(T), emissive: color, emissiveIntensity: glow,
+    color, gradientMap: celRamp(), emissive: color, emissiveIntensity: glow,
     transparent: true, opacity: 1, depthWrite: true,
   });
   m.polygonOffset = true;

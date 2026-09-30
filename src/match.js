@@ -104,10 +104,11 @@ export function unpackEyes(packed) {
   });
 }
 
-export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, wingPoses, resetIn, why, selected, eyes, groups, visions, act, betClosesAt, pools, tickerUrl, chaosCue }) {
+export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, wingPoses, resetIn, why, selected, eyes, groups, visions, act, betClosesAt, pools, tickerUrl, chaosCue, map }) {
   return {
     type: 'state',
     matchId,
+    map: map || 'dish',
     flyIds: flies.map(f => f.id),
     phase,
     clock,

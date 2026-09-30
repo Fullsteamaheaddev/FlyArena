@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyCelShading } from './cel-shade.js';
 
 const RIM_CORE = 0xa8f4ff;
 const RIM_HALO = 0x40d8ff;
@@ -156,6 +157,10 @@ export function applyUfoRimGlow(root, { sceneLights = false } = {}) {
   });
 
   if (halos.children.length) root.add(halos);
+  applyCelShading(root, {
+    skip: o => isRimLampMesh(o) || o.parent?.name === 'RimGlowHalos',
+    outlineName: 'UfoCelOutline',
+  });
   ensureUfoHullOpaque(root);
 
   if (sceneLights && lampPts.length) {

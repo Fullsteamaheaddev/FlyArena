@@ -1,6 +1,8 @@
 // Builds the MuJoCo world for one fly: the flybody fly (mesh-free physics), a walled arena with
 // obstacles and food discs, and kinematic (mocap) proxies standing in for the other flies.
 // Units follow flybody: cm, g, s. The floor is z = 0; a standing fly's thorax sits at z ~ 0.13.
+import { desertEnv, desertSpots } from './maps/desert.js';
+
 export const DEFAULT_ENV = {
   arena: { radius: 2.5, wallHeight: 1.2, segments: 48, wallFriction: 1 },    // head/body grip walls; legs slide along them (see buildWorldXML); tall enough to fly in
   food: [
@@ -56,23 +58,50 @@ export const PRESETS = {
       ],
       // Open plate: no maze walls. Outer circular arena wall is in buildWorldXML.
       obstacles: [],
+      map: 'dish',
     }),
   },
 };
+
+// Sugar Run maps. `dish` is the original plate; `desert` is the 80 cm square (src/sim/maps/desert.js).
+export const RACE_MAPS = {
+  dish: { label: 'Dish', flySpots: PRESETS.race.flySpots, env: PRESETS.race.env },
+  desert: { label: 'Desert', flySpots: desertSpots(), env: () => desertEnv(DEFAULT_ENV) },
+};
+export const RACE_MAP_IDS = Object.keys(RACE_MAPS);
+export function raceMap(id) { return RACE_MAPS[id] || RACE_MAPS.dish; }
+
+function squareArenaParts(a, parts) {
+  const H = a.half, t = 0.05, fz = (a.wallHeight / 2).toFixed(4);
+  parts.push(`<geom name="floor" type="box" size="${(H + 0.1).toFixed(4)} ${(H + 0.1).toFixed(4)} 0.25" pos="0 0 -0.25" rgba=".82 .7 .5 1" friction="1.4" solref="0.002 1" condim="3" group="0"/>`);
+  const walls = [[H + t, 0, 0], [0, H + t, Math.PI / 2], [-(H + t), 0, 0], [0, -(H + t), Math.PI / 2]];
+  const clipH = a.clipHeight ?? a.wallHeight, extra = clipH - a.wallHeight;
+  walls.forEach(([x, y, th], k) => {
+    parts.push(`<geom name="wall${k}" type="box" size="${t} ${(H + 2 * t).toFixed(4)} ${fz}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${fz}" euler="0 0 ${th.toFixed(4)}" rgba=".72 .56 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+    if (extra > 0.01) parts.push(`<geom name="wallclip${k}" type="box" size="${t} ${(H + 2 * t).toFixed(4)} ${(extra / 2).toFixed(4)}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${(a.wallHeight + extra / 2).toFixed(4)}" euler="0 0 ${th.toFixed(4)}" rgba="0 0 0 0" group="3" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+  });
+}
+
 export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, nProxies = 0 } = {}) {
   const a = env.arena, parts = [];
   // Floor + walls on a mocap body so Sugar Run can tilt / punch / rattle the real collision dish.
   parts.push('<body name="arena" mocap="true">');
-  parts.push(`<geom name="floor" type="cylinder" size="${(a.radius + 0.1).toFixed(4)} 0.25" pos="0 0 -0.25" rgba=".55 .5 .42 1" friction="1.4" solref="0.002 1" condim="3" group="0"/>`);
+  if (a.shape === 'square') squareArenaParts(a, parts);
+  else parts.push(`<geom name="floor" type="cylinder" size="${(a.radius + 0.1).toFixed(4)} 0.25" pos="0 0 -0.25" rgba=".55 .5 .42 1" friction="1.4" solref="0.002 1" condim="3" group="0"/>`);
+  // walkable dunes: buried sphere caps that legs and claws touch like the floor
+  (env.dunes || []).forEach((u, k) => parts.push(`<geom name="dune${k}" type="sphere" size="${u.Rs.toFixed(4)}" pos="${u.x.toFixed(4)} ${u.y.toFixed(4)} ${u.zc.toFixed(4)}" rgba=".86 .72 .5 1" friction="1.4" solref="0.002 1" condim="3" group="0"/>`));
+  // palm canopies: seen by the eyes, no collision
+  (env.canopies || []).forEach((c, k) => parts.push(`<geom name="canopy${k}" type="ellipsoid" size="${c.r.toFixed(4)} ${c.r.toFixed(4)} ${(c.r * 0.4).toFixed(4)}" pos="${c.x.toFixed(4)} ${c.y.toFixed(4)} ${c.z.toFixed(4)}" rgba=".25 .45 .2 1" contype="0" conaffinity="0" group="0"/>`));
+  (env.waterPools || []).forEach((w, k) => parts.push(`<geom name="water${k}" type="cylinder" size="${w.r} 0.002" pos="${w.x} ${w.y} 0.002" rgba=".25 .55 .6 1" contype="0" conaffinity="0" group="0"/>`));
   // circular wall from box segments
-  const n = a.segments, t = 0.05;
+  const n = a.shape === 'square' ? 0 : a.segments, t = 0.05;
   for (let k = 0; k < n; k++) {
     const th = (k + 0.5) / n * 2 * Math.PI, len = 2 * Math.PI * a.radius / n * 0.55;
     const x = (a.radius + t) * Math.cos(th), y = (a.radius + t) * Math.sin(th);
     parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${a.wallHeight / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${a.wallHeight / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
   }
   const clipH = a.clipHeight ?? a.wallHeight;
-  if (clipH > a.wallHeight + 0.01) {
+  if (a.shape !== 'square' && clipH > a.wallHeight + 0.01) {
     const extra = clipH - a.wallHeight;
     const zc = a.wallHeight + extra / 2;
     for (let k = 0; k < n; k++) {

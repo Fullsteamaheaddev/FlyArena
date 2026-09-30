@@ -4,6 +4,7 @@ import {
   adminMint, readChipMeta, chipSymbol,
 } from './chain.js';
 import { fetchSiteTickerUrl, saveSiteTickerUrl } from './ticker-url.js';
+import { fetchSiteMap, saveSiteMap } from './race-map.js';
 
 const $ = s => document.querySelector(s);
 const status = s => { $('#adminStatus').textContent = s; };
@@ -59,6 +60,7 @@ async function refresh() {
     try { $('#adminTicker').value = localStorage.getItem('sugarRunTickerUrl') || ''; }
     catch { $('#adminTicker').value = ''; }
   }
+  $('#adminMap').value = await fetchSiteMap();
   const mint = $('#adminMint');
   if (mint) mint.textContent = `Mint ${meta.symbol || chipSymbol()}`;
 }
@@ -110,6 +112,15 @@ $('#adminSetTicker').onclick = async () => {
     try { localStorage.setItem('sugarRunTickerUrl', url); } catch {}
     await saveSiteTickerUrl(url);
     status(url ? 'Ticker URL saved for the whole site (host and watchers).' : 'Ticker URL cleared.');
+  } catch (e) {
+    status(e.message || String(e));
+  }
+};
+$('#adminSetMap').onclick = async () => {
+  try {
+    if (!(await authorize())) return;
+    const map = await saveSiteMap($('#adminMap').value);
+    status(`Race map set to ${map}. The host switches at the next reset.`);
   } catch (e) {
     status(e.message || String(e));
   }

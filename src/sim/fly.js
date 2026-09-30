@@ -3,7 +3,7 @@
 //   physics state -> Senses (+ CompoundEye every 10 ms) -> sensory neuron drive -> brain (2 x 0.5 ms LIF steps)
 //   -> Motor (descending commands / motor neurons) -> actuators -> physics (10 x 0.1 ms MuJoCo steps)
 import { buildWorldXML } from './world.js';
-import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt, onObstacleTop, obstacleDist } from './senses.js';
+import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt, onObstacleTop, obstacleDist, groundAt } from './senses.js';
 import { Intrinsic } from './intrinsic.js';
 import { Neuromod } from './neuromod.js';
 import { Flight } from './flight.js';
@@ -52,11 +52,11 @@ export class FlyAgent {
     this.sensorAdr = {}; for (let i = 0; i < M.nsensor; i++) this.sensorAdr[M.sensor(i).name] = M.sensor_adr[i];
     this.jointAdr = {}; for (let j = 0; j < M.njnt; j++) this.jointAdr[M.jnt(j).name] = M.jnt_qposadr[j];
     // geoms: albedo for vision; which bodies count as "self body" for bristle contact
-    this.geomKind = []; for (let g = 0; g < M.ngeom; g++) { const n = M.geom(g).name; this.geomKind.push(n === 'floor' ? 'floor' : n.startsWith('wall') ? 'wall' : n.startsWith('food') ? 'food' : n.startsWith('bitter') ? 'bitter' : n.startsWith('hazard') ? 'hazard' : n.startsWith('obst') ? 'obst' : n.startsWith('proxy') ? 'fly' : n.startsWith('threat') ? 'threat' : 'self'); }
+    this.geomKind = []; for (let g = 0; g < M.ngeom; g++) { const n = M.geom(g).name; this.geomKind.push(n === 'floor' || n.startsWith('dune') ? 'floor' : n.startsWith('wall') ? 'wall' : n.startsWith('food') ? 'food' : n.startsWith('bitter') ? 'bitter' : n.startsWith('hazard') ? 'hazard' : n.startsWith('obst') ? 'obst' : n.startsWith('proxy') ? 'fly' : n.startsWith('threat') ? 'threat' : n.startsWith('canopy') ? 'canopy' : n.startsWith('water') ? 'water' : 'self'); }
     this.floorGeom = M.geom('floor').id;
-    const fi = this.floorGeom * 3;
+    this.groundGeoms = this.geomKind.map((k, g) => k === 'floor' ? g : -1).filter(g => g >= 0);
     const fr = M.geom_friction;
-    this.floorFriction0 = [fr[fi], fr[fi + 1], fr[fi + 2]];
+    this.floorFriction0 = this.groundGeoms.map(g => [fr[g * 3], fr[g * 3 + 1], fr[g * 3 + 2]]);
     this.threatMocap = M.body_mocapid[M.body('threat').id];
     // brain
     this.brain = brain || createBrain(data, size, brainOpts, sign);   // wasm brain can be injected (shared connectome memory)
@@ -105,19 +105,19 @@ export class FlyAgent {
     for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
   }
   setSlipFriction(on) {
-    const M = this.model;
-    const i = this.floorGeom * 3;
-    const fr = M.geom_friction;
-    const b = this.floorFriction0;
-    if (on) {
-      fr[i] = 0.06;
-      fr[i + 1] = 0.005;
-      fr[i + 2] = 0.0001;
-    } else {
-      fr[i] = b[0];
-      fr[i + 1] = b[1];
-      fr[i + 2] = b[2];
-    }
+    const fr = this.model.geom_friction;
+    this.groundGeoms.forEach((g, k) => {
+      const i = g * 3, b = this.floorFriction0[k];
+      if (on) {
+        fr[i] = 0.06;
+        fr[i + 1] = 0.005;
+        fr[i + 2] = 0.0001;
+      } else {
+        fr[i] = b[0];
+        fr[i + 1] = b[1];
+        fr[i + 2] = b[2];
+      }
+    });
   }
   dieKnockover() {
     if (!this.alive) return;
@@ -231,7 +231,7 @@ export class FlyAgent {
     const st = { pos: P(B.thorax), labellum: P(B.labrum), antenna: { left: P(B.antL), right: P(B.antR) }, claw: {}, touch: {}, load: {}, joint: {},
       gyro: [sd[sa.gyro], sd[sa.gyro + 1], sd[sa.gyro + 2]], vel: [sd[sa.velocimeter], sd[sa.velocimeter + 1], sd[sa.velocimeter + 2]],
       bodyContact: { left: false, right: false }, otherFlies: this.others, sugarGain: 0.6 + 0.9 * (1 - this.energy), bitterGain: 0.6 + 0.8 * this.energy };
-    st.labellumZ = st.labellum[2];
+    st.labellumZ = st.labellum[2] - groundAt(st.labellum, this.env);
     st.pitchUp = d.xmat[B.thorax * 9 + 6];   // sine of nose-up pitch (body x axis z component)
     st.proboscisOut = this.motor.proboscisOut(); st.stepping = this.motor.stepAmp || 0;
     for (const [k, b] of Object.entries(this.claw)) { st.claw[k] = P(b); st.touch[k] = sd[sa[`touch_claw_${k}`]]; const f = sa[`force_tarsus_${k}`]; st.load[k] = Math.hypot(sd[f], sd[f + 1], sd[f + 2]); }
@@ -273,6 +273,7 @@ export class FlyAgent {
     if (k === 'floor') return 0.35 + 0.25 * (((Math.floor(x / 0.4) + Math.floor(y / 0.4)) & 1) ? 1 : 0);   // checker floor
     if (k === 'wall') { const a = Math.atan2(y, x); return 0.15 + 0.6 * ((Math.floor(a / (Math.PI / 12)) & 1) ? 1 : 0); }  // striped wall
     if (k === 'food') return 0.9; if (k === 'bitter') return 0.5; if (k === 'hazard') return 0.6; if (k === 'obst') return 0.12; if (k === 'fly') return 0.08;
+    if (k === 'canopy') return 0.1; if (k === 'water') return 0.22;
     return 0.3;
   };
   /** advance 1 ms of simulated time */
@@ -373,7 +374,7 @@ export class FlyAgent {
       if (this.flight.update(this.t, 1, { turn: this.cmd.turn, env: this.env, others: this.others, legTouch, rimHit: st.rimHit }) === 'landed') this.motor.recoverUntil = this.t + 300;
       this.cmd.flying = this.flight.active; this.cmd.flight = this.flight.label();
     }
-    if (!this.flight.active && st.pos[2] >= 0.22) {
+    if (!this.flight.active && st.pos[2] - groundAt(st.pos, this.env) >= 0.22) {
       this.releaseClaws();
     }
     this.dropUprightIfNeeded();
@@ -485,7 +486,7 @@ export class FlyAgent {
       }
     }
     const hw = Math.cos(yaw / 2), hz = Math.sin(yaw / 2);
-    d.qpos[0] = x; d.qpos[1] = y; d.qpos[2] = 1.5;
+    d.qpos[0] = x; d.qpos[1] = y; d.qpos[2] = 1.5 + groundAt([x, y], this.env);
     d.qpos[3] = hw; d.qpos[4] = 0; d.qpos[5] = 0; d.qpos[6] = hz;
     for (let i = 0; i < d.qvel.length; i++) d.qvel[i] = 0;
     const act = this.motor.act;

@@ -10,7 +10,12 @@ import { loadBlenderFly, createBlenderFly, loadArenaDetail, blenderOutput } from
 import { ArenaBatches } from './arena-batches.js';
 import { RenderResolution } from './render-resolution.js';
 import { loadConnectome, loadNeurons } from './data.js';
-import { PRESETS } from './sim/world.js';
+import { PRESETS, raceMap } from './sim/world.js';
+import { groundAt } from './sim/senses.js';
+import { buildDesertScene } from './race-map-desert.js';
+import { preloadMapAssets } from './race-map-assets.js';
+import { windField, hawkAt } from './race-wind.js';
+import { fetchSiteMap, normalizeMapId } from './race-map.js';
 import { allocBrainMemory, MAX_FLIES } from './brainsetup.js';
 import { parseFlyVis } from './flyvis.js';
 import { buildGroups } from './sim/groups.js';
@@ -69,6 +74,47 @@ const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25
 let lastRaceFliesKey = '';
 let watchTickerUrl = null;
 let siteTickerUrl = '';
+let raceMapId = env.map || 'dish', desertScene = null, mapSwap = null;
+
+/** Host: dev ?map= wins, else the site-wide admin choice. */
+async function wantedRaceMap() {
+  const q = import.meta.env.DEV ? normalizeMapId(new URLSearchParams(location.search).get('map')) : null;
+  return q || fetchSiteMap();
+}
+/** Swap the shared env object in place (workers get it at init; chaos and senses hold the reference). */
+async function setRaceEnv(id) {
+  id = normalizeMapId(id) || 'dish';
+  if (!isRace || id === raceMapId) return false;
+  if (id !== 'dish') await preloadMapAssets(BASE, id);
+  const next = raceMap(id).env();
+  for (const k of Object.keys(env)) delete env[k];
+  Object.assign(env, next);
+  raceMapId = id;
+  return true;
+}
+/** Camera range, home view, shadow depth and ambience for the current map. */
+function fitRaceView() {
+  const R = env.arena.radius;
+  camera.far = Math.max(100, R * 8); camera.updateProjectionMatrix();
+  controls.maxDistance = R * 5;
+  sun.shadow.camera.far = Math.max(20, R * 3); sun.shadow.camera.updateProjectionMatrix();
+  shadowExtent = 0; shadowDirty = true;
+  raceCamHome = { pos: new THREE.Vector3(R * 1.3, 0, R * 1.45), target: new THREE.Vector3(0, 0, 0.1) };
+  if (env.map === 'desert') raceAudio?.startAmbience(); else raceAudio?.stopAmbience();
+}
+/** Watchers follow the host's map: rebuild the scene and let the next snapshot re-add the flies. */
+function watchRaceMap(id) {
+  if (mapSwap || normalizeMapId(id) === raceMapId) return;
+  mapSwap = (async () => {
+    if (!(await setRaceEnv(id))) return;
+    for (const f of flies) removeFly(f);
+    flies.length = 0;
+    raceChaos?.reset();
+    fitRaceView();
+    rebuildEnv();
+    snapRaceOverview();
+  })().finally(() => { mapSwap = null; });
+}
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
@@ -135,6 +181,7 @@ async function main() {
   flyvisMap = fvm;
   window.__data = data;
   buildBrainPanel(data);
+  if (isRace) await setRaceEnv(await wantedRaceMap());
   buildScene(data);
   buildUI();
   $('#loading').remove();
@@ -164,12 +211,13 @@ async function mainWatch() {
   visual = createBlenderFly(blender, detail, levels); outputPass = output;
   if (wingPoses) watchWingPoses = wingPoses;
   flyvisMap = fvm; meta = data.meta; bodymap = bm;
+  await setRaceEnv(await fetchSiteMap());
   buildScene(data);
   buildBrainPanel(data);
   await preloadChaosAssets(THREE, BASE);
   setupRaceChrome();
   setupFolds();
-  setRaceBrainFolded(raceMobile(), { instant: true });
+  setRaceBrainFolded(true, { instant: true });
   setupWatchBrainPanel();
   $('#loading').remove();
   const profile = $('#profile');
@@ -188,8 +236,9 @@ async function mainWatch() {
 // ---------------- scene ----------------
 async function spawnPresetFlies() {
   const st0 = PRESET.start || [0, 0, 0];
-  if (PRESET.flySpots) {
-    const spots = PRESET.flySpots.slice();
+  const flySpots = isRace ? raceMap(raceMapId).flySpots : PRESET.flySpots;
+  if (flySpots) {
+    const spots = flySpots.slice();
     if (isRace) {
       const n = spots.length, rot = raceSpotRot % n;
       raceSpotRot++;
@@ -199,7 +248,7 @@ async function spawnPresetFlies() {
         const s = spots[(i + rot) % n], k = ids[i];
         await addFly(s.pos, s.yaw, s.sex, { name: RACE_NAMES[k], color: FLY_COLORS[k] });
       }
-    } else for (const s of spots) await addFly(s.pos, s.yaw, s.sex);
+    } else for (const s of flySpots) await addFly(s.pos, s.yaw, s.sex);
   } else { await addFly([st0[0], st0[1]], st0[2]);
     for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
 }
@@ -207,7 +256,7 @@ function waitRacePoses() {
   return Promise.all(flies.map(f => f.last ? Promise.resolve() : new Promise(res => { f.onPose = res; })));
 }
 
-let renderer, scene, camera, controls, envGroup, chaosCakeGroup, raycaster, floorMesh, wallMesh, sun, composer, gtao, resolution;
+let renderer, scene, camera, controls, envGroup, chaosCakeGroup, raycaster, floorMesh, wallMesh, sun, hemiLight, rimLight, composer, gtao, resolution;
 let shadowDirty = true, lastShadow = -Infinity, shadowExtent = 0, lastBrainDraw = 0, brainDirty = true;
 let brainColorFly = -1, brainColorHover = -2;
 const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint = new THREE.Vector3();
@@ -280,7 +329,10 @@ function paintRaceFloorFull(fx, fs, logo, ticker) {
 function repaintRaceFloor() {
   const c = raceFloorPaintCtx;
   if (!c) return;
-  paintRaceFloorFull(c.fx, c.fs, raceFloorLogo, raceWallLogo);
+  if (c.paintBase) {
+    c.paintBase();
+    if (raceChaos) paintChaosScorches(c.fx, c.fs, env.arena.radius, raceChaos.getScorches(), performance.now());
+  } else paintRaceFloorFull(c.fx, c.fs, raceFloorLogo, raceWallLogo);
   c.ft.needsUpdate = true;
 }
 function paintRaceWall(wx, ww, wh) {
@@ -314,12 +366,12 @@ function buildScene(data) {
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5;
   controls.maxPolarAngle = Math.PI / 2 - 0.02;
   if (isRace) raceCamHome = { pos: camera.position.clone(), target: controls.target.clone() };
-  scene.add(new THREE.HemisphereLight(isRace ? '#f0d4ff' : '#f4f2ed', isRace ? '#4a2060' : '#514432', 0.22));
+  hemiLight = new THREE.HemisphereLight(isRace ? '#f0d4ff' : '#f4f2ed', isRace ? '#4a2060' : '#514432', 0.22); scene.add(hemiLight);
   sun = new THREE.DirectionalLight(isRace ? '#f0c8ff' : '#fff1da', 2.7); sun.position.set(3, 2, 8); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.00002; sun.shadow.normalBias = 0.0003; sun.shadow.radius = 2;
   const shadowSpan = Math.max(4, R + 0.5);
   Object.assign(sun.shadow.camera, { left: -shadowSpan, right: shadowSpan, top: shadowSpan, bottom: -shadowSpan, near: 0.1, far: Math.max(20, R * 3) }); scene.add(sun, sun.target);
-  const rim = new THREE.DirectionalLight(isRace ? '#e0a8f0' : '#f9e5c4', 0.65); rim.position.set(-3, -2, 3); scene.add(rim);
+  rimLight = new THREE.DirectionalLight(isRace ? '#e0a8f0' : '#f9e5c4', 0.65); rimLight.position.set(-3, -2, 3); scene.add(rimLight);
   const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
   composer = new EffectComposer(renderer, rt); composer.addPass(new RenderPass(scene, camera));
   gtao = new GTAOPass(scene, camera, 1, 1);
@@ -390,11 +442,17 @@ function discMesh(r, color, opacity = 1, z = ARENA_FLOOR_DECAL_Z) {
 function rebuildEnv() {
   // Placement rebuilds own their resources; release old GPU buffers/textures before replacing them.
   if (chaosCakeGroup?.parent === envGroup) envGroup.remove(chaosCakeGroup);
-  envGroup.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
+  desertScene?.dispose(); desertScene = null;
+  envGroup.traverse(o => { if (o.isMesh && !o.userData.keep) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
   envGroup.clear(); shadowDirty = true;
   const R = env.arena.radius, aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   let floorMat, wallMat;
-  if (isRace) {
+  if (isRace && env.map === 'desert') {
+    ++raceFloorPaint;
+    desertScene = buildDesertScene(envGroup, env, { renderer, scene, sun, hemi: hemiLight, rim: rimLight });
+    floorMesh = desertScene.floor; wallMesh = null;
+    raceFloorPaintCtx = desertScene.floorPaint;
+  } else if (isRace) {
     const fs = 1024, fc = document.createElement('canvas'); fc.width = fc.height = fs; const fx = fc.getContext('2d');
     const paintId = ++raceFloorPaint;
     paintRaceFloorFull(fx, fs, raceFloorLogo, raceWallLogo);
@@ -426,11 +484,13 @@ function rebuildEnv() {
     const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
     wallMat = new THREE.MeshStandardMaterial({ map: wt, side: THREE.BackSide, roughness: 0.9 });
   }
-  floorMesh = new THREE.Mesh(new THREE.CircleGeometry(R + 0.1, 96), floorMat);
-  floorMesh.receiveShadow = true; envGroup.add(floorMesh);
-  wallMesh = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true), wallMat);
-  wallMesh.rotation.x = Math.PI / 2; wallMesh.position.z = env.arena.wallHeight / 2; envGroup.add(wallMesh);
-  for (const o of env.obstacles) { const m = new THREE.Mesh(o.type === 'box' ? new THREE.BoxGeometry(o.sx * 2, o.sy * 2, o.sz) : new THREE.CylinderGeometry(o.r, o.r, o.sz, 32), new THREE.MeshStandardMaterial({ color: isRace ? '#6a3d86' : '#3d4a3d', roughness: 0.7 }));
+  if (!desertScene) {
+    floorMesh = new THREE.Mesh(new THREE.CircleGeometry(R + 0.1, 96), floorMat);
+    floorMesh.receiveShadow = true; envGroup.add(floorMesh);
+    wallMesh = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true), wallMat);
+    wallMesh.rotation.x = Math.PI / 2; wallMesh.position.z = env.arena.wallHeight / 2; envGroup.add(wallMesh);
+  }
+  for (const o of env.obstacles) { if (o.collider) continue; const m = new THREE.Mesh(o.type === 'box' ? new THREE.BoxGeometry(o.sx * 2, o.sy * 2, o.sz) : new THREE.CylinderGeometry(o.r, o.r, o.sz, 32), new THREE.MeshStandardMaterial({ color: isRace ? '#6a3d86' : '#3d4a3d', roughness: 0.7 }));
     if (o.type !== 'box') m.rotation.x = Math.PI / 2; else m.rotation.z = o.yaw || 0; m.position.set(o.x, o.y, o.sz / 2); m.castShadow = m.receiveShadow = true; envGroup.add(m); }
   for (const f of env.food) {
     if (f.hiddenDisc) continue;
@@ -695,6 +755,7 @@ function setupRaceChrome() {
     theme: `${BASE}Theme.wav`,
     xfiles: `${BASE}xfiles.wav`,
   });
+  if (env.map === 'desert') raceAudio.startAmbience();
   raceChaos = createRaceChaos({
     THREE,
     scene: () => scene,
@@ -861,18 +922,18 @@ function paintRaceTicker(href) {
   const a = $('#raceTicker');
   if (!a) return;
   const url = href != null ? normalizeTickerHref(href) : resolvedTickerUrl();
-  a.classList.toggle('is-off', !url);
-  if (url) {
+  const live = !!url;
+  a.classList.toggle('is-off', !live);
+  a.classList.toggle('is-live', live);
+  if (live) {
     a.href = url;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
-    a.removeAttribute('aria-disabled');
     a.title = 'FLYticker';
   } else {
     a.href = '#';
     a.removeAttribute('target');
     a.removeAttribute('rel');
-    a.setAttribute('aria-disabled', 'true');
     a.title = 'Set FLYticker URL in /admin';
   }
 }
@@ -907,12 +968,18 @@ function setupRaceSocials() {
       publishMatchState(true);
     });
   }
+  const refreshTickerOnFocus = () => { loadSiteTicker(); };
+  addEventListener('focus', refreshTickerOnFocus);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshTickerOnFocus();
+  });
 }
 function showRaceSocials() {
   if ($('#enterGate')) return;
   const el = $('#raceSocials');
   if (!el) return;
   paintRaceTicker();
+  loadSiteTicker();
   if (!el.hidden) return;
   el.hidden = false;
   requestAnimationFrame(() => el.classList.add('in'));
@@ -1056,6 +1123,7 @@ function publishMatchState(force = false) {
     pools: poolSnap,
     tickerUrl: tickerUrl(),
     chaosCue: raceChaos?.getCue?.() || null,
+    map: raceMapId,
   }));
 }
 let watchOverlayPhase = null, watchSawRest = false;
@@ -1212,6 +1280,8 @@ function applyWatchFlyIdent(f, row) {
   else if (f.ring?.material?.color) f.ring.material.color.set(f.color);
 }
 function applyWatchState(st) {
+  if (st.map && normalizeMapId(st.map) !== raceMapId) { watchRaceMap(st.map); return; }
+  if (mapSwap) return;
   const wasLive = watchOverlayPhase === 'live';
   matchPhase = st.phase || matchPhase;
   if (st.bodyNames) watchBodyNames = st.bodyNames;
@@ -1494,16 +1564,9 @@ function raceMobile() {
 }
 function scheduleRaceBrainFold() {
   clearTimeout(raceBrainTimer);
-  raceBrainTouched = false;
-  if (raceMobile()) {
-    setRaceBrainFolded(true, { instant: true });
-    return;
-  }
-  setRaceBrainFolded(false, { instant: true });
-  raceBrainTimer = setTimeout(() => {
-    if (raceBrainTouched || raceWinner) return;
-    setRaceBrainFolded(true);
-  }, 3000);
+  raceBrainTimer = null;
+  if (raceBrainTouched) return;
+  setRaceBrainFolded(true, { instant: true });
 }
 function showRaceOverlayCard(card, { flyColor, enter = true } = {}) {
   const overlay = $('#raceOverlay');
@@ -2160,9 +2223,10 @@ async function resetRace() {
   raceChaos?.reset();
   const clock = $('#raceClock'); if (clock) clock.hidden = true;
   if (raceAnnounce) { raceAnnounce.element.querySelector('.race-announce-text')?.classList.remove('pop'); }
-  setRaceBrainFolded(raceMobile(), { instant: true });
+  if (!raceBrainTouched) setRaceBrainFolded(true, { instant: true });
   for (const f of flies) { f.worker?.postMessage({ type: 'pause' }); removeFly(f); }
   flies.length = 0; nextId = 0; selected = 0;
+  if (isHost && await setRaceEnv(await wantedRaceMap())) fitRaceView();
   snapRaceOverview();
   if (env.food[0]) env.food[0].amount = 8;
   if (env.food.length > 1) env.food.length = 1;
@@ -2425,6 +2489,18 @@ function updateShadows(now) {
   }
 }
 const shadowOffset = new THREE.Vector3(3, 2, 8);
+/** Wall-clock wind so host and watchers sway, dust and hear the same gusts. */
+function tickDesert(now) {
+  const t = Date.now() / 1000, wind = windField(t);
+  desertScene.update(now, wind, t);
+  shadowDirty = true;
+  if (!raceAudio) return;
+  const p = controls.target;
+  let water = 0;
+  for (const w of env.waterPools || []) water = Math.max(water, 1 - Math.max(0, Math.hypot(p.x - w.x, p.y - w.y) - w.r) / 9);
+  const zoom = Math.min(1, 12 / Math.max(1, camera.position.distanceTo(p)));
+  raceAudio.setAmbience({ wind, water: water * zoom, hawk: hawkAt(t), t });
+}
 function animate() {
   requestAnimationFrame(animate);
   if (document.hidden) return;
@@ -2452,7 +2528,7 @@ function animate() {
         }
         g.quaternion.copy(q); g.updateMatrix();
       }
-      f.ring.position.set(s.pos[0], s.pos[1], ARENA_FLOOR_DECAL_Z);
+      f.ring.position.set(s.pos[0], s.pos[1], (env.dunes ? groundAt(s.pos, env) : 0) + ARENA_FLOOR_DECAL_Z);
       if (f.label) {
         syncFlySceneLabel(f);
         if (f.label.visible) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
@@ -2474,6 +2550,7 @@ function animate() {
   if (!isRace && sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   tickRaceCamera(dt);
   if (isRace) raceChaos?.tick(dt);
+  if (desertScene) tickDesert(now);
   if (isRace) {
     for (const f of flies) {
       const p = flyDrawPos(f);
@@ -2545,7 +2622,7 @@ function setupFolds() {
   };
   if (isRace) {
     const f = folds[0];
-    setRaceBrainFolded(raceMobile(), { instant: true });
+    setRaceBrainFolded(true, { instant: true });
     $(f[1]).onclick = () => setRaceBrainFolded(!$('#brainpanel').classList.contains('folded'), { user: true });
     addEventListener('keydown', e => {
       if (e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;

@@ -13,7 +13,7 @@ const _end = { x: 0, y: 0, z: 0 };
 const MUJOCO_EYE_L = { x: -0.022, y: 0.013, z: 0 };
 const MUJOCO_EYE_R = { x: 0.022, y: 0.013, z: 0 };
 
-function castBeam(origin, dir, flyId, liveFlies, arenaR, wallZ) {
+function castBeam(origin, dir, flyId, liveFlies, arenaR, wallZ, square = false) {
   const o = origin, d = dir;
   let bestT = MAX_RANGE;
   let hit = {
@@ -40,7 +40,7 @@ function castBeam(origin, dir, flyId, liveFlies, arenaR, wallZ) {
     hit = { type: 'floor', t: tf, victimId: null, x: o.x + d.x * tf, y: o.y + d.y * tf, z: 0 };
   }
 
-  const tw = rayWallT(o.x, o.y, d.x, d.y, arenaR);
+  const tw = rayWallT(o.x, o.y, d.x, d.y, arenaR, square);
   if (tw != null && tw < bestT) {
     const x = o.x + d.x * tw, y = o.y + d.y * tw;
     const z = Math.max(0, Math.min(wallZ, o.z + d.z * tw));
@@ -74,7 +74,18 @@ function rayFloorT(oz, dz) {
   return t > 0.02 ? t : null;
 }
 
-function rayWallT(ox, oy, dx, dy, R) {
+function raySquareWallT(ox, oy, dx, dy, H) {
+  let best = null;
+  for (const [o, dd] of [[ox, dx], [oy, dy]]) {
+    if (Math.abs(dd) < 1e-8) continue;
+    const t = ((dd > 0 ? H : -H) - o) / dd;
+    if (t > 0.02 && (best == null || t < best)) best = t;
+  }
+  return best;
+}
+
+function rayWallT(ox, oy, dx, dy, R, square = false) {
+  if (square) return raySquareWallT(ox, oy, dx, dy, R);
   const a = dx * dx + dy * dy;
   if (a < 1e-8) return null;
   const b = 2 * (ox * dx + oy * dy);
@@ -307,7 +318,8 @@ export function tickLaserBeams(pool, beamFlies, arena, nowMs, lastBurn, callback
     for (const side of ['L', 'R']) {
       const beam = eyeBeamFromFly(f, side, pool);
       if (!beam || i >= pool.beams.length) continue;
-      const hit = castBeam(beam.origin, beam.dir, beam.flyId, hitFlies, arena.radius, arena.wallHeight ?? 8);
+      const square = arena.shape === 'square';
+      const hit = castBeam(beam.origin, beam.dir, beam.flyId, hitFlies, square ? arena.half : arena.radius, arena.wallHeight ?? 8, square);
       const slot = pool.beams[i++];
       const len = Math.hypot(
         _end.x - beam.origin.x,

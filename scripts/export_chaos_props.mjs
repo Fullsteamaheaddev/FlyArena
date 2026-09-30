@@ -14,6 +14,7 @@ if (!globalThis.FileReader) {
 }
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -240,11 +241,40 @@ function buildMeteorChunk() {
   return root;
 }
 
+function chippedCubeGeo(s = 0.072) {
+  const u = 0.48;
+  const pts = [];
+  for (const x of [-s, s]) {
+    for (const y of [-s, s]) {
+      for (const z of [-s, s]) {
+        if (x > 0 && y < 0 && z > 0) continue;
+        pts.push(new THREE.Vector3(x, y, z));
+      }
+    }
+  }
+  pts.push(new THREE.Vector3(s - u * 2 * s, -s, s));
+  pts.push(new THREE.Vector3(s, -s + u * 2 * s, s));
+  pts.push(new THREE.Vector3(s, -s, s - u * 2 * s));
+  const geo = new ConvexGeometry(pts);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Bitten sugar cube. One mesh, big flat faces, one diagonal cut. */
 function buildSugarCrumb() {
   const root = new THREE.Group();
   root.name = 'SugarCrumb';
-  const crumb = new THREE.Mesh(new THREE.OctahedronGeometry(0.08, 0), mat('#fff4d8', 0.05, 0.35, 0xfff0cc, 0.15));
-  root.add(crumb);
+
+  const cube = new THREE.Mesh(chippedCubeGeo(0.074), toonMat('#fff3d6'));
+  cube.name = 'Cube';
+  cube.scale.set(1, 0.94, 0.9);
+  cube.rotation.set(0.12, 0.5, -0.08);
+  root.add(cube);
+
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const c = box.getCenter(new THREE.Vector3());
+  cube.position.sub(c);
   return root;
 }
 
@@ -266,8 +296,15 @@ function exportGlb(filename, object) {
   });
 }
 
-await exportGlb('ufo.glb', buildUfo());
-await exportGlb('spike_trap.glb', buildSpikeTrap());
-await exportGlb('meteor_chunk.glb', buildMeteorChunk());
-await exportGlb('sugar_crumb.glb', buildSugarCrumb());
-console.log('Wrote GLBs to', outDir);
+const jobs = {
+  ufo: buildUfo,
+  spike_trap: buildSpikeTrap,
+  meteor_chunk: buildMeteorChunk,
+  sugar_crumb: buildSugarCrumb,
+};
+const pick = process.argv[2];
+for (const [name, build] of Object.entries(jobs)) {
+  if (pick && pick !== name) continue;
+  await exportGlb(`${name}.glb`, build());
+}
+console.log('Wrote GLBs to', outDir, pick ? `(${pick})` : '(all)');

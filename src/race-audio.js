@@ -88,6 +88,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     if (laserKillUrl && !laserKillBuf) laserKillBuf = await decodeUrl(laserKillUrl);
     if (themeUrl && !themeBuf) themeBuf = await decodeUrl(themeUrl);
     if (xfilesUrl && !xfilesBuf) xfilesBuf = await decodeUrl(xfilesUrl);
+    if (ambWanted && !amb) startAmbience();
   }
   function startBuzz() {
     const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 218;
@@ -632,10 +633,99 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     hg.gain.exponentialRampToValueAtTime(0.001, t0 + 7);
     hiss.connect(hp); hp.connect(hg); hg.connect(master); hiss.start(t0);
   }
+  // ---------- map ambience (desert): wind bed, whistle, fronds, sand hiss, water, cicadas, hawk ----------
+  // Levels follow setAmbience() (the shared visual wind), so every client hears the same gusts.
+  let amb = null, ambWindBuf = null, ambHawkBuf = null, ambWanted = false;
+  function loopNoise(sec = 4) {
+    const src = noiseSrc(sec); src.loop = true; return src;
+  }
+  async function startAmbience() {
+    ambWanted = true;
+    if (!ctx || amb) return;
+    if (extraUrls.ambWind && !ambWindBuf) ambWindBuf = await decodeUrl(extraUrls.ambWind);
+    if (extraUrls.ambHawk && !ambHawkBuf) ambHawkBuf = await decodeUrl(extraUrls.ambHawk);
+    if (!ambWanted || amb) return;
+    const now = ctx.currentTime;
+    const out = ctx.createGain(); out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(1, now + 1.5); out.connect(duckGain);
+    const chain = (src, filters, gain = 0) => {
+      let node = src;
+      for (const f of filters) { node.connect(f); node = f; }
+      const g = ctx.createGain(); g.gain.value = gain; node.connect(g); g.connect(out); src.start(); return g;
+    };
+    const bq = (type, freq, Q = 0.7) => { const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = Q; return f; };
+    const a = { out };
+    if (ambWindBuf) {
+      const src = ctx.createBufferSource(); src.buffer = ambWindBuf; src.loop = true;
+      a.windLp = bq('lowpass', 2400); a.wind = chain(src, [a.windLp], 0);
+    } else {
+      a.windLp = bq('lowpass', 420); a.wind = chain(loopNoise(), [a.windLp, bq('highpass', 60)], 0);
+    }
+    a.whistleBp = bq('bandpass', 760, 9); a.whistle = chain(loopNoise(), [a.whistleBp], 0);
+    a.fronds = chain(loopNoise(), [bq('highpass', 2600), bq('lowpass', 7000)], 0);
+    a.hiss = chain(loopNoise(), [bq('bandpass', 5200, 0.9)], 0);
+    a.waterBp = bq('bandpass', 1300, 2.2); a.water = chain(loopNoise(), [a.waterBp], 0);
+    // cicadas: a 4.3 kHz whine chopped by a 38 Hz pulse
+    const ci = ctx.createOscillator(); ci.type = 'triangle'; ci.frequency.value = 4300;
+    const am = ctx.createGain(); am.gain.value = 0.5;
+    const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 38;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 0.5; lfo.connect(lfoG); lfoG.connect(am.gain);
+    const cg = ctx.createGain(); cg.gain.value = 0;
+    ci.connect(am); am.connect(cg); cg.connect(out); ci.start(); lfo.start();
+    a.cicada = cg; a.osc = [ci, lfo];
+    a.lastHawk = null; a.nextDrip = 0; a.lastSet = 0;
+    amb = a;
+  }
+  function stopAmbience() {
+    ambWanted = false;
+    if (!ctx || !amb) return;
+    const a = amb, now = ctx.currentTime; amb = null;
+    a.out.gain.cancelScheduledValues(now); a.out.gain.setValueAtTime(a.out.gain.value, now); a.out.gain.linearRampToValueAtTime(0, now + 0.8);
+    setTimeout(() => { try { a.out.disconnect(); } catch {} for (const o of a.osc) try { o.stop(); } catch {} }, 1000);
+  }
+  function drip(t0, amp) {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    const f = 900 + Math.random() * 900;
+    o.frequency.setValueAtTime(f, t0); o.frequency.exponentialRampToValueAtTime(f * 1.9, t0 + 0.05);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.05 * amp, t0 + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
+    o.connect(g); g.connect(amb.out); o.start(t0); o.stop(t0 + 0.1);
+  }
+  function hawkCry(t0) {
+    if (ambHawkBuf) { const s = ctx.createBufferSource(), g = ctx.createGain(); g.gain.value = 0.35; s.buffer = ambHawkBuf; s.connect(g); g.connect(amb.out); s.start(t0); return; }
+    for (const [dt, amp] of [[0, 1], [0.95, 0.7]]) {
+      const t = t0 + dt, o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(2900, t); o.frequency.exponentialRampToValueAtTime(1700, t + 0.75);
+      const vib = ctx.createOscillator(); vib.frequency.value = 28; const vg = ctx.createGain(); vg.gain.value = 60; vib.connect(vg); vg.connect(o.frequency);
+      const bp = bqNode('bandpass', 2300, 3);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.045 * amp, t + 0.06); g.gain.setValueAtTime(0.04 * amp, t + 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      o.connect(bp); bp.connect(g); g.connect(amb.out); o.start(t); vib.start(t); o.stop(t + 0.82); vib.stop(t + 0.82);
+    }
+  }
+  function bqNode(type, freq, Q) { const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = Q; return f; }
+  /** @param {{ wind: {strength:number, gust:number}, water?: number, hawk?: {active:boolean, n:number}, t?: number }} s */
+  function setAmbience({ wind, water = 0, hawk = null, t = 0 }) {
+    if (!ctx || !amb || ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+    if (now - amb.lastSet < 0.1) return;
+    amb.lastSet = now;
+    const s = Math.min(1.6, wind.strength), g = wind.gust, k = 0.25;
+    // a soft breeze: quiet low bed, barely-there whistle and hiss, gentle leaf rustle
+    amb.wind.gain.setTargetAtTime(0.014 + 0.018 * s, now, 0.6);
+    amb.windLp.frequency.setTargetAtTime(ambWindBuf ? 800 + 900 * s : 180 + 220 * s, now, 0.6);
+    amb.whistle.gain.setTargetAtTime(0.004 * g, now, 0.6);
+    amb.whistleBp.frequency.setTargetAtTime(620 + 300 * g + 60 * Math.sin(t * 0.7), now, k);
+    amb.fronds.gain.setTargetAtTime((0.003 + 0.007 * s) * (0.7 + 0.3 * Math.sin(t * 1.3) * Math.sin(t * 0.7)), now, 0.3);
+    amb.hiss.gain.setTargetAtTime(0.003 * g * g, now, 0.6);
+    amb.water.gain.setTargetAtTime(0.035 * water * (0.75 + 0.25 * Math.sin(t * 3.7)), now, 0.1);
+    amb.waterBp.frequency.setTargetAtTime(1100 + 400 * Math.sin(t * 1.3), now, 0.2);
+    const chirp = Math.max(0, Math.sin(t * 0.35) * Math.sin(t * 0.11 + 1));   // cicada chorus swells and rests
+    amb.cicada.gain.setTargetAtTime(0.009 * Math.min(1, chirp * 2) * (1 - 0.5 * Math.min(1, s)), now, 0.4);
+    if (water > 0.15 && now > amb.nextDrip) { drip(now + Math.random() * 0.05, water); amb.nextDrip = now + 0.25 + Math.random() * 1.4 / water; }
+    if (hawk?.active && amb.lastHawk !== hawk.n) { amb.lastHawk = hawk.n; hawkCry(now + 0.05); }
+  }
   return {
     unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, playChaos, playCakeLand,
     setMuted, setMotion, hold, playLaserToast, startLaserBeam, stopLaserBeam, playLaserKill,
-    startUfoSting, stopUfoSting,
+    startUfoSting, stopUfoSting, startAmbience, stopAmbience, setAmbience,
   };
 }
 
