@@ -3,9 +3,19 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { applyCelShading } from '../cel-shade.js';
 import { applyUfoRimGlow, ensureUfoHullOpaque } from '../ufo-rim-glow.js';
+import { DESERT_MAP_PROP_NAMES, DESERT_PREVIEW_PROPS, propScale } from '../desert-prop-scale.js';
+
+const params = new URLSearchParams(location.search);
+const setName = params.get('set') === 'desert' ? 'desert' : 'chaos';
+
+const CHAOS_PROPS = ['ufo', 'meteor_chunk', 'spike_trap', 'sugar_crumb', 'cake_slice'];
 
 const mount = document.getElementById('view');
 const partSelect = document.getElementById('part');
+const propSelect = document.getElementById('prop');
+const statsEl = document.getElementById('stats');
+const scaleToggle = document.getElementById('gameScale');
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(mount.clientWidth, mount.clientHeight);
@@ -14,7 +24,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 mount.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#eceef2');
+scene.background = new THREE.Color(setName === 'desert' ? '#4a3b28' : '#eceef2');
 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 80);
 camera.up.set(0, 0, 1);
@@ -40,17 +50,20 @@ const rim = new THREE.DirectionalLight(0xffffff, 0.28);
 rim.position.set(0, 4, 3);
 scene.add(rim);
 
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(8, 8),
-  new THREE.MeshStandardMaterial({ color: 0xd8dce3, roughness: 0.95 }),
-);
+const floorMat = new THREE.MeshStandardMaterial({
+  color: setName === 'desert' ? 0x4a3b28 : 0xd8dce3,
+  roughness: 0.95,
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), floorMat);
 floor.position.z = -0.12;
 scene.add(floor);
 
 let propRoot = null;
+let currentPropName = '';
 let meshInventory = [];
 let selectedMesh = null;
 let highlightOverlay = null;
+const baseScale = new THREE.Vector3(1, 1, 1);
 const HIGHLIGHT_MAT = new THREE.MeshBasicMaterial({
   color: 0xff2a3a,
   transparent: true,
@@ -137,6 +150,30 @@ function disposeProp(root) {
   });
 }
 
+function updateStats(root) {
+  if (!statsEl) return;
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  if (box.isEmpty()) {
+    statsEl.textContent = '—';
+    return;
+  }
+  const size = box.getSize(new THREE.Vector3());
+  statsEl.textContent = `foot Z ${box.min.z.toFixed(3)} · H ${size.z.toFixed(3)} · XY ${size.x.toFixed(2)}×${size.y.toFixed(2)}`;
+}
+
+function applyGameScale() {
+  if (!propRoot) return;
+  const useGame = setName === 'desert' && scaleToggle?.checked;
+  if (useGame && DESERT_PREVIEW_PROPS[currentPropName]) {
+    const p = DESERT_PREVIEW_PROPS[currentPropName];
+    const [sx, sy, sz] = propScale(p);
+    propRoot.scale.set(baseScale.x * sx, baseScale.y * sy, baseScale.z * sz);
+  } else {
+    propRoot.scale.copy(baseScale);
+  }
+}
+
 function frameProp(root) {
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root);
@@ -144,6 +181,7 @@ function frameProp(root) {
   box.getCenter(fitCenter);
   const size = box.getSize(new THREE.Vector3());
   fitRadius = Math.max(size.x, size.y, size.z, 0.08) * 0.5;
+  updateStats(root);
   viewThreeQ();
 }
 
@@ -168,24 +206,47 @@ function viewTop() {
   controls.target.copy(fitCenter);
 }
 
+function glbUrl(name) {
+  const base = setName === 'desert' ? `/maps/desert/${name}.glb` : `/chaos/${name}.glb`;
+  return `${base}?t=${Date.now()}`;
+}
+
 async function loadProp(name) {
+  currentPropName = name;
   if (propRoot) {
     scene.remove(propRoot);
     disposeProp(propRoot);
     propRoot = null;
   }
-  const gltf = await loader.loadAsync(`/chaos/${name}.glb?t=${Date.now()}`);
+  const gltf = await loader.loadAsync(glbUrl(name));
   propRoot = gltf.scene;
-  ambient.intensity = 0.48;
-  if (name === 'ufo') {
-    applyUfoRimGlow(propRoot, { sceneLights: false });
-    ensureUfoHullOpaque(propRoot);
-  } else {
-    applyCelShading(propRoot);
+  baseScale.set(1, 1, 1);
+  ambient.intensity = setName === 'desert' ? 0.55 : 0.48;
+  if (setName === 'chaos') {
+    if (name === 'ufo') {
+      applyUfoRimGlow(propRoot, { sceneLights: false });
+      ensureUfoHullOpaque(propRoot);
+    } else {
+      applyCelShading(propRoot);
+    }
   }
+  applyGameScale();
   scene.add(propRoot);
   frameProp(propRoot);
   refreshMeshMenu();
+}
+
+function populatePropSelect() {
+  const names = setName === 'desert' ? DESERT_MAP_PROP_NAMES : CHAOS_PROPS;
+  propSelect.innerHTML = '';
+  for (const name of names) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = `${name}.glb`;
+    propSelect.appendChild(opt);
+  }
+  const q = params.get('prop');
+  if (q && names.includes(q)) propSelect.value = q;
 }
 
 function resize() {
@@ -203,8 +264,12 @@ document.getElementById('side').onclick = viewSide;
 document.getElementById('low').onclick = viewLow;
 document.getElementById('threeQ').onclick = viewThreeQ;
 document.getElementById('top').onclick = viewTop;
-document.getElementById('reload').onclick = () => loadProp(document.getElementById('prop').value);
-document.getElementById('prop').onchange = () => loadProp(document.getElementById('prop').value);
+document.getElementById('reload').onclick = () => loadProp(propSelect.value);
+propSelect.onchange = () => loadProp(propSelect.value);
+scaleToggle?.addEventListener('change', () => {
+  applyGameScale();
+  if (propRoot) frameProp(propRoot);
+});
 document.getElementById('spin').oninput = e => {
   if (propRoot) propRoot.rotation.z = (Number(e.target.value) / 180) * Math.PI;
 };
@@ -218,11 +283,20 @@ partSelect.onchange = () => {
   if (row) setMeshHighlight(row.mesh);
 };
 
+const titleEl = document.querySelector('aside h1');
+if (titleEl) titleEl.textContent = setName === 'desert' ? 'Desert prop studio' : 'Chaos prop studio';
+if (scaleToggle) {
+  scaleToggle.checked = setName === 'desert' && params.get('scale') !== '0';
+  const scaleLabel = scaleToggle.closest('label');
+  if (scaleLabel) scaleLabel.style.display = setName === 'desert' ? '' : 'none';
+}
+
+populatePropSelect();
 try {
-  await loadProp('ufo');
+  await loadProp(propSelect.value || (setName === 'desert' ? 'arch' : 'ufo'));
 } catch (err) {
   console.error('[prop-studio] load failed', err);
-  const note = document.querySelector('aside p');
+  const note = document.querySelector('aside p.hint');
   if (note) note.textContent = String(err);
 }
 

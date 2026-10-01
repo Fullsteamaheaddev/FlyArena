@@ -2,9 +2,13 @@
 // Clones share geometry and materials with the template, so one shader patch covers every copy.
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+import { DESERT_MAP_PROP_NAMES } from './desert-prop-scale.js';
+
 const MAP_PROPS = {
-  desert: ['palm', 'pyramid', 'obelisk', 'arch', 'pillar_broken', 'block', 'rock_a', 'rock_b', 'rock_c', 'pebble', 'cactus', 'reed', 'lilypad', 'skull', 'tumbleweed'],
+  desert: DESERT_MAP_PROP_NAMES,
 };
+
+export { DESERT_MAP_PROP_NAMES };
 
 const templates = {};
 const loading = {};

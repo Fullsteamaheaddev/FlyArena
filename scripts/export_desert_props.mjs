@@ -65,6 +65,63 @@ function jitter(g, amp, freq = 7) {
 }
 const meshOf = (geos, material, name) => { const m = new THREE.Mesh(mergeGeometries(geos), material); m.name = name; return m; };
 
+/** a tapered cylinder spanning p0 -> p1, for chaining segments along a curve */
+function limb(p0, p1, r0, r1, seg = 6) {
+  const d = new THREE.Vector3().subVectors(p1, p0), len = d.length();
+  const g = new THREE.CylinderGeometry(r1, r0, len, seg, 1);
+  g.translate(0, len / 2, 0);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.divideScalar(len)));
+  g.translate(p0.x, p0.y, p0.z);
+  return g;
+}
+
+const applyToAll = (root, m) => { root.traverse(o => { if (o.isMesh) o.geometry.applyMatrix4(m); }); return root; };
+
+/**
+ * Fold node transforms into the geometry. The desert renderer instances raw
+ * `mesh.geometry` (src/race-map-assets.js -> race-map-desert.js), so anything left
+ * on a node is invisible in game even though the prop studio shows it.
+ */
+function bake(root) {
+  root.updateMatrixWorld(true);
+  const jobs = [];
+  root.traverse(o => { if (o.isMesh) jobs.push([o.geometry, o.matrixWorld.clone()]); });
+  for (const [g, m] of jobs) g.applyMatrix4(m);
+  root.traverse(o => { o.position.set(0, 0, 0); o.quaternion.identity(); o.scale.set(1, 1, 1); });
+  root.updateMatrixWorld(true);
+  return root;
+}
+
+/**
+ * Enforce the normalisation contract in geometry space.
+ *   h  target height            w  target X width          r  target footprint radius
+ *   centerXY false keeps the authored origin (trunk / shaft axis)
+ *   anchor 'center' keeps the origin at the middle (rolling tumbleweed), else foot at z 0
+ * Giving both a footprint and a height scales XY and Z separately, which matches how
+ * propScale() drives those kinds.
+ */
+function normalize(root, spec = {}) {
+  bake(root);
+  const size = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
+  let sxy = spec.w !== undefined ? spec.w / size.x
+    : spec.r !== undefined ? 2 * spec.r / Math.max(size.x, size.y)
+      : undefined;
+  let sz = spec.h !== undefined ? spec.h / size.z : undefined;
+  if (sxy === undefined) sxy = sz;
+  if (sz === undefined) sz = sxy;
+  applyToAll(root, new THREE.Matrix4().makeScale(sxy, sxy, sz));
+  root.traverse(o => { if (o.isMesh) o.geometry.normalizeNormals(); });
+
+  const box = new THREE.Box3().setFromObject(root);
+  const ctr = box.getCenter(new THREE.Vector3());
+  applyToAll(root, new THREE.Matrix4().makeTranslation(
+    spec.centerXY === false ? 0 : -ctr.x,
+    spec.centerXY === false ? 0 : -ctr.y,
+    spec.anchor === 'center' ? -ctr.z : -box.min.z,
+  ));
+  return root;
+}
+
 // ---------- palm ----------
 function buildPalm() {
   const root = new THREE.Group(); root.name = 'Palm';
@@ -140,7 +197,7 @@ function buildPalm() {
     fronds.push(g);
   }
   root.add(meshOf(fronds, mat('#ffffff', 0.7, { vertexColors: true, side: THREE.DoubleSide }), 'PalmFronds'));
-  return root;
+  return normalize(root, { h: 1, centerXY: false });   // origin = trunk base
 }
 
 // ---------- stepped pyramid (base 1, height 2/3) ----------
@@ -153,12 +210,19 @@ function buildPyramid() {
   }
   const cap = zUp(new THREE.ConeGeometry(0.1, 0.09, 4)); cap.rotateZ(Math.PI / 4); cap.translate(0, 0, H + 0.04);
   geos.push(prep(cap, '#e6c47f'));
-  // stair ramp on the front face
-  const stair = new THREE.BoxGeometry(0.16, 0.5, 0.02); stair.rotateX(-0.95); stair.translate(0, -0.34, 0.3);
-  geos.push(prep(stair, SAND_LT));
+  // stair: each step fills one tier's step corner, running from that tier's face back to the
+  // next tier's face at that tier's height, so treads and risers line up into one flight and
+  // every step rests on the tier below.
+  const hw = i => (1 - i / tiers * 0.86) * 0.5;
+  for (let i = 0; i < tiers; i++) {
+    const h = H / tiers, yOut = -hw(i - 1), yIn = -hw(i);
+    const step = new THREE.BoxGeometry(0.3, yIn - yOut, h);
+    step.translate(0, (yOut + yIn) / 2, h * (i + 0.5));
+    geos.push(prep(step, SAND_LT));
+  }
   const root = new THREE.Group(); root.name = 'Pyramid';
   root.add(meshOf(geos, mat('#ffffff', 0.92, { vertexColors: true }), 'PyramidMesh'));
-  return root;
+  return normalize(root, { w: 1, h: H });
 }
 
 // ---------- obelisk (height 1) ----------
@@ -177,66 +241,138 @@ function buildObelisk() {
   geos.push(prep(plinth, SAND_DK));
   const root = new THREE.Group(); root.name = 'Obelisk';
   root.add(meshOf(geos, mat('#ffffff', 0.8, { vertexColors: true }), 'ObeliskMesh'));
-  return root;
+  return normalize(root, { h: 1 });
 }
 
 // ---------- arch (width 1, height 5/6) ----------
+// Masonry gateway: the voussoir ring shares the piers' radial thickness, so the arch
+// springs exactly off the pier tops (intrados = inner face, extrados = outer face).
 function buildArch() {
-  const H = 5 / 6, geos = [];
+  const H = 5 / 6;
+  const pierW = 0.19;              // radial thickness, shared by piers and arch ring
+  const depth = 0.24;              // Y thickness
+  const R = 0.5 - pierW;           // intrados radius -> opening spans +/-R
+  const springZ = H - 0.5;         // a full-width semicircle rises exactly half the width
+  const geos = [];
+
   for (const side of [-1, 1]) {
-    const leg = new THREE.BoxGeometry(0.2, 0.23, H * 0.78, 1, 1, 3); jitter(leg, 0.02, 9); leg.translate(side * 0.4, 0, H * 0.39);
-    geos.push(prep(leg, SAND_DK));
+    const pier = new THREE.BoxGeometry(pierW, depth, springZ, 1, 1, 3);
+    jitter(pier, 0.01, 9);
+    pier.translate(side * (0.5 - pierW / 2), 0, springZ * 0.5);
+    geos.push(prep(pier, side > 0 ? SAND_DK : SAND));
+    const plinth = new THREE.BoxGeometry(pierW * 1.28, depth * 1.15, 0.045);
+    plinth.translate(side * (0.5 - pierW / 2), 0, 0.0225);
+    geos.push(prep(plinth, SAND_DK));
   }
-  const ring = new THREE.TorusGeometry(0.3, 0.07, 6, 16, Math.PI); ring.rotateX(Math.PI / 2); ring.translate(0, 0, H * 0.62);
-  geos.push(prep(ring, SAND));
-  const lintel = new THREE.BoxGeometry(1.0, 0.25, 0.12); jitter(lintel, 0.02, 8); lintel.translate(0, 0, H * 0.95);
-  geos.push(prep(lintel, SAND_LT));
-  const rubble = new THREE.IcosahedronGeometry(0.09, 0); jitter(rubble, 0.12); rubble.translate(0.55, 0.18, 0.04);
+
+  const N = 9, Rm = R + pierW / 2, step = Math.PI / N;
+  for (let k = 0; k < N; k++) {
+    const th = (k + 0.5) * step;
+    const keystone = k === (N - 1) / 2;
+    const radial = pierW * (keystone ? 1.16 : 1);
+    // size the tangential span to the extrados pitch, else the joints open into V gaps
+    // on the outside; the surplus overlaps harmlessly towards the intrados
+    const v = new THREE.BoxGeometry(radial, depth, (R + pierW) * step);
+    jitter(v, 0.004, 9);
+    v.rotateY(-th);
+    v.translate(Math.cos(th) * Rm, 0, springZ + Math.sin(th) * Rm);
+    geos.push(prep(v, keystone ? SAND_LT : (k % 2 ? SAND : SAND_DK)));
+  }
+
+  // runes on the keystone and pier faces, each half sunk into its face
+  const glyph = (x, z) => {
+    const g = new THREE.BoxGeometry(0.03, 0.016, 0.026);
+    g.translate(x, depth / 2, z);
+    geos.push(prep(g, '#8a6a3c'));
+  };
+  glyph(0, H - 0.07);
+  for (const side of [-1, 1]) {
+    const px = side * (0.5 - pierW / 2);
+    glyph(px, springZ * 0.68);
+    glyph(px, springZ * 0.4);
+  }
+
+  // rubble stays inside the footprint so it never drives the width contract
+  const rubble = new THREE.IcosahedronGeometry(0.07, 0);
+  jitter(rubble, 0.06);
+  rubble.translate(0.3, 0.13, 0.03);
   geos.push(prep(rubble, SAND_DK));
-  const rubble2 = new THREE.IcosahedronGeometry(0.06, 0); jitter(rubble2, 0.12); rubble2.translate(-0.3, -0.2, 0.03);
+  const rubble2 = new THREE.IcosahedronGeometry(0.05, 0);
+  jitter(rubble2, 0.06);
+  rubble2.translate(-0.24, -0.12, 0.024);
   geos.push(prep(rubble2, SAND));
-  const root = new THREE.Group(); root.name = 'Arch';
+
+  const root = new THREE.Group();
+  root.name = 'Arch';
   root.add(meshOf(geos, mat('#ffffff', 0.92, { vertexColors: true }), 'ArchMesh'));
-  return root;
+  return normalize(root, { w: 1, h: H, centerXY: false });   // origin = gateway centre
 }
 
 // ---------- broken pillar (height 1) ----------
 function buildPillar() {
   const geos = [];
-  const shaft = new THREE.CylinderGeometry(0.28, 0.3, 1, 14, 4); zUp(shaft);
+  // keep the shaft near r 0.3: sim/maps/desert.js gives pillars a r 0.35 collider and the
+  // renderer scales XY by 1.17, so a slimmer shaft would leave an invisible wall
+  const FL = 14;
+  const shaft = new THREE.CylinderGeometry(0.28, 0.3, 1, FL * 2, 6); zUp(shaft);
   const p = shaft.attributes.position;
   for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(y, x), flute = 1 - 0.05 * (Math.cos(a * 14) > 0 ? 1 : 0);
-    let zz = z + 0.5;
-    if (zz > 0.9) zz = 0.85 + 0.15 * (0.5 + 0.5 * Math.sin(a * 3 + 1.2)) * rr(0.6, 1);   // jagged break
-    p.setXYZ(i, x * flute, y * flute, zz);
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(y, x);
+    const flute = 1 - 0.055 * (0.5 + 0.5 * Math.cos(a * FL));   // smooth flutes survive low poly
+    // shear the top off along a wavy fracture instead of per-vertex noise
+    const brk = 0.84 + 0.13 * (0.5 + 0.5 * Math.sin(a * 3 + 1.2)) + 0.025 * Math.sin(a * 7 - 0.4);
+    p.setXYZ(i, x * flute, y * flute, Math.min(z + 0.5, brk));
   }
   shaft.computeVertexNormals();
   geos.push(prep(shaft, SAND_LT));
-  const base = new THREE.BoxGeometry(0.72, 0.72, 0.1); base.translate(0, 0, 0.05);
+  const base = new THREE.BoxGeometry(0.78, 0.78, 0.07); base.translate(0, 0, 0.035);
   geos.push(prep(base, SAND_DK));
-  const chunk = new THREE.CylinderGeometry(0.28, 0.28, 0.35, 12); chunk.rotateZ(Math.PI / 2); chunk.translate(0.55, 0.3, 0.28); jitter(chunk, 0.04);
+  const step = new THREE.BoxGeometry(0.66, 0.66, 0.06); step.translate(0, 0, 0.1);
+  geos.push(prep(step, SAND));
+  const chunk = new THREE.CylinderGeometry(0.17, 0.17, 0.24, 10); chunk.rotateZ(Math.PI / 2); chunk.translate(0.5, 0.25, 0.17); jitter(chunk, 0.03);
   geos.push(prep(chunk, SAND));
   const root = new THREE.Group(); root.name = 'PillarBroken';
   root.add(meshOf(geos, mat('#ffffff', 0.9, { vertexColors: true }), 'PillarMesh'));
-  return root;
+  return normalize(root, { h: 1, centerXY: false });   // origin = shaft axis, chunk lies beside it
 }
 
 // ---------- sandstone block (height 1) ----------
+// Two stacked courses rather than one crate, so the silhouette has a step and a shadow line.
 function buildBlock() {
-  const g = new THREE.BoxGeometry(1.5, 1.1, 1, 3, 3, 2); jitter(g, 0.05, 5); g.translate(0, 0, 0.35);
+  const lowH = 0.3, topH = 0.24;
+  const low = new THREE.BoxGeometry(0.92, 0.72, lowH, 3, 3, 1);
+  jitter(low, 0.035, 5);
+  low.translate(0, 0, lowH * 0.5);
+  const geos = [prep(low, SAND_DK)];
+
+  const top = new THREE.BoxGeometry(0.72, 0.54, topH, 3, 3, 1);
+  jitter(top, 0.03, 7);
+  top.rotateZ(0.08);
+  top.translate(0.03, -0.02, lowH + topH * 0.5 - 0.01);
+  geos.push(prep(top, SAND));
+
+  // runes sit half sunk in the lower course's flat -Y face, the side the reference view shows
+  for (let i = 0; i < 4; i++) {
+    const rune = new THREE.BoxGeometry(0.07, 0.024, 0.05);
+    rune.translate(-0.21 + i * 0.14, -0.36, lowH * 0.58);
+    geos.push(prep(rune, '#8a6a3c'));
+  }
   const root = new THREE.Group(); root.name = 'Block';
-  root.add(meshOf([prep(g, SAND_DK)], mat('#ffffff', 0.95, { vertexColors: true }), 'BlockMesh'));
-  return root;
+  root.add(meshOf(geos, mat('#ffffff', 0.95, { vertexColors: true }), 'BlockMesh'));
+  return normalize(root, { h: 1 });
 }
 
 // ---------- rocks (radius 1, height 1) ----------
 function buildRock(name, detail, amp, tint) {
   const g = new THREE.IcosahedronGeometry(1, detail); jitter(g, amp, rr(3, 6));
   g.scale(1, rr(0.8, 1), 0.62); g.translate(0, 0, 0.42);
+  // shear the buried cap off so the rock has a flat base and reads as half sunk in the sand
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) if (p.getZ(i) < 0) p.setZ(i, 0);
+  g.computeVertexNormals();
   const root = new THREE.Group(); root.name = name;
   root.add(meshOf([prep(g, tint)], mat('#ffffff', 0.95, { vertexColors: true, flatShading: true }), `${name}Mesh`));
-  return root;
+  return normalize(root, { r: 1, h: 1 });
 }
 
 // ---------- saguaro cactus (height 1) ----------
@@ -255,37 +391,72 @@ function buildCactus() {
   geos.push(prep(flower, '#f2d25a'));
   const root = new THREE.Group(); root.name = 'Cactus';
   root.add(meshOf(geos, mat('#ffffff', 0.75, { vertexColors: true }), 'CactusMesh'));
-  return root;
+  return normalize(root, { h: 1, centerXY: false });   // origin = trunk axis
 }
 
-// ---------- reed clump (height 1) ----------
+// ---------- reed clump / cattail (height 1) ----------
+// A straight centre stem carries the spike so the two always read as joined; the leaf blades
+// are tapered prisms rather than cones, because a cone tip goes sub-pixel and looks broken off.
 function buildReed() {
   const geos = [];
-  for (let k = 0; k < 5; k++) {
-    const a = k / 5 * Math.PI * 2, h = rr(0.7, 1), lean = rr(0.05, 0.15);
-    const blade = new THREE.ConeGeometry(0.018, h, 4, 4); zUp(blade); blade.translate(0, 0, h / 2);
-    const p = blade.attributes.position;
-    for (let i = 0; i < p.count; i++) { const z = p.getZ(i), t = z / h; p.setXY(i, p.getX(i) + Math.cos(a) * lean * t * t + Math.cos(a) * 0.03, p.getY(i) + Math.sin(a) * lean * t * t + Math.sin(a) * 0.03); }
-    blade.computeVertexNormals();
-    geos.push(prep(blade, k % 2 ? '#6f8f3a' : '#839c45', (pp, i) => [Math.max(0, pp.getZ(i)), 1]));
-  }
-  const head = zUp(new THREE.CapsuleGeometry(0.03, 0.12, 2, 6)); head.translate(0.04, 0, 0.9);
+  const sway = (pp, i) => [Math.max(0, Math.min(1, pp.getZ(i))), 1];
+
+  const stemH = 0.86;
+  const stem = zUp(new THREE.CylinderGeometry(0.011, 0.016, stemH, 5));
+  stem.translate(0, 0, stemH / 2);
+  geos.push(prep(stem, '#7d9440', sway));
+
+  const head = zUp(new THREE.CapsuleGeometry(0.036, 0.15, 3, 9));
+  head.translate(0, 0, stemH - 0.04);
   geos.push(prep(head, '#6b4a2a', () => [0.9, 1]));
+
+  const bladeHs = [0.62, 0.74, 0.55, 0.69, 0.5, 0.66];
+  for (let k = 0; k < bladeHs.length; k++) {
+    const a = k / bladeHs.length * Math.PI * 2 + 0.3;
+    const h = bladeHs[k];
+    const lean = 0.1 + k * 0.012;
+    const blade = zUp(new THREE.CylinderGeometry(0.006, 0.026, h, 4));
+    blade.translate(0, 0, h / 2);
+    const p = blade.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const t = p.getZ(i) / h;
+      const d = lean * t * t + 0.016;
+      p.setXY(i, p.getX(i) + Math.cos(a) * d, p.getY(i) + Math.sin(a) * d);
+    }
+    blade.computeVertexNormals();
+    geos.push(prep(blade, k % 2 ? '#6f8f3a' : '#839c45', sway));
+  }
+
   const root = new THREE.Group(); root.name = 'Reed';
   root.add(meshOf(geos, mat('#ffffff', 0.8, { vertexColors: true }), 'ReedMesh'));
-  return root;
+  return normalize(root, { h: 1, centerXY: false });   // origin = clump centre
 }
 
 // ---------- lily pad (radius 1) ----------
 function buildLilypad() {
   const geos = [];
-  const pad = new THREE.CircleGeometry(1, 20, 0.35, Math.PI * 2 - 0.35); pad.translate(0, 0, 0.01);
+  // A shallow open cone with the apex downwards is a near flat pad that keeps the dished centre
+  // and upturned rim of a real lily; the theta gap leaves the characteristic notch.
+  const pad = new THREE.ConeGeometry(1, 0.075, 24, 1, true, 0.35, Math.PI * 2 - 0.35);
+  pad.rotateX(-Math.PI / 2);
   geos.push(prep(pad, '#4f8a3b', (p, i) => [Math.hypot(p.getX(i), p.getY(i)) * 0.3, 1]));
-  const flower = new THREE.ConeGeometry(0.28, 0.3, 6); zUp(flower); flower.translate(0.2, 0.15, 0.16);
-  geos.push(prep(flower, '#f4b8d0', () => [0.3, 1]));
+
+  // bloom: a yellow core ringed by tapered petals, kept small so it reads as a flower
+  const fx = -0.18, fy = 0.26, fz = 0.07;   // clear of the notch, which is on +X
+  const core = zUp(new THREE.SphereGeometry(0.05, 8, 6)); core.scale(1, 1, 0.7);
+  core.translate(fx, fy, fz + 0.01);
+  geos.push(prep(core, '#f2d85c', () => [0.3, 1]));
+  for (let k = 0; k < 7; k++) {
+    const petal = zUp(new THREE.CylinderGeometry(0.05, 0.006, 0.15, 4));   // wide end is the tip
+    petal.translate(0, 0, 0.075);
+    petal.rotateY(1.1);
+    petal.rotateZ(k / 7 * Math.PI * 2);
+    petal.translate(fx, fy, fz);
+    geos.push(prep(petal, k % 2 ? '#f4b8d0' : '#f7dcea', () => [0.3, 1]));
+  }
   const root = new THREE.Group(); root.name = 'Lilypad';
   root.add(meshOf(geos, mat('#ffffff', 0.5, { vertexColors: true, side: THREE.DoubleSide }), 'LilypadMesh'));
-  return root;
+  return normalize(root, { r: 1, centerXY: false });   // origin = pad centre
 }
 
 // ---------- bleached skull (height 1) ----------
@@ -293,17 +464,46 @@ function buildSkull() {
   const geos = [], B = '#efe6d2';
   const cran = new THREE.SphereGeometry(0.42, 12, 10); cran.scale(1, 0.85, 0.75); cran.translate(0, 0, 0.35);
   geos.push(prep(cran, B));
-  const snout = new THREE.CylinderGeometry(0.16, 0.26, 0.6, 10); snout.rotateZ(Math.PI / 2); snout.translate(0.5, 0, 0.25);
+
+  // muzzle narrows towards the nose and droops; the other way round reads as a megaphone
+  const snout = new THREE.CylinderGeometry(0.115, 0.21, 0.54, 9);
+  snout.rotateZ(-Math.PI / 2);
+  snout.scale(1, 1, 0.85);
+  snout.rotateY(0.14);
+  snout.translate(0.44, 0, 0.3);
   geos.push(prep(snout, B));
+  const nose = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 8);
+  nose.rotateZ(-Math.PI / 2); nose.translate(0.685, 0, 0.262);
+  geos.push(prep(nose, '#3a3026'));
+  // cheek mass fills the corner where the muzzle meets the braincase, hiding the seam
+  const cheek = new THREE.SphereGeometry(0.21, 10, 8);
+  cheek.scale(1, 0.92, 0.88); cheek.translate(0.23, 0, 0.32);
+  geos.push(prep(cheek, B));
+
   for (const s of [-1, 1]) {
-    const horn = new THREE.TorusGeometry(0.35, 0.05, 6, 10, Math.PI * 0.6); horn.rotateX(Math.PI / 2); horn.rotateZ(s > 0 ? 0.2 : Math.PI - 0.2); horn.translate(-0.05, s * 0.28, 0.55);
-    geos.push(prep(horn, '#d8cbb0'));
-    const eye = new THREE.SphereGeometry(0.08, 8, 6); eye.translate(0.28, s * 0.2, 0.42);
+    // horn: tapered segments along a curve whose root starts inside the braincase, so it grows
+    // out of the skull instead of hovering beside it
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.04, s * 0.13, 0.45),
+      new THREE.Vector3(-0.12, s * 0.34, 0.55),
+      new THREE.Vector3(-0.11, s * 0.50, 0.72),
+      new THREE.Vector3(0.00, s * 0.52, 0.90),
+      new THREE.Vector3(0.13, s * 0.41, 0.98),
+    ]);
+    const N = 12, rad = t => 0.08 * (1 - t) + 0.011 * t;
+    for (let k = 0; k < N; k++) {
+      const t0 = k / N, t1 = (k + 1) / N;
+      geos.push(prep(limb(curve.getPoint(t0), curve.getPoint(t1), rad(t0), rad(t1)), '#d8cbb0'));
+    }
+    // socket: a dark lens barely breaking the surface, not a protruding eyeball
+    const eye = new THREE.SphereGeometry(0.1, 10, 8);
+    eye.scale(1, 0.32, 1);
+    eye.translate(0.16, s * 0.28, 0.47);
     geos.push(prep(eye, '#2b241c'));
   }
   const root = new THREE.Group(); root.name = 'Skull';
   root.add(meshOf(geos, mat('#ffffff', 0.7, { vertexColors: true }), 'SkullMesh'));
-  return root;
+  return normalize(root, { h: 1 });
 }
 
 // ---------- tumbleweed (radius 1) ----------
@@ -316,7 +516,8 @@ function buildTumbleweed() {
   }
   const root = new THREE.Group(); root.name = 'Tumbleweed';
   root.add(meshOf(geos, mat('#ffffff', 0.95, { vertexColors: true }), 'TumbleweedMesh'));
-  return root;
+  // race-map-desert.js places these at ground + r and rolls them, so the origin is the centre
+  return normalize(root, { r: 1, anchor: 'center' });
 }
 
 function exportGlb(filename, object) {
@@ -330,19 +531,26 @@ function exportGlb(filename, object) {
   });
 }
 
-await exportGlb('palm.glb', buildPalm());
-await exportGlb('pyramid.glb', buildPyramid());
-await exportGlb('obelisk.glb', buildObelisk());
-await exportGlb('arch.glb', buildArch());
-await exportGlb('pillar_broken.glb', buildPillar());
-await exportGlb('block.glb', buildBlock());
-await exportGlb('rock_a.glb', buildRock('RockA', 1, 0.18, '#a88458'));
-await exportGlb('rock_b.glb', buildRock('RockB', 1, 0.22, '#9a7a52'));
-await exportGlb('rock_c.glb', buildRock('RockC', 0, 0.2, '#b8956a'));
-await exportGlb('pebble.glb', buildRock('Pebble', 0, 0.15, '#9c8866'));
-await exportGlb('cactus.glb', buildCactus());
-await exportGlb('reed.glb', buildReed());
-await exportGlb('lilypad.glb', buildLilypad());
-await exportGlb('skull.glb', buildSkull());
-await exportGlb('tumbleweed.glb', buildTumbleweed());
-console.log('Wrote desert GLBs to', outDir);
+const jobs = {
+  palm: () => exportGlb('palm.glb', buildPalm()),
+  pyramid: () => exportGlb('pyramid.glb', buildPyramid()),
+  obelisk: () => exportGlb('obelisk.glb', buildObelisk()),
+  arch: () => exportGlb('arch.glb', buildArch()),
+  pillar_broken: () => exportGlb('pillar_broken.glb', buildPillar()),
+  block: () => exportGlb('block.glb', buildBlock()),
+  rock_a: () => exportGlb('rock_a.glb', buildRock('RockA', 1, 0.18, '#a88458')),
+  rock_b: () => exportGlb('rock_b.glb', buildRock('RockB', 1, 0.22, '#9a7a52')),
+  rock_c: () => exportGlb('rock_c.glb', buildRock('RockC', 0, 0.2, '#b8956a')),
+  pebble: () => exportGlb('pebble.glb', buildRock('Pebble', 0, 0.15, '#9c8866')),
+  cactus: () => exportGlb('cactus.glb', buildCactus()),
+  reed: () => exportGlb('reed.glb', buildReed()),
+  lilypad: () => exportGlb('lilypad.glb', buildLilypad()),
+  skull: () => exportGlb('skull.glb', buildSkull()),
+  tumbleweed: () => exportGlb('tumbleweed.glb', buildTumbleweed()),
+};
+const pick = process.argv[2];
+for (const [name, run] of Object.entries(jobs)) {
+  if (pick && pick !== name) continue;
+  await run();
+}
+console.log('Wrote desert GLBs to', outDir, pick ? `(${pick})` : '(all)');

@@ -78,20 +78,31 @@ instead of drawing the dish floor and wall.
 - **Walls:** sandstone block texture, coping, merlons and corner towers. The inner face
   sits exactly at ±25.
 - **Water:** glassy pools with scrolling normals, ripple rings, reeds and lily pads.
-- **Odor trails:** one ribbon per lane, draped on the ground, with vertex alpha and
-  wisps that flow toward the sugar. There's also a pulsing glow over the plaza.
+- **Odor:** vinegar fields stay in `env.odors` (centre disc + elongated lane blobs). The
+  green ribbon meshes and plaza glow are not drawn — they were transparent overdraw on
+  the whole floor every frame. Packed-sand lane paint on the floor canvas is still there.
 - **Lamps:** stone post, iron bowl, an unlit flame cone, an additive ember and a halo
   sprite per lamp, plus a `PointLight` on the six `light: true` ones. One flicker term
   per lamp drives the flame scale, the ember, the halo opacity and the light intensity.
-- **Props:** GLBs in `public/maps/desert/`, baked by `node scripts/export_desert_props.mjs`.
-  They're unit-normalised and scaled at placement. There's one `InstancedMesh` per template
-  mesh, about 16 draw calls in all.
+- **Props:** GLBs in `public/maps/desert/`, baked by `node scripts/export_desert_props.mjs`
+  (single prop: `node scripts/export_desert_props.mjs arch`). Procedural meshes live in
+  that script; each export ends in `normalize()`, which **bakes every node transform into the
+  geometry** before scaling to the unit contract and grounding `foot Z` at 0. That bake is
+  load-bearing: the arena instances raw `mesh.geometry`, so a transform left on a node shows
+  up in the studio but not in game. `propScale()` in `src/desert-prop-scale.js` applies
+  instance scale in the arena. One `InstancedMesh` per template mesh (~16 draw calls).
+  Swaying props bake a `_sway` vec2 attribute — do not strip it.
+- **Prop QC:** `node scripts/audit_desert_props.mjs [name]` checks each GLB against its unit
+  contract (footprint, height, centring) and flags pieces that float free of the rest of the
+  mesh. Then look at it: `/local/prop-studio?set=desert&prop=arch&scale=0`. Judge the mesh with
+  `scale=0`; turn the in-game scale toggle on only to preview lane proportions.
 - **Motion:** palms, reeds and lily pads sway through an `onBeforeCompile` vertex patch that
   reads the baked `_sway` attribute (bend weight, flutter flag). A matching depth material
   keeps the shadows in step. Tumbleweeds roll along the wall bands. There are dust motes and
   a hawk shadow.
-- **Sky:** night dome with stars and a low moon (outside `envGroup`, so they don't tilt),
-  dark fog, dim blue moonlight and a warm rim. Everything is restored on `dispose()`.
+- **Sky:** a flat night background, ~80 screen-space stars and a moon sprite (outside
+  `envGroup`, so they don't tilt). No gradient dome. Fog matches the background. Moonlight
+  and a warm rim, all restored on `dispose()`.
 
 Wind is `windField(t)` in `src/race-wind.js`: a deterministic function of wall-clock
 seconds (`Date.now()`), so the host and every watcher sway and hear the same gusts
