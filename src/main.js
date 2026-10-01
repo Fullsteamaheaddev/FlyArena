@@ -2,9 +2,19 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadNeurons, loadGraph, loadSkeletons } from './data.js';
 import { FlyBrain } from './brain.js';
+import { t, applyDom, onLocaleChange, formatLoadStatus } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
-const status = (s) => { $('#status').textContent = s; };
+const status = (s) => { $('#status').textContent = formatLoadStatus(s); };
+applyDom();
+onLocaleChange(() => {
+  applyDom();
+  if (data) {
+    $('#summary').textContent = t('viewer.summary', { n: N.toLocaleString(), e: data.E.toLocaleString() });
+    renderDrives();
+    if (selected >= 0) renderSelection();
+  }
+});
 
 // ---------- palettes ----------
 const SC_COLORS = {
@@ -37,7 +47,7 @@ async function main() {
   $('#loading').remove();
   animate();
   const bg = document.createElement('div'); bg.id = 'bgload'; document.body.append(bg);
-  const lines = { graph: 'connectome…', skel: 'skeletons…' };
+  const lines = { graph: t('load.connectomeDots'), skel: t('load.skeletonsDots') };
   const show = (k) => (s) => { lines[k] = s; bg.innerHTML = Object.values(lines).filter(Boolean).map(x => `<div>${x}</div>`).join(''); };
   const done = (k) => { lines[k] = ''; show(k)(''); if (!lines.graph && !lines.skel) bg.remove(); };
   show('graph')(lines.graph);
@@ -51,7 +61,7 @@ async function main() {
   $('#play').disabled = false;
   applyDeepLink();
   if (selected >= 0) renderSelection();
-  $('#summary').textContent = `${N.toLocaleString()} traced neurons · ${data.E.toLocaleString()} connections (model uses ≥5-synapse connections)`;
+  $('#summary').textContent = t('viewer.summary', { n: N.toLocaleString(), e: data.E.toLocaleString() });
   brain.onFrame(onFrame);
   done('graph');
   await skelP;
@@ -220,7 +230,7 @@ function fillDatalist() {
   $('#groupList').innerHTML = vals.slice(0, 4000).map(v => `<option value="${v}">`).join('');
 }
 function renderDrives() {
-  $('#drives').innerHTML = drives.map((d, i) => `<li><span>${d.label} · ${d.indices.length} neurons · ${d.rate} Hz</span><button data-i="${i}">✕</button></li>`).join('');
+  $('#drives').innerHTML = drives.map((d, i) => `<li><span>${t('viewer.driveLine', { label: d.label, n: d.indices.length, hz: d.rate })}</span><button data-i="${i}">✕</button></li>`).join('');
   $('#drives').querySelectorAll('button').forEach(b => b.onclick = () => { const d = drives.splice(+b.dataset.i, 1)[0]; brain.drive(d.indices, 0); renderDrives(); });
 }
 
@@ -231,7 +241,7 @@ function select(i) {
 }
 function renderSelection() {
   const i = selected; const m = data.meta;
-  if (!data.indptr) { $('#selinfo').innerHTML = `<div><b>${m.types[i] || '(untyped)'}</b></div><div style="color:var(--dim)">loading connectivity…</div>`; return; }
+  if (!data.indptr) { $('#selinfo').innerHTML = `<div><b>${m.types[i] || t('viewer.untyped')}</b></div><div style="color:var(--dim)">${t('viewer.loadingConn')}</div>`; return; }
   const partners = (dir) => {
     const list = [];
     if (dir === 'out') { for (let j = data.indptr[i]; j < data.indptr[i + 1]; j++) list.push([data.indices[j], data.weights[j]]); }
@@ -239,12 +249,12 @@ function renderSelection() {
     list.sort((a, b) => b[1] - a[1]);
     return list.slice(0, 25).map(([j, w]) => `<div data-j="${j}"><span>${m.types[j] || m.superclasses[data.superclass[j]]} <small style="color:var(--dim)">${data.bodyIds[j]}</small></span><span>${w}${spikeCounts ? ` · ${spikeCounts[j]}⚡` : ''}</span></div>`).join('');
   };
-  $('#selinfo').innerHTML = `<div><b>${m.types[i] || '(untyped)'}</b> ${m.instances[i] ? `<span style="color:var(--dim)">${m.instances[i]}</span>` : ''}</div>
-    <div>body ${data.bodyIds[i]} · ${m.superclasses[data.superclass[i]]} · ${m.nts[data.nt[i]]} · side ${['?', 'L', 'R', 'M'][data.side[i]]}</div>
-    <div>in ${data.indeg[i]} · out ${data.outdeg[i]} partners${spikeCounts ? ` · <b>${spikeCounts[i]}</b> spikes` : ''}</div>
-    <div class="row" style="margin-top:6px"><button id="stimSel">Drive this neuron</button><button id="pulseSel">Pulse</button><button id="stimType">Drive its type</button></div>
-    <div style="margin-top:6px;color:var(--dim)">strongest outputs</div><div class="partners">${partners('out')}</div>
-    <div style="margin-top:6px;color:var(--dim)">strongest inputs</div><div class="partners">${partners('in')}</div>`;
+  $('#selinfo').innerHTML = `<div><b>${m.types[i] || t('viewer.untyped')}</b> ${m.instances[i] ? `<span style="color:var(--dim)">${m.instances[i]}</span>` : ''}</div>
+    <div>${t('viewer.bodyLine', { id: data.bodyIds[i], sc: m.superclasses[data.superclass[i]], nt: m.nts[data.nt[i]], side: ['?', 'L', 'R', 'M'][data.side[i]] })}</div>
+    <div>${spikeCounts ? t('viewer.ioSpikes', { inn: data.indeg[i], out: data.outdeg[i], n: spikeCounts[i] }) : t('viewer.ioLine', { inn: data.indeg[i], out: data.outdeg[i] })}</div>
+    <div class="row" style="margin-top:6px"><button id="stimSel">${t('viewer.driveThis')}</button><button id="pulseSel">${t('viewer.pulse')}</button><button id="stimType">${t('viewer.driveType')}</button></div>
+    <div style="margin-top:6px;color:var(--dim)">${t('viewer.outputs')}</div><div class="partners">${partners('out')}</div>
+    <div style="margin-top:6px;color:var(--dim)">${t('viewer.inputs')}</div><div class="partners">${partners('in')}</div>`;
   $('#stimSel').onclick = () => addDrive(`${m.types[i] || 'body'} ${data.bodyIds[i]}`, [i], +$('#rateHz').value);
   $('#pulseSel').onclick = () => brain.pulse([i], 10);
   $('#stimType').onclick = () => { const ix = groupIndices('type', m.types[i], 0); addDrive(m.types[i], ix, +$('#rateHz').value); };
@@ -275,7 +285,7 @@ function buildViewUI() {
 }
 function buildSimUI() {
   let running = false;
-  $('#play').onclick = () => { running = !running; running ? brain.run() : brain.pause(); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
+  $('#play').onclick = () => { running = !running; running ? brain.run() : brain.pause(); $('#play').textContent = running ? t('panel.pause') : t('panel.run'); };
   $('#reset').onclick = () => brain.reset();
   $('#speed').oninput = (e) => { brain.setParams({ speed: +e.target.value }); $('#speedv').textContent = `${(+e.target.value).toFixed(2)}×`; };
   brain.setParams({ speed: 0.5 });
@@ -290,11 +300,11 @@ function buildSimUI() {
 // with those types driven at 80 Hz. Linked from structures.html.
 function applyDeepLink() {
   const qs = new URLSearchParams(location.search);
-  const t = qs.get('type');
-  if (t) {
-    const i = data.meta.types.indexOf(t);
-    if (i >= 0) { $('#groupKind').value = 'type'; fillDatalist(); $('#groupQuery').value = t; select(i); }
-    else status(`type "${t}" not found`);
+  const typeQ = qs.get('type');
+  if (typeQ) {
+    const i = data.meta.types.indexOf(typeQ);
+    if (i >= 0) { $('#groupKind').value = 'type'; fillDatalist(); $('#groupQuery').value = typeQ; select(i); }
+    else status(`type "${typeQ}" not found`);
   }
   const drv = qs.get('drive');
   if (drv) {
@@ -305,6 +315,6 @@ function applyDeepLink() {
       if (ix.length) addDrive(`${name}`, ix, rate); else status(`type "${name}" not found`);
     }
   }
-  if (qs.get('run') && $('#play').textContent.includes('Run')) $('#play').click();
+  if (qs.get('run')) $('#play').click();
 }
 main().catch(e => { status('error: ' + e.message); console.error(e); });

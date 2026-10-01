@@ -22,55 +22,55 @@
 <body>
 <canvas id="c"></canvas>
 <aside id="brainpanel" hidden>
-  <header><h2 id="bpTitle">Inside fly 0</h2><span class="lr"><i class="l"></i>left <i class="r"></i>right</span><button id="bpFold" class="fold" title="Hide brain panel (])" aria-expanded="true">›</button></header>
+  <header><h2 id="bpTitle" data-i18n="brain.title">Inside fly 0</h2><span class="lr"><i class="l"></i><span data-i18n="brain.left">left</span> <i class="r"></i><span data-i18n="brain.right">right</span></span><button id="bpFold" class="fold" data-i18n-title="brain.hide" title="Hide brain panel (])" aria-expanded="true">›</button></header>
   <div id="bpBody">
-    <div class="eyes"><figure><canvas id="eyeL" width="168" height="116"></canvas><figcaption>left eye</figcaption></figure><figure><canvas id="eyeR" width="168" height="116"></canvas><figcaption>right eye</figcaption></figure></div>
-    <div class="note">What each eye sees: brightness in its 721 columns, as fed to the optic-lobe model.</div>
+    <div class="eyes"><figure><canvas id="eyeL" width="168" height="116"></canvas><figcaption data-i18n="brain.leftEye">left eye</figcaption></figure><figure><canvas id="eyeR" width="168" height="116"></canvas><figcaption data-i18n="brain.rightEye">right eye</figcaption></figure></div>
+    <div class="note" data-i18n="brain.eyesNote">What each eye sees: brightness in its 721 columns, as fed to the optic-lobe model.</div>
     <div id="groups"></div>
   </div>
   <canvas id="brain"></canvas>
 </aside>
-<button id="bpHint" hidden type="button" title="Show brain panel">!</button>
-<div id="loading"><div class="title">Embodied male fly connectome</div><div id="status">loading…</div></div>
+<button id="bpHint" hidden type="button" data-i18n-title="brain.showHint" title="Show brain panel">!</button>
+<div id="loading"><div class="title">Embodied male fly connectome</div><div id="status" data-i18n="load.ellipsis">loading…</div></div>
 <aside id="panel">
   <header>
-    <div class="hrow"><h1>Fly arena</h1><button id="panelFold" class="fold" title="Hide controls ([)" aria-expanded="true">‹</button></div>
-    <div class="sub">Each fly: 165,122-neuron connectome brain in a flybody physics body. <a href="./">brain viewer</a> · <a href="structures.html">algorithmic structures</a></div>
+    <div class="hrow"><h1 data-i18n="panel.title">Fly arena</h1><button id="panelFold" class="fold" data-i18n-title="panel.hideControls" title="Hide controls ([)" aria-expanded="true">‹</button></div>
+    <div class="sub"><span data-i18n="panel.subLinks">Each fly: 165,122-neuron connectome brain in a flybody physics body. </span><a href="./" data-i18n="panel.brainViewer">brain viewer</a> · <a href="structures.html" data-i18n="panel.structures">algorithmic structures</a></div>
   </header>
   <section>
     <div class="row">
-      <button id="play" class="primary">▶ Run</button>
-      <button id="addFly">+ Fly</button>
-      <button id="addFemale" title="Add a female fly (males court her)">+ ♀</button>
-      <label>speed <input id="speed" type="range" min="0.05" max="2" step="0.05" value="2"><span id="speedv">2.00×</span></label>
+      <button id="play" class="primary" data-i18n="panel.run">▶ Run</button>
+      <button id="addFly" data-i18n="panel.addFly">+ Fly</button>
+      <button id="addFemale" data-i18n="panel.addFemale" data-i18n-title="panel.addFemaleTitle" title="Add a female fly (males court her)">+ ♀</button>
+      <label><span data-i18n="panel.speed">speed</span> <input id="speed" type="range" min="0.05" max="2" step="0.05" value="2"><span id="speedv">2.00×</span></label>
     </div>
-    <div class="row"><label>world <select id="preset"></select></label></div>
+    <div class="row"><label><span data-i18n="panel.world">world</span> <select id="preset"></select></label></div>
     <div class="row">
-      <label>motor <select id="mode"><option value="descending">descending commands</option><option value="connectome">full connectome VNC</option></select></label>
-      <label><input type="checkbox" id="follow" checked> follow</label>
+      <label><span data-i18n="panel.motor">motor</span> <select id="mode"><option value="descending" data-i18n="panel.motorDescending">descending commands</option><option value="connectome" data-i18n="panel.motorConnectome">full connectome VNC</option></select></label>
+      <label><input type="checkbox" id="follow" checked> <span data-i18n="panel.follow">follow</span></label>
     </div>
-    <div class="stats" id="clock"><div><b id="simt">0.0</b><span>sim s</span></div><div><b id="rt">–</b><span>× real time</span></div><div><b id="nfly">0</b><span>flies</span></div><div><b id="fps">0</b><span>fps</span></div></div>
+    <div class="stats" id="clock"><div><b id="simt">0.0</b><span data-i18n="panel.simS">sim s</span></div><div><b id="rt">–</b><span data-i18n="panel.realTime">× real time</span></div><div><b id="nfly">0</b><span data-i18n="panel.flies">flies</span></div><div><b id="fps">0</b><span data-i18n="panel.fps">fps</span></div></div>
   </section>
   <section>
-    <h2>Place</h2>
+    <h2 data-i18n="panel.place">Place</h2>
     <div class="row tools">
-      <button data-tool="food">sugar</button><button data-tool="odor">vinegar odor</button><button data-tool="bitter">bitter</button>
-      <button data-tool="hazard">heat</button><button data-tool="obstacle">block</button><button data-tool="co2">CO₂</button><button data-tool="none" class="on">none</button>
+      <button data-tool="food" data-i18n="panel.sugar">sugar</button><button data-tool="odor" data-i18n="panel.odor">vinegar odor</button><button data-tool="bitter" data-i18n="panel.bitter">bitter</button>
+      <button data-tool="hazard" data-i18n="panel.heat">heat</button><button data-tool="obstacle" data-i18n="panel.block">block</button><button data-tool="co2" data-i18n="panel.co2">CO₂</button><button data-tool="none" class="on" data-i18n="panel.none">none</button>
     </div>
-    <div class="note">Click the floor to place. Flies sense these only through their sensory neurons.</div>
+    <div class="note" data-i18n="panel.placeNote">Click the floor to place. Flies sense these only through their sensory neurons.</div>
   </section>
   <section>
-    <h2>Challenges</h2>
-    <div class="row"><button id="threat">Looming threat → selected fly</button><button id="takeoff" title="Excite the selected fly's takeoff descending neurons (DNp02, DNp04), as optogenetic activation would">Activate takeoff DNs</button></div>
-    <div class="row"><label>wind <input id="wind" type="range" min="0" max="30" step="1" value="0"> <span id="windv">0</span> cm/s</label>
-    <label>light <input id="light" type="range" min="0.05" max="1.5" step="0.05" value="1"></label></div>
+    <h2 data-i18n="panel.challenges">Challenges</h2>
+    <div class="row"><button id="threat" data-i18n="panel.threat">Looming threat → selected fly</button><button id="takeoff" data-i18n="panel.takeoff" data-i18n-title="panel.takeoffTitle" title="Excite the selected fly's takeoff descending neurons (DNp02, DNp04), as optogenetic activation would">Activate takeoff DNs</button></div>
+    <div class="row"><label><span data-i18n="panel.wind">wind</span> <input id="wind" type="range" min="0" max="30" step="1" value="0"> <span id="windv">0</span> <span data-i18n="panel.cmS">cm/s</span></label>
+    <label><span data-i18n="panel.light">light</span> <input id="light" type="range" min="0.05" max="1.5" step="0.05" value="1"></label></div>
   </section>
   <section>
-    <h2>Flies</h2>
+    <h2 data-i18n="panel.fliesH">Flies</h2>
     <div id="flies"></div>
   </section>
   <section id="selsec" hidden>
-    <h2>Selected fly</h2>
+    <h2 data-i18n="panel.selected">Selected fly</h2>
     <div id="sel"></div>
   </section>
 </aside>
@@ -85,9 +85,9 @@
 </div>
 <div id="profileScrim" hidden></div>
 <aside id="profile" hidden>
-  <header><h2>You</h2><div class="profile-actions"><button type="button" id="profileConnect">Connect</button><button type="button" id="profileDisconnect" class="danger" hidden>Disconnect</button><button id="profileFold" class="fold" type="button" title="Hide profile" aria-expanded="true">›</button></div></header>
+  <header><h2 data-i18n="profile.title">You</h2><div class="profile-actions"><div id="langSelect"></div><button type="button" id="profileConnect" data-i18n="profile.connect">Connect</button><button type="button" id="profileDisconnect" class="danger" hidden data-i18n="profile.disconnect">Disconnect</button><button id="profileFold" class="fold" type="button" data-i18n-title="profile.hide" title="Hide profile" aria-expanded="true">›</button></div></header>
   <div id="profileBody">
-    <p id="profileBal">Connect a wallet</p>
+    <p id="profileBal" data-i18n="profile.connectHint">Connect a wallet</p>
     <p id="profileNote"></p>
     <ul id="profileTickets"></ul>
   </div>
@@ -97,8 +97,8 @@
 </div>
 <div id="walletPick" hidden>
   <div class="race-card wallet-pick-card" role="dialog" aria-labelledby="walletPickTitle" aria-modal="true">
-    <h1 id="walletPickTitle">Open a wallet</h1>
-    <p>Continue in an app that can browse this site.</p>
+    <h1 id="walletPickTitle" data-i18n="wallet.title">Open a wallet</h1>
+    <p data-i18n="wallet.body">Continue in an app that can browse this site.</p>
     <button type="button" id="walletMetaMask" class="connect-btn">MetaMask</button>
     <button type="button" id="walletRabby" class="connect-btn">Rabby</button>
   </div>

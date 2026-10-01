@@ -11,7 +11,7 @@ Upstream: [Lulzx/fly-brain](https://github.com/Lulzx/fly-brain). Browser sim of 
 ```sh
 npm install
 npm run dev                  # Vite; COOP/COEP headers in vite.config.js
-npm run relay                # Match WebSocket (host/watch); ws://localhost:8787
+npm run relay                # Match WebSocket (host/watch); ws://localhost:8787 — set HOST_SECRET; /racehost prompts for it
 npm run compile:contracts    # PlayChip + RacePool
 npm run chain                # local Hardhat (31337)
 npm run deploy:local         # write contracts/deployments/31337.json
@@ -25,7 +25,7 @@ npm run deploy:robinhood-testnet # PlayChip + RacePool on Robinhood testnet (466
 | `/arena.html?gpu=0` | Force WASM brain (no WebGPU) |
 | `/arena.html?env=courtship` | Preset (`foraging` default; see `PRESETS` in `src/sim/world.js`) |
 | `/arena.html?env=race` | Sugar Run host (same as `/racehost`) |
-| `/racehost` | Sugar Run host (this machine runs it) |
+| `/racehost` | Sugar Run host (this machine runs it; password from `HOST_SECRET` on the relay) |
 | `/brain` | Connectome viewer (`brain.html` → `src/main.js`) |
 | `/admin` | Race pool owner (token, window, operator, mint); UI only after owner wallet connects |
 | `/fly.html` | Anatomy / Blender fly (`src/fly.js`) |

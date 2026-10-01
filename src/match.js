@@ -22,33 +22,53 @@ export function matchUrl() {
   return `${proto}//${location.hostname}:8787`;
 }
 
-export function createMatchLink({ role, onState, onStatus, onPool }) {
-  let ws, alive = true, timer = null;
+export function createMatchLink({ role, onState, onStatus, onPool, secret }) {
+  let ws, alive = true, timer = null, paused = false;
+  const secretVal = () => (typeof secret === 'function' ? secret() : secret) || '';
+  function sendHello() {
+    if (ws?.readyState !== 1) return;
+    const hello = { type: 'hello', role };
+    if (role === 'host') hello.secret = secretVal();
+    ws.send(JSON.stringify(hello));
+  }
   function connect() {
-    if (!alive) return;
+    if (!alive || paused) return;
     const url = matchUrl();
     try { ws = new WebSocket(url); }
     catch {
       onStatus?.('offline'); timer = setTimeout(connect, 1500); return;
     }
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'hello', role }));
-      onStatus?.('live');
+      sendHello();
+      if (role !== 'host') onStatus?.('live');
     };
     ws.onmessage = e => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
+      if (msg.type === 'hello-ok') {
+        onStatus?.('live');
+        return;
+      }
       if (msg.type === 'state') {
         onState?.(msg);
       }
       if (msg.type === 'pool') onPool?.(msg);
       if (msg.type === 'error') {
         onStatus?.(msg.error);
+        if (role === 'host' && msg.error === 'host-auth') {
+          paused = true;
+          clearTimeout(timer);
+          return;
+        }
+        if (role === 'host' && msg.error === 'host-taken') {
+          clearTimeout(timer);
+          timer = setTimeout(() => { try { ws?.close(); } catch {} }, 1500);
+        }
       }
     };
     ws.onclose = () => {
       onStatus?.('offline');
-      if (alive) timer = setTimeout(connect, 1500);
+      if (alive && !paused) timer = setTimeout(connect, 1500);
     };
     ws.onerror = () => { try { ws.close(); } catch {} };
   }
@@ -60,8 +80,16 @@ export function createMatchLink({ role, onState, onStatus, onPool }) {
     },
     close() {
       alive = false;
+      paused = true;
       clearTimeout(timer);
       try { ws?.close(); } catch {}
+    },
+    retry() {
+      paused = false;
+      clearTimeout(timer);
+      if (ws?.readyState === 1) { sendHello(); return; }
+      try { ws?.close(); } catch {}
+      connect();
     },
   };
 }

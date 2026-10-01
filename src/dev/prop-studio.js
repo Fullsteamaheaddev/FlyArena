@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { applyCelShading } from '../cel-shade.js';
+import { attachCakeSilhouette } from '../race-chaos-props.js';
 import { applyUfoRimGlow, ensureUfoHullOpaque } from '../ufo-rim-glow.js';
 import { DESERT_MAP_PROP_NAMES, DESERT_PREVIEW_PROPS, propScale } from '../desert-prop-scale.js';
 
@@ -226,6 +227,9 @@ async function loadProp(name) {
     if (name === 'ufo') {
       applyUfoRimGlow(propRoot, { sceneLights: false });
       ensureUfoHullOpaque(propRoot);
+    } else if (name === 'cake_slice') {
+      applyCelShading(propRoot, { outline: false });
+      attachCakeSilhouette(propRoot, THREE);
     } else {
       applyCelShading(propRoot);
     }

@@ -46,6 +46,16 @@ export function cloneChaosProp(name) {
   if (name === 'ufo') applyUfoRimGlow(root, { sceneLights: true });
   else if (name === 'cake_slice') {
     applyCelShading(root, { outline: false });
+    root.traverse(o => {
+      if (!o.isMesh || o.name === 'CelOutline') return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (!m || m.isMeshBasicMaterial || m.isSpriteMaterial) continue;
+        m.transparent = false;
+        m.depthWrite = true;
+        m.opacity = 1;
+      }
+    });
     attachCakeSilhouette(root, THREE);
   } else applyCelShading(root);
   root.traverse(o => {

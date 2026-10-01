@@ -2,7 +2,6 @@
 // patch that follows the tube surface and knuckle creases.
 // Thumb/finger local axes: contact at origin, shaft toward +Z, nail (dorsal) +X.
 // Hand local axes: palm in XY, fingers toward +Y, back of hand -Z.
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { celRamp, celRampCake, celOutline, celOutlineMat } from './cel-shade.js';
 
 const CAKE_INK = '#120c14';
@@ -18,7 +17,7 @@ function cakeToonMat(T, color, glow = 0.16) {
     emissive: color,
     emissiveIntensity: glow,
     flatShading: true,
-    transparent: true,
+    transparent: false,
     opacity: 1,
     depthWrite: true,
   });
@@ -28,40 +27,43 @@ function cakeToonMat(T, color, glow = 0.16) {
   return m;
 }
 
-function mergeWorldGeometries(T, meshes) {
-  const parts = [];
-  for (const mesh of meshes) {
-    if (!mesh?.geometry) continue;
-    mesh.updateMatrix();
-    let g = mesh.geometry.clone();
-    if (g.index) g = g.toNonIndexed();
-    g.applyMatrix4(mesh.matrix);
-    parts.push(g);
-  }
-  if (!parts.length) return null;
-  return mergeGeometries(parts);
+/** Constant-width inverted-hull scale about the geometry's bounding-box centre. */
+function cakeInkScale(box, T, pad = 0.03) {
+  const size = box.getSize(new T.Vector3());
+  const axis = d => Math.min(1.8, Math.max(1.02, (d + 2 * pad) / Math.max(d, 1e-4)));
+  return [axis(size.x), axis(size.y), axis(size.z)];
 }
 
-/** One inverted-hull ink line around every visible cake part (layers, drips, sprinkles, cherry). */
+/**
+ * Proper cel ink: one BackSide hull per cake part, opaque, inflated a fixed width
+ * about that part's centre (not a merged transparent shell).
+ */
 export function attachCakeSilhouette(root, T) {
-  root?.traverse?.(o => {
-    if (o.name === 'CelOutline') o.removeFromParent();
-  });
-  const meshes = [];
-  root?.traverse?.(o => {
-    if (o.isMesh && o.name !== 'CelOutline') meshes.push(o);
-  });
-  root?.updateMatrixWorld?.(true);
-  const shellGeo = mergeWorldGeometries(T, meshes);
-  if (!shellGeo) return null;
+  const stale = [];
+  root?.traverse?.(o => { if (o.name === 'CelOutline') stale.push(o); });
+  for (const o of stale) o.removeFromParent();
   const inkMat = celOutlineMat(T, CAKE_INK);
-  inkMat.depthWrite = false;
-  const ink = new T.Mesh(shellGeo, inkMat);
-  ink.name = 'CelOutline';
-  ink.scale.setScalar(1.062);
-  ink.renderOrder = 20;
-  root.add(ink);
-  return ink;
+  const centre = new T.Vector3();
+  root?.traverse?.(o => {
+    if (!o.isMesh || o.name === 'CelOutline' || !o.geometry) return;
+    const g = o.geometry;
+    if (!g.boundingBox) g.computeBoundingBox();
+    const box = g.boundingBox;
+    if (!box) return;
+    const ex = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
+    if (ex < 0.08) return;
+    box.getCenter(centre);
+    const [sx, sy, sz] = cakeInkScale(box, T);
+    const ink = new T.Mesh(g, inkMat);
+    ink.name = 'CelOutline';
+    ink.scale.set(sx, sy, sz);
+    ink.position.set(centre.x * (1 - sx), centre.y * (1 - sy), centre.z * (1 - sz));
+    ink.renderOrder = -1;
+    ink.castShadow = false;
+    ink.receiveShadow = false;
+    o.add(ink);
+  });
+  return inkMat;
 }
 
 function decal(mat, T, bias) {
@@ -288,39 +290,61 @@ function eachMat(o, fn) {
 export function prepareMeshFade(obj) {
   obj?.traverse?.(o => {
     if (!o.isMesh) return;
+    const outline = isCelOutline(o);
     eachMat(o, m => {
-      m.transparent = true;
-      m.depthWrite = false;
-      m.opacity = 1;
+      if (!m.transparent) {
+        m.transparent = true;
+        m.needsUpdate = true;
+      }
     });
     o.castShadow = false;
     o.receiveShadow = false;
-    o.renderOrder = 12;
+    if (!outline) o.renderOrder = 12;
   });
 }
 
-export function fadeGroup(obj, opacity) {
-  const a = Math.max(0, Math.min(1, opacity));
-  obj?.traverse?.(o => {
-    eachMat(o, m => {
-      m.transparent = true;
-      m.depthWrite = a > 0.98;
-      m.opacity = a;
-    });
-  });
+function isCelOutline(o) {
+  if (o.name === 'CelOutline' || o.name === 'UfoCelOutline') return true;
+  const mats = Array.isArray(o.material) ? o.material : [o.material];
+  return mats.some(m => m && m.isMeshBasicMaterial && m.side === 1);
 }
 
-/** Rock + emissive shell fade together (avoids z-fight / layer pop). */
-export function fadeMeteorChunk(obj, opacity) {
-  const a = Math.max(0, Math.min(1, opacity));
+function applyFadeMat(m, a, { depthWrite }) {
+  if (!m.transparent) {
+    m.transparent = true;
+    m.needsUpdate = true;
+  }
+  m.depthWrite = !!depthWrite;
+  m.opacity = a;
+}
+
+export function fadeGroup(obj, opacity, inkOpacity) {
+  const body = Math.max(0, Math.min(1, opacity));
+  const ink = inkOpacity == null ? body : Math.max(0, Math.min(1, inkOpacity));
   obj?.traverse?.(o => {
     if (!o.isMesh) return;
+    const outline = isCelOutline(o);
+    const a = outline ? ink : body;
+    o.visible = !outline || a > 0.02;
+    if (!o.visible) return;
+    eachMat(o, m => applyFadeMat(m, a, { depthWrite: !outline && a > 0.98 }));
+  });
+}
+
+/** Rock + emissive shell. Pass inkOpacity so the outline can vanish first. */
+export function fadeMeteorChunk(obj, opacity, inkOpacity) {
+  const body = Math.max(0, Math.min(1, opacity));
+  const ink = inkOpacity == null ? body : Math.max(0, Math.min(1, inkOpacity));
+  obj?.traverse?.(o => {
+    if (!o.isMesh) return;
+    const outline = isCelOutline(o);
+    const a = outline ? ink : body;
+    o.visible = !outline || a > 0.02;
+    if (!o.visible) return;
     eachMat(o, m => {
-      m.transparent = true;
-      m.depthWrite = false;
-      m.opacity = a;
-      if (m.emissive && m.userData._emissiveBase != null) {
-        m.emissiveIntensity = m.userData._emissiveBase * a;
+      applyFadeMat(m, a, { depthWrite: false });
+      if (!outline && m.emissive && m.userData._emissiveBase != null) {
+        m.emissiveIntensity = m.userData._emissiveBase * body;
       }
     });
   });

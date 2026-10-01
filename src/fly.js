@@ -12,9 +12,15 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { MacroFocusPass } from './macro-focus.js';
 import { createWingBlurMaterial, lightWingBlur } from './wing-blur.js';
+import { t, applyDom, onLocaleChange, formatLoadStatus } from './i18n.js';
 const BASE = import.meta.env.BASE_URL;
 const $ = s => document.querySelector(s);
-const status = s => { $('#status').textContent = s; };
+const status = s => { $('#status').textContent = formatLoadStatus(s); };
+applyDom();
+onLocaleChange(() => {
+  applyDom();
+  paintFlySub();
+});
 
 // ---------------- anatomy notes (hover) ----------------
 const ANATOMY = [
@@ -191,8 +197,13 @@ addEventListener('resize', () => { resolution.reset(); resize(); }); resize();
 // ---------------- UI state ----------------
 const state = { sex: 'm', wings: 'rest', wingBlend: 0, flight: 0, labels: false };
 const setSeg = (attr, v) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.classList.toggle('on', b.dataset[attr] === v));
+function paintFlySub() {
+  const el = $('#flySub');
+  if (!el) return;
+  el.innerHTML = `${t('fly.sub', { sex: t(state.sex === 'm' ? 'fly.male' : 'fly.female') })}<br><a href="./">${t('panel.brainViewer')}</a> · <a href="./arena.html">${t('viewer.arena')}</a>`;
+}
 function applySex(sex) {
-  state.sex = sex; setSeg('sex', sex); $('#sexLabel').textContent = sex === 'm' ? 'male' : 'female';
+  state.sex = sex; setSeg('sex', sex); paintFlySub();
   for (const im of sexComb) im.visible = sex === 'm';
   appearance.pigment(sex);
   const s = sex === 'f' ? 1.1 : 1; root.scale.setScalar(s);

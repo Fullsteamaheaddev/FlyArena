@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { createHash, timingSafeEqual } from 'crypto';
 import { WebSocketServer } from 'ws';
 import { Contract, JsonRpcProvider, Wallet } from 'ethers';
 
@@ -27,9 +28,17 @@ const poolAbi = require('../src/abi/RacePool.json');
 const POOL = process.env.VITE_POOL || deployed.pool;
 const RPC = process.env.VITE_RPC || process.env.ROBINHOOD_TESTNET_RPC || 'https://rpc.testnet.chain.robinhood.com';
 const KEY = process.env.DEPLOYER_KEY || '';
+const HOST_SECRET = process.env.HOST_SECRET || '';
 const pool = KEY && POOL
   ? new Contract(POOL, poolAbi, new Wallet(KEY, new JsonRpcProvider(RPC)))
   : null;
+
+function secretOk(got) {
+  if (!HOST_SECRET) return false;
+  const a = createHash('sha256').update(String(got ?? '')).digest();
+  const b = createHash('sha256').update(HOST_SECRET).digest();
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 const idle = () => ({
   type: 'state',
@@ -146,6 +155,10 @@ wss.on('connection', ws => {
     try { msg = JSON.parse(raw); } catch { return; }
     if (msg.type === 'hello') {
       if (msg.role === 'host') {
+        if (!HOST_SECRET || !secretOk(msg.secret)) {
+          send(ws, { type: 'error', error: 'host-auth' });
+          return;
+        }
         if (host && host !== ws && host.readyState === 1) {
           send(ws, { type: 'error', error: 'host-taken' });
           return;
@@ -175,4 +188,5 @@ wss.on('connection', ws => {
   });
 });
 
-console.log(`match relay ws://0.0.0.0:${PORT}` + (pool ? ' · pool operator on' : ' · pool operator off (no DEPLOYER_KEY)'));
+if (!HOST_SECRET) console.warn('host lock on · HOST_SECRET unset — all host hellos rejected');
+console.log(`match relay ws://0.0.0.0:${PORT}` + (pool ? ' · pool operator on' : ' · pool operator off (no DEPLOYER_KEY)') + (HOST_SECRET ? ' · host lock on' : ''));

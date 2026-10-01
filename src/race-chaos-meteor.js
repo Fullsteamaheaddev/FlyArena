@@ -1,12 +1,13 @@
 /** Sprite diameter ≈ meteor chunk width in arena units (deformed rock + chips). */
-export const METEOR_TRAIL_WIDTH = 1.42;
+export const METEOR_SCALE = 3;
+export const METEOR_TRAIL_WIDTH = 1.42 * METEOR_SCALE;
 
 const MAX_PUFFS = 2400;
 const SOFT_OVERFLOW = 3200;
-const TRAIL_STEP = 0.12;
+const TRAIL_STEP = 0.12 * METEOR_SCALE;
 const MAX_STEPS_PER_SEGMENT = 9;
 const LINGER_AFTER_LAND_MS = 5200;
-/** Opacity ramp begins this long before dieAt (most of post-land life is fade). */
+/** Whole-trail fade starts this long before dieAt (ease-in-out, no stepped opacity). */
 const FADE_TAIL_MS = 4200;
 
 let smokeGroup = null;
@@ -17,6 +18,12 @@ let nextBatchId = 1;
 const sealedBatches = new Set();
 /** @type {Map<number, number>} unified expiry per landed batch */
 const batchDieAt = new Map();
+/** @type {Map<number, number>} when the whole trail starts fading */
+const batchFadeFrom = new Map();
+
+function easeInOutQuad(u) {
+  return u < 0.5 ? 2 * u * u : 1 - ((-2 * u + 2) ** 2) / 2;
+}
 
 export function allocMeteorSmokeBatch() {
   return nextBatchId++;
@@ -41,6 +48,7 @@ export function disposeMeteorSmoke() {
   puffs = [];
   sealedBatches.clear();
   batchDieAt.clear();
+  batchFadeFrom.clear();
   if (!smokeGroup) return;
   smokeGroup.parent?.remove(smokeGroup);
   smokeGroup = null;
@@ -58,7 +66,7 @@ function makePuffMaterial() {
     transparent: true,
     opacity: 0.85,
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,
     blending: T.NormalBlending,
     color: 0xe8e8f0,
     toneMapped: false,
@@ -83,6 +91,7 @@ function syncBatchSets() {
     if (!live.has(id)) {
       sealedBatches.delete(id);
       batchDieAt.delete(id);
+      batchFadeFrom.delete(id);
     }
   }
 }
@@ -174,8 +183,8 @@ export function emitMeteorSmokeAlongSegment(x0, y0, z0, x1, y1, z1, batchId, opt
   for (let i = 0; i <= n; i++) {
     const t = i / n;
     spawnMeteorSmokePuff(
-      x0 + dx * t + (Math.random() - 0.5) * 0.03,
-      y0 + dy * t + (Math.random() - 0.5) * 0.03,
+      x0 + dx * t + (Math.random() - 0.5) * 0.03 * METEOR_SCALE,
+      y0 + dy * t + (Math.random() - 0.5) * 0.03 * METEOR_SCALE,
       z0 + dz * t,
       w,
       batchId,
@@ -188,6 +197,7 @@ export function sealMeteorSmokeBatch(batchId, landTime) {
   sealedBatches.add(batchId);
   const end = landTime + LINGER_AFTER_LAND_MS;
   batchDieAt.set(batchId, end);
+  batchFadeFrom.set(batchId, end - FADE_TAIL_MS);
   applyBatchDieAt(batchId);
   freezeBatchDrift(batchId);
 }
@@ -196,11 +206,11 @@ export function burstMeteorSmoke(x, y, z, batchId) {
   const w = METEOR_TRAIL_WIDTH * 1.05;
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
-    const r = 0.12 + Math.random() * 0.1;
+    const r = (0.12 + Math.random() * 0.1) * METEOR_SCALE;
     spawnMeteorSmokePuff(
       x + Math.cos(a) * r,
       y + Math.sin(a) * r,
-      z + 0.03,
+      z + 0.03 * METEOR_SCALE,
       w,
       batchId,
       null,
@@ -212,17 +222,26 @@ export function burstMeteorSmoke(x, y, z, batchId) {
 
 export function tickMeteorSmoke(t) {
   if (!puffs.length) return;
+  const fadeOf = new Map();
+  for (const p of puffs) {
+    if (fadeOf.has(p.batchId)) continue;
+    const from = batchFadeFrom.get(p.batchId);
+    const die = batchDieAt.get(p.batchId) ?? p.dieAt;
+    let fade = 1;
+    if (from != null) {
+      if (t >= die) fade = 0;
+      else if (t > from) fade = 1 - easeInOutQuad((t - from) / Math.max(1, die - from));
+    }
+    fadeOf.set(p.batchId, fade);
+  }
   const next = [];
   for (const p of puffs) {
     if (t >= p.dieAt) {
       disposePuff(p);
       continue;
     }
-    const remain = p.dieAt - t;
-    const fadeRaw = remain < FADE_TAIL_MS ? remain / FADE_TAIL_MS : 1;
-    const fade = Math.round(fadeRaw * 3) / 3;
     const age = (t - p.bornAt) / 1000;
-    p.mesh.material.opacity = p.baseOpacity * fade;
+    p.mesh.material.opacity = p.baseOpacity * fadeOf.get(p.batchId);
     if (!p.frozen) {
       p.mesh.position.x += p.vx;
       p.mesh.position.y += p.vy;

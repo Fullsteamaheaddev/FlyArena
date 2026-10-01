@@ -1,5 +1,9 @@
 // The manuscript is pre-rendered by scripts/build_textbook.mjs.
+import { t, applyDom, onLocaleChange } from './i18n.js';
 const $ = id => document.getElementById(id);
+let routeFn = null;
+applyDom();
+onLocaleChange(() => { applyDom(); routeFn?.(); });
 const tocEl = $('toc'), landingTocEl = $('landing-toc');
 const landingEl = $('landing'), readerEl = $('reader');
 const contentEl = $('content'), progressEl = $('progress');
@@ -104,7 +108,7 @@ async function init() {
       `<a class="seg${s === ch.slug ? ' cur' : ''}" href="#${s}" aria-label="${chapterBySlug.get(s).title}"${s === ch.slug ? ' aria-current="page"' : ''}></a>`).join('');
 
     const app = ch.slug.match(/^([A-Z])-/);
-    $('chap-label').textContent = app ? `Appendix ${app[1]}` : `Chapter ${idx + 1}`;
+    $('chap-label').textContent = app ? t('book.appendix', { n: app[1] }) : t('book.chapter', { n: idx + 1 });
     $('chap-title').textContent = ch.title;
     contentEl.innerHTML = ch.html.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>/, '');
     tocEl.querySelectorAll('.toc-row').forEach(a => {
@@ -116,7 +120,7 @@ async function init() {
 
     const prev = chapters[idx - 1], next = chapters[idx + 1];
     $('prevnext').hidden = !next;
-    $('next-label').innerHTML = next ? `<b>Next chapter</b><br/>${next.title}` : '';
+    $('next-label').innerHTML = next ? `<b>${t('book.next')}</b><br/>${next.title}` : '';
     if (next) $('next-btn').href = `#${next.slug}`;
     $('prevrow').hidden = !prev;
     $('prev').textContent = prev ? `← ${prev.title}` : '';
@@ -126,6 +130,7 @@ async function init() {
     window.scrollTo(0, 0);
   }
   addEventListener('hashchange', route);
+  routeFn = route;
   route();
 }
 

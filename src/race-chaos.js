@@ -1,3 +1,4 @@
+import { chaosCopy } from './i18n.js';
 import {
   makeThumb, makeHand, makeFinger, fadeGroup, fadeMeteorChunk, prepareMeshFade, makeCakeSlice, makeLeaf,
 } from './race-chaos-props.js';
@@ -7,7 +8,7 @@ import { createUfoBeam, tickUfoBeam, setUfoBeamOpacity } from './race-chaos-ufo-
 import { setUfoSaucerFade } from './ufo-rim-glow.js';
 import {
   initMeteorSmoke, allocMeteorSmokeBatch, emitMeteorSmokeAlongSegment, sealMeteorSmokeBatch,
-  disposeMeteorSmoke, burstMeteorSmoke, orientMeteorAlong, tickMeteorSmoke,
+  disposeMeteorSmoke, burstMeteorSmoke, orientMeteorAlong, tickMeteorSmoke, METEOR_SCALE,
 } from './race-chaos-meteor.js';
 import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial } from './race-chaos-bolt.js';
 import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laserSessionDuration, collectLaserSolids } from './race-chaos-laser.js';
@@ -18,24 +19,6 @@ export const CHAOS_KINDS = [
 ];
 const KINDS = CHAOS_KINDS;
 
-const COPY = {
-  thumb: { title: 'Thumb of fate', line: name => `${name} is pinned, then flicked.` },
-  spin: { title: 'Spin cycle', line: name => `${name} spins like a bottle cap.` },
-  quake: { title: 'Earthquake', line: () => 'The dish rattles for five seconds.' },
-  flip: { title: 'Dish flip', line: () => 'A hand boots the plate from below.' },
-  tilt: { title: 'Dish tilt', line: () => 'The plate tips, then levels again.' },
-  lightning: { title: 'Lightning', line: () => 'Three bolts scorch the arena' },
-  double: { title: 'Double lightning', line: name => name ? `Lightning finds ${name}.` : 'Six bolts. Smaller, meaner.' },
-  crumb: { title: 'Cake rain', line: () => "It's raining cake from the heavens" },
-  firefly: { title: 'Firefly moment', line: () => 'Little lights drift along the rim.' },
-  boop: { title: 'Gentle boop', line: name => `A tiny boop for ${name}.` },
-  puff: { title: 'GUST', line: () => 'A gust of wind rolls through the arena' },
-  laser: { title: 'Laser eyes', line: name => (name ? `${name} gets laser eyes.` : 'A fly gets laser eyes.') },
-  meteor: { title: 'Meteor shower', line: () => 'Something falls from the sky.' },
-  sugarrain: { title: 'Sugar crumbs', line: () => 'It\'s raining sugar.' },
-  ufo: { title: 'ABDUCTION', line: name => (name ? `${name} gets beamed up.` : 'A fly gets beamed up.') },
-  spikes: { title: 'Spike trap', line: () => 'Mind the floor.' },
-};
 
 function liveFlies(flies) {
   return flies.filter(f => f.last?.alive !== false && f.last?.pos);
@@ -101,7 +84,7 @@ export function createRaceChaos(api) {
   const CAKE_STAGGER_MS = 400;
   let fxRoot = null;
   let previewMesh = null;
-  let toastEl = null, toastTimer = 0;
+  let toastEl = null, toastTimer = 0, lastToast = null;
   let savedWind = null, savedRadial = null;
   let lastScorchPaint = 0;
   let dishAnim = null, dishPhysics = false, lastDishKey = '';
@@ -168,7 +151,14 @@ export function createRaceChaos(api) {
     if (!toastEl) return;
     toastEl.classList.remove('in');
     toastEl.hidden = true;
+    lastToast = null;
     clearTimeout(toastTimer);
+  }
+  function relocalizeToast() {
+    if (!toastEl || toastEl.hidden || !lastToast) return;
+    const copy = chaosCopy(lastToast.kind, lastToast.name);
+    toastEl.querySelector('h2').textContent = copy.title;
+    toastEl.querySelector('p').textContent = copy.line;
   }
   function sceneFlashBox() {
     if (sceneFlashEl) return sceneFlashEl;
@@ -244,7 +234,7 @@ export function createRaceChaos(api) {
     });
   }
 
-  function beginCamHold() {
+  function beginCamHold(opts = {}) {
     const cam = api.camera(), ctl = api.controls();
     if (!cam || !ctl) return null;
     if (!camShot) {
@@ -253,32 +243,42 @@ export function createRaceChaos(api) {
         target: ctl.target.clone(),
         polar: ctl.maxPolarAngle,
         enabled: ctl.enabled,
+        allowOrbit: !!opts.orbit,
       };
       api.holdFollow?.(true);
       ctl.enabled = false;
       ctl.maxPolarAngle = Math.PI / 2;
+    } else if (opts.orbit) {
+      camShot.allowOrbit = true;
     }
     return camShot;
+  }
+  function finishCamTween() {
+    const ctl = api.controls();
+    aimCam();
+    if (camShot?.allowOrbit && ctl) ctl.enabled = true;
   }
   function aimCam() {
     const cam = api.camera(), ctl = api.controls();
     if (cam && ctl) { cam.lookAt(ctl.target); cam.updateMatrixWorld(); }
   }
-  function easeCamTo(pos, target, dur, done) {
+  function easeCamTo(pos, target, dur, done, opts) {
     const cam = api.camera(), ctl = api.controls();
     if (!cam || !ctl || !pos || !target) { done?.(); return; }
-    beginCamHold();
+    beginCamHold(opts);
+    ctl.enabled = false;
     const p0 = cam.position.clone(), t0 = ctl.target.clone();
     tween(dur, u => {
       const k = easeInOut(u);
       cam.position.lerpVectors(p0, pos, k);
       ctl.target.lerpVectors(t0, target, k);
       aimCam();
-    }, () => { aimCam(); done?.(); });
+    }, () => { finishCamTween(); done?.(); });
   }
   function releaseCam(dur, done) {
     const snap = camShot, cam = api.camera(), ctl = api.controls();
     if (!snap || !cam || !ctl) { done?.(); return; }
+    ctl.enabled = false;
     const p0 = cam.position.clone(), t0 = ctl.target.clone();
     tween(dur, u => {
       const k = easeInOut(u);
@@ -411,11 +411,11 @@ export function createRaceChaos(api) {
       },
     }, allLive);
   }
-  function camPullBack(scale, dur) {
+  function camPullBack(scale, dur, opts) {
     const cam = api.camera(), ctl = api.controls();
     if (!cam || !ctl) return;
     const to = ctl.target.clone().add(cam.position.clone().sub(ctl.target).multiplyScalar(scale));
-    easeCamTo(to, ctl.target.clone(), dur);
+    easeCamTo(to, ctl.target.clone(), dur, undefined, opts);
   }
   function camPunchIn(frac, dur, done) {
     const cam = api.camera(), ctl = api.controls();
@@ -514,7 +514,8 @@ export function createRaceChaos(api) {
       }
       const u = Math.min(1, (t - d.fadeStart) / CAKE_FADE_MS);
       const opacity = 1 - easeInOut(u);
-      fadeGroup(d.mesh, opacity);
+      const ink = 1 - easeInOut(Math.min(1, u / 0.08));
+      fadeGroup(d.mesh, opacity, ink);
       if (u >= 1) {
         fadeGroup(d.mesh, 0);
         disposeObj(d.mesh);
@@ -971,14 +972,26 @@ export function createRaceChaos(api) {
     return null;
   }
 
+  // Elevation from the horizon: 50° floor so they never skim, up to ~82° so some still
+  // drop steep. slantR follows from that and the spawn height.
+  const METEOR_ELEV_MIN = Math.PI * 50 / 180;
+  const METEOR_ELEV_MAX = Math.PI * 82 / 180;
+  const METEOR_Z_GROUND = 0.18 * METEOR_SCALE;
+  function meteorSlant(strike = {}) {
+    const h = strike.h ?? boltHeight() * randRange(0.82, 1.02);
+    const elev = strike.elev ?? randRange(METEOR_ELEV_MIN, METEOR_ELEV_MAX);
+    const drop = Math.max(0.5, h - METEOR_Z_GROUND);
+    const slantR = strike.slantR ?? drop / Math.tan(elev);
+    const slantAz = strike.slantAz ?? Math.random() * Math.PI * 2;
+    return { slantAz, slantR, h, elev };
+  }
+
   function meteorImpact(strike, physics, opts = {}) {
     ensureMeteorSmoke();
     const { x, y } = strike;
-    const slantAz = strike.slantAz ?? Math.random() * Math.PI * 2;
-    const slantR = strike.slantR ?? randRange(4, 9);
+    const { slantAz, slantR, h } = meteorSlant(strike);
     const root = fxGroup();
-    const h = boltHeight() * randRange(0.82, 1.02);
-    const zGround = 0.18;
+    const zGround = METEOR_Z_GROUND;
     const sx = x + Math.cos(slantAz) * slantR;
     const sy = y + Math.sin(slantAz) * slantR;
     const sz = h;
@@ -986,6 +999,7 @@ export function createRaceChaos(api) {
     if (mesh) {
       prepareMeshFade(mesh);
       mesh.userData.meteorChunk = true;
+      mesh.scale.setScalar(METEOR_SCALE);
       mesh.position.set(sx, sy, sz);
       orientMeteorAlong(mesh, x - sx, y - sy, zGround - sz);
       root.add(mesh);
@@ -1038,8 +1052,10 @@ export function createRaceChaos(api) {
       later(15000, () => {
         if (!mesh?.parent || mesh.userData.meteorDespawning) return;
         mesh.userData.meteorDespawning = true;
-        tween(500, u => {
-          fadeMeteorChunk(mesh, 1 - u);
+        tween(700, u => {
+          const ink = 1 - easeInOut(Math.min(1, u / 0.32));
+          const body = u < 0.28 ? 1 : 1 - easeInOut((u - 0.28) / 0.72);
+          fadeMeteorChunk(mesh, body, ink);
         }, () => {
           fadeMeteorChunk(mesh, 0);
           mesh.visible = false;
@@ -1053,8 +1069,7 @@ export function createRaceChaos(api) {
     let strikes = payload.strikes?.length
       ? payload.strikes.slice()
       : [{ x: payload.x, y: payload.y, slantAz: payload.slantAz, slantR: payload.slantR }, ...(payload.points || [])];
-    const lateDrop = 3;
-    if (strikes.length > 7) strikes = strikes.slice(0, strikes.length - lateDrop);
+    if (strikes.length > 3) strikes = strikes.slice(0, 3);
     let hit = payload.hitIndex;
     if (hit != null && hit >= strikes.length) hit = null;
     strikes.forEach((st, i) => {
@@ -1062,7 +1077,7 @@ export function createRaceChaos(api) {
       if (i === 0) go();
       else later(160 * i + randRange(0, 80), go);
     });
-    camPullBack(1.1, 600);
+    camPullBack(1.1, 600, { orbit: true });
     later(5600, () => releaseCam(500));
   }
 
@@ -1072,7 +1087,7 @@ export function createRaceChaos(api) {
     const t0 = now();
     sugarRainSession = { until: t0 + dur, nextCrumb: t0, nextBump: t0 + 180, physics: !!physics, crumbs: [] };
     busyUntil = Math.max(busyUntil, t0 + dur);
-    camPullBack(1.06, 700);
+    camPullBack(1.06, 700, { orbit: true });
     later(dur, () => {
       endSugarRain();
       releaseCam(500);
@@ -1182,6 +1197,8 @@ export function createRaceChaos(api) {
       new T.Vector3(p0[0] + 4.2 * ufoCamPull, p0[1] - 3.6 * ufoCamPull, 5.8 * ufoCamPull),
       new T.Vector3(p0[0], p0[1], 0.2),
       420,
+      undefined,
+      { orbit: true },
     );
     if (physics && f?.worker) {
       post(f, { op: 'ground' });
@@ -1260,7 +1277,7 @@ export function createRaceChaos(api) {
         }, () => endSpikes());
       });
     });
-    easeCamTo(new T.Vector3(x + 4.37, y - 2.99, 2.76), new T.Vector3(x, y, 0.15), 380);
+    easeCamTo(new T.Vector3(x + 4.37, y - 2.99, 2.76), new T.Vector3(x, y, 0.15), 380, undefined, { orbit: true });
     later(2800, () => releaseCam(450));
   }
 
@@ -1277,13 +1294,16 @@ export function createRaceChaos(api) {
     }
   }
 
+  function chaosName(kind, payload) {
+    if (kind === 'double') return payload.hitBolt != null ? (payload.name || '') : '';
+    return payload.name || '';
+  }
+
   function playEvent(kind, payload, physics) {
-    const name = payload.name || 'a fly';
-    const copy = COPY[kind];
-    const line = kind === 'double'
-      ? copy.line(payload.hitBolt != null ? payload.name : '')
-      : copy.line(name);
-    showToast(copy.title, line);
+    const name = chaosName(kind, payload);
+    const copy = chaosCopy(kind, name);
+    lastToast = { kind, name };
+    showToast(copy.title, copy.line);
     api.audio()?.playChaos?.(kind, { killed: !!(payload.killed || payload.hitBolt != null) });
 
     if (kind === 'thumb') {
@@ -1395,6 +1415,8 @@ export function createRaceChaos(api) {
         if (i === 0) go();
         else later(CAKE_STAGGER_MS * i, go);
       });
+      camPullBack(1.06, 700, { orbit: true });
+      later(CAKE_STAGGER_MS * (CAKE_SLICE_COUNT - 1) + 2800, () => releaseCam(500));
     } else if (kind === 'firefly') {
       fireflies();
     } else if (kind === 'boop') {
@@ -1484,11 +1506,11 @@ export function createRaceChaos(api) {
       y = pts[0].y;
       extra = pts.slice(1);
     } else if (kind === 'meteor') {
-      const n = 8 + Math.floor(Math.random() * 4);
+      const n = 3;
       const strikes = [];
       for (let i = 0; i < n; i++) {
         const [px, py] = randomInDish(1);
-        strikes.push({ x: px, y: py, slantAz: Math.random() * Math.PI * 2, slantR: randRange(4, 9) });
+        strikes.push({ x: px, y: py, ...meteorSlant() });
       }
       let hitIndex = null;
       let mFlyId = null;
@@ -1599,16 +1621,14 @@ export function createRaceChaos(api) {
     busyUntil = now() + duration(kind);
     playEvent(kind, payload, physics);
     if (physics) {
-      const copy = COPY[kind];
+      const copy = chaosCopy(kind, chaosName(kind, payload));
       setCue({
         kind,
         flyId: payload.flyId,
         name: payload.name,
         color: payload.color,
         title: copy.title,
-        line: kind === 'lightning' || kind === 'double'
-          ? copy.line(payload.hitBolt != null ? payload.name : '')
-          : copy.line(payload.name || 'a fly'),
+        line: copy.line,
         x: payload.x, y: payload.y,
         yaw: payload.yaw, deg: payload.deg,
         points: payload.points,
@@ -1806,5 +1826,5 @@ export function createRaceChaos(api) {
     return key;
   }
 
-  return { arm, reset, stopLive, holdRoulette, tick, playCue, getCue, getScorches, showToast, hideToast, debugFire, previewProp, kinds: KINDS, camBusy: () => !!camShot };
+  return { arm, reset, stopLive, holdRoulette, tick, playCue, getCue, getScorches, showToast, hideToast, relocalizeToast, debugFire, previewProp, kinds: KINDS, camBusy: () => !!camShot };
 }

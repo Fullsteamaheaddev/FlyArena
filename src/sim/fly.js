@@ -13,6 +13,20 @@ import { createBrain } from '../brainmodel.js';
 
 const Rt9 = (xm, b) => [xm[b * 9], xm[b * 9 + 3], xm[b * 9 + 6]];   // body x axis (heading) in world frame
 
+/** Horizontal unit vector from a collider obstacle toward p (box: nearest face; cyl: radial). */
+function colliderOutward(p, o) {
+  if (o.type === 'box' || o.sx != null) {
+    const yaw = o.yaw || 0, c = Math.cos(yaw), s = Math.sin(yaw);
+    const dx = p[0] - o.x, dy = p[1] - o.y;
+    const lx = dx * c + dy * s, ly = -dx * s + dy * c;
+    const px = Math.abs(lx) - o.sx, py = Math.abs(ly) - o.sy;
+    const ox = px >= py ? (Math.sign(lx) || 1) : 0, oy = px >= py ? 0 : (Math.sign(ly) || 1);
+    return [ox * c - oy * s, ox * s + oy * c];
+  }
+  const dx = p[0] - o.x, dy = p[1] - o.y, len = Math.hypot(dx, dy) || 1;
+  return [dx / len, dy / len];
+}
+
 function quatMul(a, b) {
   return [
     a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
@@ -86,6 +100,8 @@ export class FlyAgent {
     this.takeoffPending = false;
     this.tDrop = -1e9;
     this.tTopNudge = -1e9;
+    this.tPropBump = -1e9;
+    this._propBump = null;
     this.chaosPin = false;
     this.chaosSpin = false;
     this.chaosSpinWz = 0;
@@ -241,12 +257,27 @@ export class FlyAgent {
     if (this.t % 10 === 0 || this.flight.active) {
       const Rt = d.xmat.slice(B.thorax * 9, B.thorax * 9 + 9); const bc = { left: false, right: false };
       let rimHit = false;
+      this._propBump = null;
       const cv = d.contact; const n = Math.min(d.ncon, cv.size());
       for (let c = 0; c < n; c++) { const con = cv.get(c); const k1 = this.geomKind[con.geom1], k2 = this.geomKind[con.geom2];
         if ((k1 === 'self') !== (k2 === 'self') && k1 !== 'floor' && k2 !== 'floor') {
           const p = con.pos; const rel = [p[0] - st.pos[0], p[1] - st.pos[1], p[2] - st.pos[2]]; const lat = Rt[1] * rel[0] + Rt[4] * rel[1] + Rt[7] * rel[2];
           bc[lat > 0 ? 'left' : 'right'] = true;
-          if (k1 === 'wall' || k2 === 'wall') rimHit = true; }
+          if (k1 === 'wall' || k2 === 'wall') rimHit = true;
+          if ((k1 === 'obst') !== (k2 === 'obst')) {
+            const obstG = k1 === 'obst' ? con.geom1 : con.geom2;
+            const idx = +(this.model.geom(obstG).name.slice(4));
+            const o = this.env.obstacles?.[idx];
+            if (o?.collider) {
+              const fr = con.frame;
+              let nx = fr?.[0], ny = fr?.[1], nz = fr?.[2];
+              if (nx == null) { nx = st.pos[0] - o.x; ny = st.pos[1] - o.y; nz = 0; }
+              else if (k1 === 'self') { nx = -nx; ny = -ny; nz = -nz; }
+              const h = Math.hypot(nx, ny), mag = Math.hypot(nx, ny, nz) || 1;
+              if (h > 0.35 * mag) this._propBump = { nx: nx / h, ny: ny / h };
+            }
+          }
+        }
         con.delete(); }
       cv.delete(); this._bodyContact = bc; this._rimHit = rimHit;
     }
@@ -379,6 +410,7 @@ export class FlyAgent {
     }
     this.dropUprightIfNeeded();
     this.nudgeOffMazeTop();
+    this.bumpOffProp();
     if (this.chaosPull && this.pullTarget) {
       const [tx, ty, tz] = this.pullTarget;
       const dx = tx - d.qpos[0];
@@ -509,9 +541,38 @@ export class FlyAgent {
     d.qvel[0] += 10 * Math.cos(a);
     d.qvel[1] += 10 * Math.sin(a);
     d.qvel[2] += 4;
-    const act = this.motor.act;
-    for (const name of Object.keys(act)) if (name.startsWith('adhere_claw_')) d.ctrl[act[name]] = 0;
+    this.releaseClaws();
     this.tTopNudge = this.t;
+  }
+  /** Kick away from a desert prop collider so the gait cannot pin the thorax against it. */
+  bumpOffProp() {
+    if (this.chaosPin || this.motor.jumping) return;
+    if (this.t - this.tPropBump < 120) return;
+    const d = this.mjd;
+    let nx, ny;
+    if (this._propBump) { nx = this._propBump.nx; ny = this._propBump.ny; }
+    else {
+      const p = [d.qpos[0], d.qpos[1], d.qpos[2]];
+      let best = null, bestD = 0.02;
+      for (const o of this.env.obstacles || []) {
+        if (!o.collider) continue;
+        if (p[2] > o.sz + 0.1) continue;
+        const dist = obstacleDist(p, o);
+        if (dist < bestD) { bestD = dist; best = o; }
+      }
+      if (!best) return;
+      const n = colliderOutward(p, best); nx = n[0]; ny = n[1];
+    }
+    const h = Math.hypot(nx, ny) || 1;
+    nx /= h; ny /= h;
+    this.releaseClaws();
+    d.qvel[0] += 14 * nx;
+    d.qvel[1] += 14 * ny;
+    d.qvel[2] += 3;
+    const fx = Rt9(d.xmat, this.bid.thorax);
+    if (fx[0] * nx + fx[1] * ny < 0) { d.qvel[0] -= fx[0] * 6; d.qvel[1] -= fx[1] * 6; }
+    this._propBump = null;
+    this.tPropBump = this.t;
   }
   physiology(st) {
     const dt = 0.001;

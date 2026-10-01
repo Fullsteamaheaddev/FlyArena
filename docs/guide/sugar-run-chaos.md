@@ -26,6 +26,8 @@ rules, and the four GLB-backed wildcards (`meteor`, `sugarrain`, `ufo`, `spikes`
    x, y, yaw, deg, points, hitBolt, … })` runs. Match snapshots include `chaosCue`
    (`src/match.js`, `src/arena.js`). Watchers call `playCue(c)` → `fire(c.kind, c, false)`:
    toast, camera, meshes, audio; **no** kill impulses or env mutations.
+   Meteor, sugar rain, cake rain, the spike trap, and the UFO frame the camera then
+   re-enable orbit; thumb, boop, flip, quake punch, and puff stay locked until release.
 5. **Toast** — “Luckiest Guy” copy from `COPY[kind]` in `race-chaos.js` (~2.4 s).
 6. **Debug** — On the host page, `fireChaos('laser')` / `window.CHAOS_KINDS` (see
    `src/arena.js`).
@@ -99,15 +101,15 @@ reset.
 | `tilt` | Dish tilt | ~4 s dish tip; `loose` + `slip` (low floor friction, gravity slide on the plate) | |
 | `lightning` | Lightning | 3 bolts; ~25% one bolt targets a fly → `kill` | Scorches |
 | `double` | Double lightning | 6 thinner bolts; same kill odds | |
-| `crumb` | Cake slice | 12 staggered drops; splat **kill** in radius; leaves vinegar cake patches | `race-chaos-props` slice |
+| `crumb` | Cake rain | 12 staggered drops; splat **kill** in radius; leaves vinegar cake patches | Pull-back then orbit; `race-chaos-props` slice |
 | `firefly` | Firefly moment | None | Rim lights ~7 s |
-| `boop` | Gentle boop | Small impulse on one fly | Finger pad |
-| `puff` | Dandelion puff | 5 s inward `windRadial` + outward per-fly `bias` | Seed meshes |
+| `boop` | Gentle boop | Small impulse on one fly | Finger pad; cam locked |
+| `puff` | Dandelion puff | 5 s inward `windRadial` + outward per-fly `bias` | Seed meshes; cam locked |
 | `laser` | Laser eyes | ~5 s session; beams can kill | `race-chaos-laser.js` pool |
-| `meteor` | Meteor shower | ~5–8 slanted impacts (late landings trimmed); smoke lingers ≥5 s per impact; chunks ~15 s; ~15% targeted kill | `public/chaos/meteor_chunk.glb` |
-| `sugarrain` | Sugar crumbs | Light crumb rain + weak impulses; no kill, no cake patches | `public/chaos/sugar_crumb.glb` |
-| `ufo` | UFO | Shader beam + saucer GLB; lift/drop; no auto-kill | `ufo.glb` + `race-chaos-ufo-beam.js` |
-| `spikes` | Spike trap | `spike_trap.glb` (+Z spikes, 1.5×); kills inside while armed | AABB `half` ~1.0–1.23 |
+| `meteor` | Meteor shower | 3 slanted impacts; smoke lingers ≥5 s per impact; chunks ~15 s; ~15% targeted kill | Pull-back then orbit; `public/chaos/meteor_chunk.glb` |
+| `sugarrain` | Sugar crumbs | Light crumb rain + weak impulses; no kill, no cake patches | Pull-back then orbit; `public/chaos/sugar_crumb.glb` |
+| `ufo` | UFO | Shader beam + saucer GLB; lift/drop; no auto-kill | Frames then orbit; `ufo.glb` + `race-chaos-ufo-beam.js` |
+| `spikes` | Spike trap | `spike_trap.glb` (+Z spikes, 1.5×); kills inside while armed | Frames the trap then orbit; AABB `half` ~1.0–1.23 |
 
 Reference implementations for “spectacle + optional kill”: **`crumb`** (staggered props +
 env), **`laser`** (session + tick), **`lightning`** (payload `points` + `hitBolt`),
@@ -154,13 +156,13 @@ These ship in `CHAOS_KINDS` alongside the original twelve (**16 kinds**, equal r
 
 ### `meteor`
 
-- **Fantasy:** Dense meteor shower — mostly chaos, occasionally lethal.
-- **VFX:** ~5–8 GLB chunks on **slanted** paths (`slantAz`, `slantR` per strike in
-  `strikes[]` / `chaosCue`), cell-shaded grey billboard smoke (stepped procedural puff texture)
-  (per-impact batch; sealed to linger ≥5 s after landing), chunk rests ~15 s then fades,
-  scorch on impact.
+- **Fantasy:** Three meteors — mostly chaos, occasionally lethal.
+- **VFX:** 3 GLB chunks on **slanted** paths (`slantAz`, `slantR`, spawn `h` per strike
+  in `strikes[]` / `chaosCue`). Elevation from the horizon is 50°–82° (never skim, not all
+  vertical). Cell-shaded grey billboard smoke (stepped procedural puff texture; per-impact
+  batch sealed to linger ≥5 s after landing), chunk rests ~15 s then fades, scorch on impact.
 - **Physics (host):** Impulse/kill at impact `(x,y)` as before; ~15% one strike targets a fly.
-- **Payload:** `strikes: [{ x, y, slantAz, slantR }, …]`, `hitIndex`, optional `flyId`.
+- **Payload:** `strikes: [{ x, y, slantAz, slantR, h, elev }, …]`, `hitIndex`, optional `flyId`.
 - **Duration:** ~5.6 s busy window.
 
 ### `sugarrain` (sugar crumbs)

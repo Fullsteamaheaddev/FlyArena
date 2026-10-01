@@ -1,6 +1,8 @@
 // Visualises public/data/algo_structures.json (written by scripts/algo_structures.py): one card per
 // algorithmic structure found in the connectome, with a figure, the key numbers and what they mean.
+import { applyDom } from './i18n.js';
 const BASE = import.meta.env.BASE_URL;
+applyDom();
 const $ = (s) => document.querySelector(s);
 const fmt = (v) => typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(v < 1 ? 3 : 1)) : v;
 const pct = (v) => `${Math.round(v * 100)}%`;

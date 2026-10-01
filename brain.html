@@ -11,56 +11,56 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="loading"><div class="title">Male fruit fly CNS connectome</div><div id="status">loading…</div></div>
+<div id="loading"><div class="title" data-i18n="viewer.loadingTitle">Male fruit fly CNS connectome</div><div id="status" data-i18n="load.ellipsis">loading…</div></div>
 <aside id="panel">
   <header>
-    <h1>Drosophila male CNS</h1>
+    <h1 data-i18n="viewer.title">Drosophila male CNS</h1>
     <div class="sub" id="summary"></div>
   </header>
   <section>
     <div class="row">
-      <button id="play" class="primary">▶ Run</button>
-      <button id="reset">Reset</button>
-      <label>speed <input id="speed" type="range" min="0.05" max="2" step="0.05" value="0.5"><span id="speedv">0.5×</span></label>
+      <button id="play" class="primary" data-i18n="panel.run">▶ Run</button>
+      <button id="reset" data-i18n="viewer.reset">Reset</button>
+      <label><span data-i18n="panel.speed">speed</span> <input id="speed" type="range" min="0.05" max="2" step="0.05" value="0.5"><span id="speedv">0.5×</span></label>
     </div>
     <div class="stats">
-      <div><b id="simt">0</b><span>sim ms</span></div>
-      <div><b id="rate">0</b><span>spikes / s</span></div>
-      <div><b id="active">0</b><span>active neurons</span></div>
-      <div><b id="fps">0</b><span>fps</span></div>
+      <div><b id="simt">0</b><span data-i18n="viewer.simMs">sim ms</span></div>
+      <div><b id="rate">0</b><span data-i18n="viewer.spikes">spikes / s</span></div>
+      <div><b id="active">0</b><span data-i18n="viewer.active">active neurons</span></div>
+      <div><b id="fps">0</b><span data-i18n="panel.fps">fps</span></div>
     </div>
   </section>
   <section>
-    <h2>Stimulate</h2>
+    <h2 data-i18n="viewer.stimulate">Stimulate</h2>
     <div class="row">
-      <select id="groupKind"><option value="superclass">superclass</option><option value="class">class</option><option value="type">type</option></select>
-      <input id="groupQuery" list="groupList" placeholder="e.g. olfactory, DNp01, MBON…">
+      <select id="groupKind"><option value="superclass" data-i18n="viewer.superclass">superclass</option><option value="class" data-i18n="viewer.class">class</option><option value="type" data-i18n="viewer.type">type</option></select>
+      <input id="groupQuery" list="groupList" data-i18n-placeholder="viewer.queryPh" placeholder="e.g. olfactory, DNp01, MBON…">
       <datalist id="groupList"></datalist>
     </div>
     <div class="row">
-      <select id="groupSide"><option value="0">both sides</option><option value="1">left</option><option value="2">right</option></select>
-      <label>rate <input id="rateHz" type="number" value="150" min="0" step="10"> Hz</label>
-      <button id="addDrive" class="primary">Add</button>
-      <button id="pulse">Pulse</button>
+      <select id="groupSide"><option value="0" data-i18n="viewer.bothSides">both sides</option><option value="1" data-i18n="viewer.left">left</option><option value="2" data-i18n="viewer.right">right</option></select>
+      <label><span data-i18n="viewer.rate">rate</span> <input id="rateHz" type="number" value="150" min="0" step="10"> Hz</label>
+      <button id="addDrive" class="primary" data-i18n="viewer.add">Add</button>
+      <button id="pulse" data-i18n="viewer.pulse">Pulse</button>
     </div>
     <ul id="drives"></ul>
   </section>
   <section>
-    <h2>View</h2>
+    <h2 data-i18n="viewer.view">View</h2>
     <div class="row">
-      <label>color <select id="colorMode"><option value="superclass">superclass</option><option value="nt">neurotransmitter</option><option value="side">side</option><option value="activity">activity only</option></select></label>
-      <label>show <select id="showMode"><option value="skeletons">skeletons</option><option value="somas">somas</option><option value="active">active only</option></select></label>
+      <label><span data-i18n="viewer.color">color</span> <select id="colorMode"><option value="superclass" data-i18n="viewer.superclass">superclass</option><option value="nt" data-i18n="viewer.nt">neurotransmitter</option><option value="side" data-i18n="viewer.side">side</option><option value="activity" data-i18n="viewer.activity">activity only</option></select></label>
+      <label><span data-i18n="viewer.show">show</span> <select id="showMode"><option value="skeletons" data-i18n="viewer.skeletons">skeletons</option><option value="somas" data-i18n="viewer.somas">somas</option><option value="active" data-i18n="viewer.activeOnly">active only</option></select></label>
     </div>
-    <div class="row"><label>opacity <input id="opacity" type="range" min="0.005" max="0.3" step="0.005" value="0.02"></label></div>
+    <div class="row"><label><span data-i18n="viewer.opacity">opacity</span> <input id="opacity" type="range" min="0.005" max="0.3" step="0.005" value="0.02"></label></div>
     <div id="legend"></div>
   </section>
   <section>
-    <h2>Model</h2>
-    <div class="row"><label>background synaptic activity <input id="bgRate" type="number" step="10" value="0" min="0"> Hz/neuron</label></div>
-    <div class="note">Conductance-based leaky integrate-and-fire (WebAssembly), 0.5 ms steps, parameters calibrated against published behaviours (see PLAN.md). Signs from predicted transmitters; unclear neurons use per-synapse probabilities. Connections ≥5 synapses. Open the <a href="arena.html" style="color:var(--acc)">embodied arena</a>, the <a href="structures.html" style="color:var(--acc)">algorithmic structures</a>, or the <a href="textbook/" style="color:var(--acc)">textbook</a>.</div>
+    <h2 data-i18n="viewer.model">Model</h2>
+    <div class="row"><label><span data-i18n="viewer.bgRate">background synaptic activity</span> <input id="bgRate" type="number" step="10" value="0" min="0"> <span data-i18n="viewer.hzNeuron">Hz/neuron</span></label></div>
+    <div class="note"><span data-i18n="viewer.modelNote">Conductance-based leaky integrate-and-fire (WebAssembly), 0.5 ms steps, parameters calibrated against published behaviours (see PLAN.md). Signs from predicted transmitters; unclear neurons use per-synapse probabilities. Connections ≥5 synapses. Open the </span><a href="arena.html" style="color:var(--acc)" data-i18n="viewer.arena">embodied arena</a>, <a href="structures.html" style="color:var(--acc)" data-i18n="viewer.structures">algorithmic structures</a>, <a href="textbook/" style="color:var(--acc)" data-i18n="viewer.textbook">textbook</a>.</div>
   </section>
   <section id="selection" hidden>
-    <h2>Selected neuron</h2>
+    <h2 data-i18n="viewer.selected">Selected neuron</h2>
     <div id="selinfo"></div>
   </section>
 </aside>

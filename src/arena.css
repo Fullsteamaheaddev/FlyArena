@@ -201,6 +201,42 @@ body.race #enterGate .enter-social:focus-visible {
   color: #fff; border-color: var(--race-outline); background: rgba(255,255,255,.06);
 }
 body.race #enterGate .enter-social svg { width: 20px; height: 20px; fill: currentColor; }
+body.race #hostGate {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgba(8, 6, 14, .85);
+  box-sizing: border-box;
+}
+body.race #hostGate .enter-card {
+  width: min(420px, calc(100vw - 24px)); height: auto;
+  max-width: min(420px, calc(100vw - 24px)); max-height: 90vh;
+  box-sizing: border-box;
+  padding: 28px 28px 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 12px;
+  background: var(--panel); backdrop-filter: blur(12px);
+  border: 4px solid var(--race-outline); border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
+}
+body.race #hostGate h1 {
+  margin: 0; font-family: var(--race-title); font-weight: 400;
+  font-size: clamp(24px, 4vw, 36px); line-height: 1.05; color: #fff;
+}
+body.race #hostGate p { margin: 0; max-width: 28em; color: var(--dim); font-size: 15px; }
+body.race #hostGate .host-error { color: #fb7185; min-height: 1.2em; }
+body.race #hostGate .host-error[hidden] { display: none; }
+body.race #hostGate input[type=password] {
+  width: min(280px, 100%); padding: 10px 12px; margin: 4px 0 0;
+  border: 2px solid var(--race-outline); border-radius: 10px;
+  background: rgba(0,0,0,.35); color: #fff; font-size: 16px; text-align: center;
+}
+body.race #hostGate #hostGateBtn {
+  min-width: 160px; padding: 12px 28px; margin-top: 8px;
+  font: 400 20px/1.1 var(--race-title);
+  border: 4px solid var(--race-outline); border-radius: 999px;
+  background: var(--acc); color: #fff;
+}
 body.race #raceSocials {
   position: fixed;
   left: max(12px, env(safe-area-inset-left));
@@ -580,7 +616,7 @@ body.race #profile {
   width: max-content; min-width: min(420px, calc(100vw - 24px));
   max-width: min(520px, calc(100vw - 24px));
   padding: 12px 14px; background: var(--panel); border: 4px solid var(--race-outline);
-  border-radius: 18px; pointer-events: auto; overflow: hidden;
+  border-radius: 18px; pointer-events: auto; overflow: visible;
   transform-origin: bottom right;
   transition: width var(--race-fold-duration) var(--race-fold-ease);
 }
@@ -588,6 +624,26 @@ body.race #profile[hidden] { display: none; }
 body.race #profile header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; white-space: nowrap; }
 body.race #profile h2 { margin: 0; flex: none; font-family: var(--race-title); font-weight: 400; font-size: 28px; line-height: 1; }
 body.race #profile .profile-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+body.race #profile .lang-select { position: relative; flex: none; }
+body.race #profile .lang-current {
+  padding: 0; width: 28px; height: 24px; min-width: 28px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+}
+body.race #profile .lang-current img,
+body.race #profile .lang-menu img { width: 20px; height: 14px; display: block; object-fit: cover; border-radius: 2px; }
+body.race #profile .lang-menu {
+  position: absolute; right: 0; bottom: calc(100% + 6px); margin: 0; padding: 6px;
+  list-style: none; display: flex; flex-direction: column; gap: 4px;
+  background: var(--panel); border: 3px solid var(--race-outline); border-radius: 10px; z-index: 30;
+}
+body.race #profile .lang-menu[hidden] { display: none; }
+body.race #profile .lang-menu button {
+  padding: 4px; width: 28px; height: 22px; min-width: 0; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center; background: transparent;
+}
+body.race #profile .lang-menu button[aria-selected="true"] { outline: 2px solid var(--acc); }
+body.race #profile.folded #langSelect { display: none; }
 body.race #profile:not(.folded) .profile-actions { margin-left: auto; }
 body.race #profileFold {
   font-family: var(--race-title); font-weight: 400; font-size: 15px; line-height: 1;
@@ -871,7 +927,7 @@ body.race #brainpanel .fold { border-radius: 8px; }
     max-width: none;
     max-height: 90dvh;
     padding: 24px 16px;
-    overflow: hidden;
+    overflow: visible;
     transform: translate(-50%, -50%);
     transform-origin: center center;
     z-index: 20;

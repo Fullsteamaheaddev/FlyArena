@@ -30,10 +30,14 @@ import {
   readBalance, loadHistory, userTotal, userStake, isClaimed, readRace, chipFmt,
   resolveChip, chipSymbol, getChipMeta,
 } from './chain.js';
+import { t, applyDom, onLocaleChange, formatLoadStatus, behaviorLabel, groupLabel, groupInfo } from './i18n.js';
+import { mountLangSelect } from './i18n-ui.js';
 const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pages
 
 const $ = s => document.querySelector(s);
-const status = s => { $('#status').textContent = s; };
+const status = s => { const el = $('#status'); if (el) el.textContent = formatLoadStatus(s); };
+applyDom();
+onLocaleChange(() => relocalizeUi());
 const FLY_COLORS = ['#ffb347', '#5ac8fa', '#a3e635', '#f472b6', '#c084fc', '#facc15', '#fb7185', '#2dd4bf'];
 const RACE_NAMES = ['Amber', 'Blue', 'Lime'];
 const presetKey = isWatchPath() || isRaceHostPath() || new URLSearchParams(location.search).get('watch') === '1'
@@ -68,7 +72,10 @@ const DEAD_FLY_BLINK_MS = 1250, DEAD_FLY_BLINK_OP_MIN = 0.35, DEAD_FLY_BLINK_SCA
 const RACE_HISTORY_KEY = 'odorRaceResults';
 const RACE_FLIES_KEY = 'odorRaceFlies';
 const ENTER_GATE_KEY = 'fruitFlyEntered';
+const HOST_SECRET_KEY = 'sugarRunHostSecret';
 const TICKER_KEY = 'sugarRunTickerUrl';
+let hostSecret = '';
+let hostGateResolve = null;
 const X_HREF = 'https://x.com/SugarRunFun';
 const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
 let lastRaceFliesKey = '';
@@ -172,6 +179,8 @@ async function loadLocalChaosHarness() {
 
 async function main() {
   if (isWatch) return mainWatch();
+  if (isRace) document.body.classList.add('race');
+  if (isHost) await gateHost();
   if (!crossOriginIsolated) console.warn('not cross-origin isolated: SharedArrayBuffer unavailable');
   const data = await loadConnectome(status);
   meta = data.meta;
@@ -709,11 +718,12 @@ function syncEnv() { for (const f of flies) if (f.ready) f.worker.postMessage({ 
 
 // ---------------- UI ----------------
 function buildUI() {
-  $('#play').onclick = () => { running = !running; for (const f of flies) f.worker.postMessage({ type: running ? 'run' : 'pause' }); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
+  applyDom();
+  $('#play').onclick = () => { running = !running; for (const f of flies) f.worker.postMessage({ type: running ? 'run' : 'pause' }); $('#play').textContent = running ? t('panel.pause') : t('panel.run'); };
   $('#addFly').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2); };
   $('#addFemale').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2, 'f'); };
   $('#speed').oninput = e => { speed = +e.target.value; $('#speedv').textContent = speed.toFixed(2) + '×'; for (const f of flies) f.worker.postMessage({ type: 'speed', speed }); };
-  $('#preset').innerHTML = Object.entries(PRESETS).map(([k, p]) => `<option value="${k}" ${k === presetKey ? 'selected' : ''}>${p.label}</option>`).join('');
+  paintPresetSelect();
   $('#preset').onchange = e => { location.search = '?env=' + e.target.value; };
   $('#mode').onchange = e => { for (const f of flies) f.worker.postMessage({ type: 'mode', mode: e.target.value }); };
   document.querySelectorAll('.tools button').forEach(b => b.onclick = () => { tool = b.dataset.tool; document.querySelectorAll('.tools button').forEach(x => x.classList.toggle('on', x === b)); });
@@ -733,6 +743,92 @@ function buildUI() {
   $('#takeoff').onclick = () => flies.find(x => x.id === selected)?.worker.postMessage({ type: 'takeoff' });
   setInterval(() => { if (foodDirty) { foodDirty = false; syncEnv(); envGroup.children.forEach(m => { if (m.userData.food) m.material.opacity = 0.35 + 0.65 * Math.min(1, m.userData.food.amount / 5); }); } renderFlyList(); }, 500);
 }
+function paintPresetSelect() {
+  const el = $('#preset');
+  if (!el) return;
+  el.innerHTML = Object.entries(PRESETS).map(([k]) => `<option value="${k}" ${k === presetKey ? 'selected' : ''}>${t('preset.' + k)}</option>`).join('');
+}
+function winWhy(why) {
+  return why === 'last' ? t('race.lastRemaining') : why === 'died' ? t('race.lastToDie') : '';
+}
+function relocalizeUi() {
+  applyDom();
+  paintPresetSelect();
+  const play = $('#play');
+  if (play) play.textContent = running ? t('panel.pause') : t('panel.run');
+  if (isRace) {
+    const capL = $('#eyeL')?.closest('figure')?.querySelector('figcaption');
+    const capR = $('#eyeR')?.closest('figure')?.querySelector('figcaption');
+    if (capL) capL.textContent = t('brain.left');
+    if (capR) capR.textContent = t('brain.right');
+    const note = $('#bpBody .note');
+    if (note) note.textContent = t('brain.eyesNoteRace');
+    paintEnterGateCopy();
+    paintEnterToken();
+    if (matchPhase === 'lobby') paintLobbyOverlay(true);
+    else if (matchPhase === 'results') relocalizeResultsCard();
+    else if (isWatch && watchOverlayPhase === 'wait') showWatchWaiting(t('race.wait'));
+    refreshProfile();
+    raceChaos?.relocalizeToast?.();
+    if ($('#hostGate')) paintHostGate();
+  }
+  if (groups.length) paintGroupRows();
+  const sf = flies.find(x => x.id === selected);
+  if (sf && histFly === sf.id) {
+    const title = $('#bpTitle');
+    if (title) title.innerHTML = `${t('brain.inside', { name: sf.name })} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sf.color}"></i>`;
+  }
+  renderFlyList();
+  setupFoldsTitles();
+}
+function relocalizeResultsCard() {
+  const card = $('#raceCard');
+  if (!card || card.dataset.kind !== 'results') return;
+  const name = card.dataset.winnerName || raceWinner?.name || '';
+  const why = card.dataset.why || raceWinnerWhy || '';
+  const wall = card.dataset.wall || '';
+  const fly = card.dataset.fly || '';
+  const color = card.dataset.winnerColor || raceWinner?.color || '';
+  const note = winWhy(why);
+  card.innerHTML = `<h1>${t('race.wins', { name })}</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${wall}</p><p class="flyt">${flyTimeLine(fly)}</p>
+        ${raceHistoryHtml(loadRaceHistory())}
+        <div class="bet-actions"></div>
+        <p id="betNote" class="flyt"></p>
+        <p id="raceReset">${settleNote()}</p>`;
+  card.dataset.kind = 'results';
+  card.dataset.winnerName = name;
+  card.dataset.why = why;
+  card.dataset.wall = wall;
+  card.dataset.fly = fly;
+  if (color) card.dataset.winnerColor = color;
+  paintResultActions(matchId);
+}
+function paintEnterGateCopy() {
+  const el = $('#enterGate');
+  if (!el) return;
+  const title = el.querySelector('#enterTitle');
+  if (title) title.textContent = t('enter.title');
+  const p = el.querySelector('.enter-card > p');
+  if (p) p.textContent = t('enter.body');
+  const btn = el.querySelector('#enterBtn');
+  if (btn) btn.textContent = t('enter.press');
+}
+function setupFoldsTitles() {
+  if (isRace) {
+    brainFoldChrome($('#brainpanel')?.classList.contains('folded'));
+    profileFoldChrome($('#profile')?.classList.contains('folded'));
+    return;
+  }
+  for (const [panel, btn, key, open, shut, what] of [
+    ['#panel', '#panelFold', '[', '‹', '›', t('brain.controls')],
+    ['#brainpanel', '#bpFold', ']', '›', '‹', t('brain.panel')],
+  ]) {
+    const folded = $(panel)?.classList.contains('folded');
+    const b = $(btn); if (!b) continue;
+    b.textContent = folded ? shut : open;
+    b.title = `${folded ? t('panel.showControls').split(' (')[0] : t('panel.hideControls').split(' (')[0]} ${what} (${key})`;
+  }
+}
 function loadRaceHistory() {
   try { const a = JSON.parse(localStorage.getItem(RACE_HISTORY_KEY) || '[]'); return Array.isArray(a) ? a.slice(0, 1) : []; }
   catch { return []; }
@@ -745,7 +841,7 @@ function saveRaceResult(row) {
 function raceHistoryHtml(rows) {
   const r = rows?.[0];
   if (!r) return '';
-  return `<h2 class="hist">Last race</h2><ol class="race-hist"><li><i style="background:${r.color}"></i><b>${r.name}</b><span>${r.wall}</span></li></ol>`;
+  return `<h2 class="hist">${t('hist.last')}</h2><ol class="race-hist"><li><i style="background:${r.color}"></i><b>${r.name}</b><span>${r.wall}</span></li></ol>`;
 }
 function setupRaceChrome() {
   document.body.classList.add('race');
@@ -755,10 +851,10 @@ function setupRaceChrome() {
   $('#follow').checked = false;
   const capL = $('#eyeL')?.closest('figure')?.querySelector('figcaption');
   const capR = $('#eyeR')?.closest('figure')?.querySelector('figcaption');
-  if (capL) capL.textContent = 'Left';
-  if (capR) capR.textContent = 'Right';
+  if (capL) capL.textContent = t('brain.left');
+  if (capR) capR.textContent = t('brain.right');
   const note = $('#bpBody .note');
-  if (note) note.textContent = 'What this fly sees.';
+  if (note) note.textContent = t('brain.eyesNoteRace');
   raceAudio = createRaceAudio(`${BASE}yipee.wav`, `${BASE}gong.wav`, {
     boop: `${BASE}boop.wav`,
     thunder: `${BASE}Thundersound.wav`,
@@ -820,16 +916,17 @@ function setupRaceChrome() {
       profileFoldChrome(profile.classList.contains('folded'));
       $('#profileFold')?.addEventListener('click', () => setProfileFolded(!profile.classList.contains('folded')));
       $('#profileScrim')?.addEventListener('click', () => setProfileFolded(true));
+      mountLangSelect($('#langSelect'));
       restoreWallet().then(a => {
         if (!a) return;
         refreshProfile();
         if (matchPhase === 'lobby') paintLobbyOverlay(true);
       });
     }
-    showWatchWaiting('Waiting for the next race');
+    showWatchWaiting(t('race.wait'));
     onWalletChange(() => { refreshProfile(); if (matchPhase === 'lobby') paintLobbyOverlay(true); if (matchPhase === 'results') paintResultActions(matchId); });
   }
-  setupMatchLink();
+  if (isWatch || !matchLink) setupMatchLink();
   $('#raceVitals').addEventListener('pointerdown', e => {
     const row = e.target.closest('.fly');
     if (!row) return;
@@ -858,9 +955,9 @@ function paintEnterToken() {
   if (!addr) { btn.hidden = true; return; }
   btn.hidden = false;
   btn.dataset.addr = addr;
-  const shown = btn.dataset.copied === '1' ? 'Copied' : shortToken(addr);
+  const shown = btn.dataset.copied === '1' ? t('profile.copied') : shortToken(addr);
   btn.textContent = shown;
-  btn.title = 'Copy token address';
+  btn.title = t('enter.copyToken');
 }
 function popCopied(btn, after) {
   btn.classList.remove('copied');
@@ -911,7 +1008,7 @@ function unlockRaceAudio(ev) {
 }
 function flyTimeLine(fly) {
   const n = String(fly ?? '0');
-  return `${n} second${n === '1' ? '' : 's'} in fly time`;
+  return t(n === '1' ? 'race.flyTimeOne' : 'race.flyTime', { n });
 }
 function tickerUrl() {
   const env = String(import.meta.env.VITE_TICKER_URL || '').trim();
@@ -1009,10 +1106,10 @@ function setupEnterGate() {
   el.id = 'enterGate';
   el.innerHTML = `<div class="enter-card" role="dialog" aria-labelledby="enterTitle" aria-modal="true">
     <img class="enter-logo" src="${BASE}FruitFlyText.png" alt="Sugar Run" />
-    <h1 id="enterTitle">Welcome to Sugar Run</h1>
-    <p>Three of us, three brains — 165,122 neurons each — racing for sugar at the centre. Pick a fly. Cheer. Bet. Don't get eaten by a fruit bowl.</p>
+    <h1 id="enterTitle">${t('enter.title')}</h1>
+    <p>${t('enter.body')}</p>
     <button type="button" class="enter-token" id="enterToken" hidden></button>
-    <button type="button" class="primary" id="enterBtn">Press to enter</button>
+    <button type="button" class="primary" id="enterBtn">${t('enter.press')}</button>
     <div class="enter-socials">
       <a class="enter-social enter-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
     </div>
@@ -1037,10 +1134,10 @@ function setupEnterGate() {
   addEventListener('keydown', onKey);
 }
 function settleNote() {
-  if (!chainConfigured()) return 'Next race starting…';
-  if (poolStatus === 3 || poolStatus === 4) return 'Settled — next race starting…';
-  if (poolOpError) return 'Pool operator offline — next race starting…';
-  return 'Settling match on-chain…';
+  if (!chainConfigured()) return t('race.next');
+  if (poolStatus === 3 || poolStatus === 4) return t('race.settled');
+  if (poolOpError) return t('race.opOffline');
+  return t('race.settling');
 }
 function readyForNextRace() {
   const configured = chainConfigured();
@@ -1072,14 +1169,140 @@ function kickHostSim() {
   }
   if (matchPhase === 'lobby' && betClosesAt && Date.now() >= betClosesAt) goLiveFromLobby();
 }
+function readHostSecret() {
+  try { return sessionStorage.getItem(HOST_SECRET_KEY) || ''; }
+  catch { return ''; }
+}
+function writeHostSecret(s) {
+  hostSecret = s || '';
+  try {
+    if (hostSecret) sessionStorage.setItem(HOST_SECRET_KEY, hostSecret);
+    else sessionStorage.removeItem(HOST_SECRET_KEY);
+  } catch { /* private mode */ }
+}
+function hideHostGate() {
+  const el = $('#hostGate');
+  if (el) el.remove();
+  hostGateResolve = null;
+}
+function paintHostGate() {
+  const el = $('#hostGate');
+  if (!el) return;
+  const errKey = el.dataset.err || '';
+  const taken = errKey === 'host.taken';
+  el.innerHTML = `<form class="enter-card" id="hostGateForm" autocomplete="off">
+    <h1 id="hostGateTitle">${t('host.title')}</h1>
+    <p>${t('host.body')}</p>
+    ${taken ? '' : `<input id="hostSecret" type="password" name="password" autocomplete="off" spellcheck="false" required placeholder="${t('host.password')}" aria-label="${t('host.password')}">
+    <button type="submit" class="primary" id="hostGateBtn">${t('host.submit')}</button>`}
+    <p class="host-error" ${errKey ? '' : 'hidden'}>${errKey ? t(errKey) : ''}</p>
+  </form>`;
+  const form = $('#hostGateForm');
+  const input = $('#hostSecret');
+  if (form && !taken) {
+    form.onsubmit = e => {
+      e.preventDefault();
+      const v = input?.value || '';
+      if (!v) return;
+      writeHostSecret(v);
+      const done = hostGateResolve;
+      hostGateResolve = null;
+      hideHostGate();
+      done?.();
+    };
+  }
+  input?.focus();
+}
+function showHostGate(errKey) {
+  if (isRace) document.body.classList.add('race');
+  let el = $('#hostGate');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'hostGate';
+    document.body.appendChild(el);
+  }
+  el.dataset.err = errKey || '';
+  paintHostGate();
+  if (errKey === 'host.taken') return Promise.resolve();
+  return new Promise(resolve => { hostGateResolve = resolve; });
+}
+function ensureHostSecret(errKey) {
+  if (!isHost) return Promise.resolve();
+  if (!errKey) {
+    const s = readHostSecret();
+    if (s) { hostSecret = s; return Promise.resolve(); }
+  }
+  return showHostGate(errKey);
+}
+function onHostLinkStatus(s) {
+  if (s === 'live') hideHostGate();
+  else if (s === 'host-taken') showHostGate('host.taken');
+  else if (s === 'host-auth') {
+    writeHostSecret('');
+    matchLink?.close();
+    matchLink = null;
+    ensureHostSecret('host.badSecret').then(() => {
+      if (!matchLink) setupMatchLink();
+      else matchLink.retry();
+    });
+  }
+}
+function waitHostHello() {
+  return new Promise(resolve => {
+    let finished = false;
+    const done = s => { if (finished) return; finished = true; resolve(s); };
+    matchLink?.close();
+    matchLink = createMatchLink({
+      role: 'host',
+      secret: () => hostSecret,
+      onPool: applyPoolStatus,
+      onStatus: s => {
+        if (s === 'live') hideHostGate();
+        else if (s === 'host-taken') showHostGate('host.taken');
+        else if (s === 'host-auth') {
+          if (finished) onHostLinkStatus(s);
+          done('auth');
+          return;
+        }
+        if (s === 'live') done('ok');
+        else if (s === 'host-taken') done('taken');
+      },
+    });
+    setTimeout(() => done('offline'), 8000);
+  });
+}
+async function gateHost() {
+  if (!isHost) return;
+  if (isRace) document.body.classList.add('race');
+  for (;;) {
+    await ensureHostSecret();
+    const st = await waitHostHello();
+    if (st === 'auth') {
+      writeHostSecret('');
+      matchLink?.close();
+      matchLink = null;
+      await ensureHostSecret('host.badSecret');
+      continue;
+    }
+    if (st === 'taken') {
+      await showHostGate('host.taken');
+      return;
+    }
+    hideHostGate();
+    return;
+  }
+}
 function setupMatchLink() {
   if (!isHost && !isWatch) return;
+  if (matchLink) return;
   matchLink = createMatchLink({
     role: isHost ? 'host' : 'watch',
+    secret: isHost ? () => hostSecret : undefined,
     onState: isWatch ? applyWatchState : undefined,
     onPool: applyPoolStatus,
     onStatus: s => {
-      if (isWatch && (s === 'offline' || s === 'host-taken')) showWatchWaiting('Waiting for the next race');
+      if (isWatch && (s === 'offline' || s === 'host-taken')) showWatchWaiting(t('race.wait'));
+      if (isHost) onHostLinkStatus(s);
     },
   });
 }
@@ -1097,7 +1320,7 @@ function paintSimRate(r) {
   const el = $('#simRate'); if (!el) return;
   el.hidden = !r;
   if (!r) return;
-  el.textContent = `sim ${r.rate.toFixed(2)}× of ${r.target}×${r.backend ? ' · ' + r.backend : ''}`;
+  el.textContent = r.backend ? t('race.simRateBe', { rate: r.rate.toFixed(2), target: r.target, be: r.backend }) : t('race.simRate', { rate: r.rate.toFixed(2), target: r.target });
   el.classList.toggle('slow', r.rate < 0.5 * r.target);
 }
 function publishMatchState(force = false) {
@@ -1107,7 +1330,7 @@ function publishMatchState(force = false) {
   sampleSimRate(now);
   if (!force && now - lastMatchSend < 1000 / 30) return;
   lastMatchSend = now;
-  const wall = raceStartWall != null ? formatWall(now - raceStartWall) : '0 s';
+  const wall = raceStartWall != null ? formatWall(now - raceStartWall) : t('clock.s', { n: 0 });
   const sel = flies.find(f => f.id === selected) || flies[0];
   let act = null;
   if (now - lastActSend > 400 && brainAct) { lastActSend = now; act = packAct(brainAct); }
@@ -1182,9 +1405,14 @@ function applyWatchOverlay(st) {
     const w = st.winner;
     const reset = settleNote();
     if (watchOverlayPhase !== 'results') {
-      const note = w.why === 'last' ? 'last remaining' : w.why === 'died' ? 'last to die' : '';
+      const note = winWhy(w.why);
       card.dataset.kind = 'results';
-      card.innerHTML = `<h1>${w.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${st.clock?.wall || ''}</p><p class="flyt">${flyTimeLine(st.clock?.fly)}</p>
+      card.dataset.winnerName = w.name;
+      card.dataset.why = w.why || '';
+      card.dataset.wall = st.clock?.wall || '';
+      card.dataset.fly = st.clock?.fly || '';
+      card.dataset.winnerColor = w.color || '';
+      card.innerHTML = `<h1>${t('race.wins', { name: w.name })}</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${st.clock?.wall || ''}</p><p class="flyt">${flyTimeLine(st.clock?.fly)}</p>
         ${raceHistoryHtml(loadRaceHistory())}
         <div class="bet-actions"></div>
         <p id="betNote" class="flyt"></p>
@@ -1201,7 +1429,7 @@ function applyWatchOverlay(st) {
     lastLobbyKind = '';
     return;
   }
-  if (watchOverlayPhase !== 'wait') showWatchWaiting('Waiting for the next race');
+  if (watchOverlayPhase !== 'wait') showWatchWaiting(t('race.wait'));
   watchOverlayPhase = 'wait';
   lastLobbyKind = '';
 }
@@ -1358,7 +1586,7 @@ function applyWatchState(st) {
   }
   if (st.phase !== 'live') watchSawRest = true;
   if (st.phase === 'live' && !wasLive) {
-    if (watchSawRest) announceRace('GO!');
+    if (watchSawRest) announceRace(t('race.go'), null, { gong: true });
     scheduleRaceBrainFold();
     playWatchBed();
   }
@@ -1368,11 +1596,12 @@ function applyWatchState(st) {
     for (const f of flies) syncFlyDeathVisual(f);
   }
   if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && !raceWinner) {
-    announceRace(`${st.winner.name} wins!`, st.winner.color);
+    announceRace(t('race.wins', { name: st.winner.name }), st.winner.color);
     raceAudio?.setMotion({ flying: false, walk: 0 });
     raceAudio?.playBed('menu');
     raceAudio?.playYipee();
     refreshProfile();
+    followRaceWinner(flies.find(x => x.id === st.winner.id));
   }
   paintRaceVitals(true);
   running = st.phase === 'live';
@@ -1423,7 +1652,7 @@ function setupRaceAnnounce() {
   raceAnnounce = new CSS2DObject(el);
   scene.add(raceAnnounce);
 }
-function announceRace(text, color) {
+function announceRace(text, color, { gong = false, died = false } = {}) {
   if (!isRace) return;
   if (!raceAnnounce) setupRaceAnnounce();
   if (!raceAnnounce) return;
@@ -1433,8 +1662,8 @@ function announceRace(text, color) {
   span.classList.remove('pop');
   void span.offsetWidth;
   span.classList.add('pop');
-  if (/\bdied!/.test(text)) raceChaos?.hideToast?.();
-  if (text === 'GO!') raceAudio?.playGong();
+  if (died) raceChaos?.hideToast?.();
+  if (gong) raceAudio?.playGong();
 }
 const announceNdc = new THREE.Vector3();
 function pinRaceAnnounce() {
@@ -1447,13 +1676,13 @@ function brainFoldChrome(folded) {
   const b = $('#bpFold'); if (!b) return;
   const mobile = raceMobile();
   b.textContent = mobile ? (folded ? '∧' : '∨') : (folded ? '<' : '>');
-  b.title = `${folded ? 'Show' : 'Hide'} brain panel (])`;
+  b.title = folded ? t('brain.show') : t('brain.hide');
   b.setAttribute('aria-expanded', String(!folded));
 }
 function profileFoldChrome(folded) {
   const b = $('#profileFold'); if (!b) return;
   b.textContent = folded ? '<' : '>';
-  b.title = `${folded ? 'Show' : 'Hide'} profile`;
+  b.title = folded ? t('profile.show') : t('profile.hide');
   b.setAttribute('aria-expanded', String(!folded));
 }
 function syncProfileScrim() {
@@ -1610,9 +1839,9 @@ function cueSelectedTakeoff(f) {
   if ((!prev?.flying && cur.flying) || (!prev?.takeoffPending && cur.takeoffPending)) raceAudio?.playTakeoff();
 }
 function lobbyClockLabel() {
-  if (betClosesAt == null) return 'Waiting for betting to open…';
+  if (betClosesAt == null) return t('lobby.waitingBets');
   const left = Math.max(0, Math.ceil((betClosesAt - Date.now()) / 1000));
-  return `Bets close in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  return t('lobby.betsClose', { m: Math.floor(left / 60), s: String(left % 60).padStart(2, '0') });
 }
 function poolRowsHtml(list = flies) {
   const total = poolSnap.reduce((s, p) => s + Number(p.display || 0), 0);
@@ -1639,7 +1868,7 @@ async function refreshPoolSnap() {
   } catch { /* offline pool */ }
 }
 function shortAddr(a) {
-  return a ? a.slice(0, 4) + '...' + a.slice(-4) : 'Connect';
+  return a ? a.slice(0, 4) + '...' + a.slice(-4) : t('profile.connect');
 }
 function matchWhen(id) {
   const n = Number(id);
@@ -1674,7 +1903,7 @@ async function connectFromUi(fn = connectWallet) {
   }
   const note = $('#betNote') || $('#profileNote');
   try {
-    if (note) note.textContent = 'Check your wallet…';
+    if (note) note.textContent = t('profile.checkWallet');
     await fn();
     if (note) note.textContent = '';
     if (matchPhase === 'lobby') paintLobbyOverlay(true);
@@ -1730,8 +1959,8 @@ function injectResultActions(id) {
   const host = $('#raceCard .bet-actions');
   if (!host) return;
   if (resultActions.key.split(':')[0] !== String(id)) { host.innerHTML = ''; return; }
-  host.innerHTML = (resultActions.claim ? '<button id="betClaim" class="primary" type="button">Claim</button>' : '')
-    + (resultActions.refund ? '<button id="betRefund" type="button">Refund</button>' : '');
+  host.innerHTML = (resultActions.claim ? `<button id="betClaim" class="primary" type="button">${t('ticket.claim')}</button>` : '')
+    + (resultActions.refund ? `<button id="betRefund" type="button">${t('ticket.refund')}</button>` : '');
   const claim = host.querySelector('#betClaim');
   if (claim) claim.onclick = () => runBetTx(() => claimRace(id));
   const refund = host.querySelector('#betRefund');
@@ -1759,7 +1988,7 @@ async function paintResultActions(id) {
       } catch { /* pool offline */ }
     }
     // The #raceReset line already says we are settling, so only speak up when there is money to take.
-    const note = claim ? 'You won — claim your payout.' : (refund ? 'Race voided — take your refund.' : '');
+    const note = claim ? t('race.claimNote') : (refund ? t('race.refundNote') : '');
     resultActions = { key, claim, refund, note };
   }
   injectResultActions(id);
@@ -1783,7 +2012,7 @@ function wireLobbyCard(card) {
   if (bet) bet.onclick = () => runBetTx(async () => {
     const amt = +card.querySelector('#betAmt')?.value || 10;
     const fly = betFlyId ?? flies[0]?.id;
-    if (fly == null) throw new Error('Pick a fly');
+    if (fly == null) throw new Error(t('lobby.pickError'));
     await placeBet(matchId, fly, amt);
     lastPoolRead = 0; await refreshPoolSnap(); paintLobbyOverlay(); await refreshProfile();
   });
@@ -1792,21 +2021,21 @@ async function runBetTx(fn) {
   const note = $('#betNote') || $('#profileNote');
   try {
     await ensureWallet();
-    if (note) note.textContent = 'Confirm in wallet…';
+    if (note) note.textContent = t('lobby.confirm');
     await fn();
-    if (note) note.textContent = 'Done.';
+    if (note) note.textContent = t('lobby.done');
     await refreshProfile();
   } catch (e) {
     if (note) note.textContent = e.shortMessage || e.message || String(e);
   }
 }
 function ticketStatus(r) {
-  if (r.outcome === 'unclaimed') return { label: 'Won', kind: 'won' };
-  if (r.outcome === 'won') return { label: 'Claimed', kind: 'claimed' };
-  if (r.outcome === 'void') return { label: 'Void', kind: 'void' };
-  if (r.outcome === 'refunded') return { label: 'Refunded', kind: 'refunded' };
-  if (r.outcome === 'open') return { label: 'Open', kind: 'open' };
-  if (r.outcome === 'lost') return { label: 'Lost', kind: 'lost' };
+  if (r.outcome === 'unclaimed') return { label: t('ticket.won'), kind: 'won' };
+  if (r.outcome === 'won') return { label: t('ticket.claimed'), kind: 'claimed' };
+  if (r.outcome === 'void') return { label: t('ticket.void'), kind: 'void' };
+  if (r.outcome === 'refunded') return { label: t('ticket.refunded'), kind: 'refunded' };
+  if (r.outcome === 'open') return { label: t('ticket.open'), kind: 'open' };
+  if (r.outcome === 'lost') return { label: t('ticket.lost'), kind: 'lost' };
   return { label: r.outcome, kind: r.outcome };
 }
 async function refreshProfile() {
@@ -1819,28 +2048,28 @@ async function refreshProfile() {
   el.classList.toggle('guest', !acct);
   if (acct) hideWalletPick();
   if (connect) {
-    connect.textContent = connect.dataset.copied === '1' ? 'Copied' : shortAddr(acct);
-    connect.title = acct ? 'Copy address' : 'Connect wallet';
+    connect.textContent = connect.dataset.copied === '1' ? t('profile.copied') : shortAddr(acct);
+    connect.title = acct ? t('profile.copyAddr') : t('profile.connectWallet');
     connect.classList.toggle('connect-btn', !acct);
   }
   if (disc) disc.hidden = !acct;
   syncBpHint();
   const bal = $('#profileBal'), list = $('#profileTickets');
   if (!chainConfigured()) {
-    if (bal) bal.textContent = 'Pool not configured';
+    if (bal) bal.textContent = t('profile.poolMissing');
     if (list) list.innerHTML = '';
     return;
   }
   if (!acct) {
     profileAcct = null;
-    if (bal) bal.textContent = 'Connect a wallet';
+    if (bal) bal.textContent = t('profile.connectHint');
     if (list) list.innerHTML = '';
     return;
   }
   if (acct !== profileAcct) {          // a switch must not leave the old wallet's tickets on screen
     profileAcct = acct;
-    if (bal) bal.textContent = 'Loading…';
-    if (list) list.innerHTML = '<li>Loading…</li>';
+    if (bal) bal.textContent = t('profile.loading');
+    if (list) list.innerHTML = `<li>${t('profile.loading')}</li>`;
   }
   try {
     const [chips, hist, stake] = await Promise.all([
@@ -1849,15 +2078,15 @@ async function refreshProfile() {
       matchId ? userTotal(matchId, acct) : 0n,
     ]);
     if (seq !== profileSeq) return;    // a newer refresh already owns the panel
-    if (bal) bal.textContent = `${Number(chips).toFixed(1)} ${chipSymbol()}` + (stake && stake > 0n ? ` · this race ${Number(chipFmt(stake)).toFixed(1)}` : '');
+    if (bal) bal.textContent = `${Number(chips).toFixed(1)} ${chipSymbol()}` + (stake && stake > 0n ? t('profile.thisRace', { n: Number(chipFmt(stake)).toFixed(1) }) : '');
     if (list) {
       list.innerHTML = hist.slice(0, 8).map(r => {
         const st = ticketStatus(r);
-        const act = r.outcome === 'unclaimed' ? `<button type="button" class="tk-claim" data-claim="${r.matchId}">Claim</button>`
-          : (r.outcome === 'void' ? `<button type="button" class="tk-refund" data-refund="${r.matchId}">Refund</button>` : '');
+        const act = r.outcome === 'unclaimed' ? `<button type="button" class="tk-claim" data-claim="${r.matchId}">${t('ticket.claim')}</button>`
+          : (r.outcome === 'void' ? `<button type="button" class="tk-refund" data-refund="${r.matchId}">${t('ticket.refund')}</button>` : '');
         const win = r.payout != null && Number(r.payout) > 0 && r.outcome !== 'lost' ? ` +${Number(r.payout).toFixed(1)}` : '';
         return `<li><b>${matchWhen(r.matchId)}</b>${flyTag(r.flyId, r.matchId)}<span class="tk-amt">${Number(r.amount).toFixed(1)}</span><i class="tk-status tk-${st.kind}">${st.label}${win}</i><span class="tk-act">${act}</span></li>`;
-      }).join('') || '<li>No tickets yet</li>';
+      }).join('') || `<li>${t('profile.noTickets')}</li>`;
       list.querySelectorAll('[data-claim]').forEach(b => { b.onclick = () => runBetTx(() => claimRace(+b.dataset.claim)); });
       list.querySelectorAll('[data-refund]').forEach(b => { b.onclick = () => runBetTx(() => refundRace(+b.dataset.refund)); });
     }
@@ -1896,25 +2125,25 @@ function paintLobbyOverlay(force = false) {
   if (isWatch) {
     // Unknown status with a running clock means no operator is reporting: let them try anyway.
     const open = !chainConfigured() || poolStatus === 1 || (poolStatus == null && betClosesAt != null && !poolOpError);
-    const note = !chainConfigured() ? 'Pool not configured (set VITE_POOL).'
-      : poolOpError && poolStatus !== 1 ? 'Pool operator offline — betting is closed this race.'
-      : (open ? 'Pick a fly, then Bet.' : 'Opening the race on-chain…');
-    card.innerHTML = `<h1>Sugar Run</h1><p>Winner pool — first to the sugary center, or last alive</p>
+    const note = !chainConfigured() ? t('lobby.poolMissing')
+      : poolOpError && poolStatus !== 1 ? t('lobby.opOffline')
+      : (open ? t('lobby.pickFly') : t('lobby.opening'));
+    card.innerHTML = `<h1>Sugar Run</h1><p>${t('lobby.blurb')}</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       ${poolRowsHtml()}
       <div class="bet-stake">
         <div class="bet-stake-row"><input id="betAmt" type="number" min="1" value="10"><span>${chipSymbol()}</span>
-          <button id="betPlace" class="primary" type="button"${open ? '' : ' disabled'}>Bet</button></div>
+          <button id="betPlace" class="primary" type="button"${open ? '' : ' disabled'}>${t('lobby.bet')}</button></div>
       </div>
       <div class="bet-wallet">
         <button id="betConnect" type="button">${shortAddr(acct)}</button>
-        ${acct ? '<button id="betDisconnect" class="danger" type="button">Disconnect</button>' : ''}
+        ${acct ? `<button id="betDisconnect" class="danger" type="button">${t('profile.disconnect')}</button>` : ''}
       </div>
       <p id="betNote" class="flyt">${note}</p>`;
   } else {
-    card.innerHTML = `<h1>Sugar Run</h1><p>Winner pool — first to the sugary center, or last alive</p>
+    card.innerHTML = `<h1>Sugar Run</h1><p>${t('lobby.blurb')}</p>
       <p class="sub" id="lobbyClock">${clock}</p>
-      <p class="flyt">Race starts itself — no GO</p>
+      <p class="flyt">${t('lobby.autoStart')}</p>
       ${poolRowsHtml()}${raceHistoryHtml(loadRaceHistory())}`;
   }
   showRaceOverlayCard(card, { enter: overlayWasHidden });
@@ -2006,7 +2235,7 @@ async function showRaceStart() {
 function formatWall(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   if (s >= 60) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  return s + ' s';
+  return t('clock.s', { n: s });
 }
 function parseWallMs(wall) {
   if (wall == null) return null;
@@ -2029,14 +2258,14 @@ function startRace() {
   overlay.classList.remove('show');
   overlay.hidden = true;
   raceStartWall = performance.now();
-  paintRaceClock('0 s');
+  paintRaceClock(t('clock.s', { n: 0 }));
   running = true;
   matchPhase = 'live';
   matchResetIn = null;
   clearInterval(lobbyTimer); lobbyTimer = null;
   raceAudio?.unlock().then(() => raceAudio?.playBed('race'));
   for (const f of flies) f.worker?.postMessage({ type: 'run' });
-  announceRace('GO!');
+  announceRace(t('race.go'), null, { gong: true });
   scheduleRaceBrainFold();
   raceChaos?.arm();
   publishMatchState(true);
@@ -2056,13 +2285,20 @@ function announceRaceWinner(f, why) {
   raceAudio?.setMotion({ flying: false, walk: 0 });
   raceAudio?.playBed('menu');
   raceAudio?.playYipee();
-  announceRace(`${f.name} wins!`, f.color);
+  announceRace(t('race.wins', { name: f.name }), f.color);
   raceChaos?.reset();
+  followRaceWinner(f);
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   const card = $('#raceCard');
   card.dataset.kind = 'results';
-  const note = why === 'last' ? 'last remaining' : why === 'died' ? 'last to die' : '';
-  card.innerHTML = `<h1>${f.name} wins!</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${wall}</p><p class="flyt">${flyTimeLine(fly)}</p>${raceHistoryHtml(hist)}<p id="raceReset">${settleNote()}</p>`;
+  const note = winWhy(why);
+  card.dataset.kind = 'results';
+  card.dataset.winnerName = f.name;
+  card.dataset.why = why || '';
+  card.dataset.wall = wall;
+  card.dataset.fly = fly;
+  card.dataset.winnerColor = f.color || '';
+  card.innerHTML = `<h1>${t('race.wins', { name: f.name })}</h1>${note ? `<p class="flyt">${note}</p>` : ''}<p class="win-time">${wall}</p><p class="flyt">${flyTimeLine(fly)}</p>${raceHistoryHtml(hist)}<p id="raceReset">${settleNote()}</p>`;
   publishMatchState(true);
   showRaceOverlayCard(card, { flyColor: f.color });
   settleHostRace(f.id);
@@ -2207,7 +2443,7 @@ function onFlyDeath(f, { winnerKnown = false } = {}) {
   if (!isRace || !f || f.diedAt) return;
   f.diedAt = performance.now();
   if (!winnerKnown) raceAudio?.playOof();
-  if (!isWatch && !raceWinner) announceRace(`${f.name} died!`, f.color);
+  if (!isWatch && !raceWinner) announceRace(t('race.died', { name: f.name }), f.color, { died: true });
   spawnDeadFlySprite(f);
   syncFlySceneLabel(f);
   paintRaceVitals(true);
@@ -2268,12 +2504,17 @@ function chaseCam(f, outPos, outTarget) {
   outPos.set(p[0] - Math.cos(yaw) * RACE_CHASE_BACK, p[1] - Math.sin(yaw) * RACE_CHASE_BACK, p[2] + RACE_CHASE_Z);
 }
 const chasePos = new THREE.Vector3(), chaseTarget = new THREE.Vector3();
-function startRaceFollow(id) {
+function followRaceWinner(f) {
+  if (!isRace || !f?.last) return;
+  if (raceFollow === f.id && !raceCamTween) return;
+  startRaceFollow(f.id, { silent: true });
+}
+function startRaceFollow(id, { silent = false } = {}) {
   id = +id;
   const same = isRace && raceFollow === id;
   selected = id;
   if (!isRace) { renderFlyList(); return; }
-  if (!same) raceAudio?.playSelect(id);
+  if (!same && !silent) raceAudio?.playSelect(id);
   raceFollow = id;
   raceCamTween = { mode: 'in', t: 0, dur: 0.55, fromPos: camera.position.clone(), fromTarget: controls.target.clone() };
   renderFlyList();
@@ -2337,48 +2578,28 @@ function onClick(e) {
   if (tool === 'co2') env.odors.push({ x: p.x, y: p.y, odor: 'co2', strength: 1, sigma: 0.8 });
   if (tool === 'bitter') env.bitterPatches.push({ x: p.x, y: p.y, r: 0.25, bitter: 1 });
   if (tool === 'hazard') env.hazards.push({ x: p.x, y: p.y, r: 0.3, heat: 1 });
-  if (tool === 'obstacle') { alert('Obstacles change the physics world; they apply to flies added after this point.'); env.obstacles.push({ type: 'box', x: p.x, y: p.y, sx: 0.2, sy: 0.2, sz: 0.3 }); }
+  if (tool === 'obstacle') { alert(t('panel.obstacleAlert')); env.obstacles.push({ type: 'box', x: p.x, y: p.y, sx: 0.2, sy: 0.2, sz: 0.3 }); }
   rebuildEnv(); syncEnv();
 }
-const VITALS_SHORT = {
-  'turning left': 'turn left',
-  'turning right': 'turn right',
-  'walking backward': 'walk back',
-  walking: 'walk',
-  standing: 'stand',
-  'taking off': 'takeoff',
-  'escape jump': 'escape',
-  'singing (courtship)': 'singing',
-  courting: 'court',
-  grooming: 'groom',
-  feeding: 'feed',
-  flying: 'fly',
-  landing: 'land',
-  righting: 'right',
-  dead: 'dead',
-  'proboscis extended': 'proboscis',
-};
 function vitalsBehaviorLabel(behavior) {
-  if (!behavior) return '';
-  const base = behavior.replace(/ \(proboscis out\)$/, '');
-  return VITALS_SHORT[base] || base;
+  return behaviorLabel(behavior, { short: true });
 }
 function flyRowHtml(f, selectedId = selected, raceVitals = false) {
   const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
   const gender = raceVitals ? '' : `${f.sex === 'f' ? '♀' : '♂'} `;
   const timer = raceVitals ? '' : `<span class="fly-t" style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span>`;
   return `<div class="fly ${f.id === selectedId ? 'sel' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
-      <div>${gender}<span class="fly-name">${f.name}</span> <span class="fly-behavior" style="color:var(--acc)">${s.behavior || ''}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
+      <div>${gender}<span class="fly-name">${f.name}</span> <span class="fly-behavior" style="color:var(--acc)">${raceVitals ? (raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior)) : behaviorLabel(s.behavior)}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
       ${timer}</div>`;
 }
 function flyKvHtml(f) {
   const s = f.last; if (!s) return '';
   const c = s.cmd || {};
-  return `<div class="kv"><span>behaviour</span><span style="color:var(--acc)">${s.behavior || ''}</span><span>energy</span><span>${(s.energy * 100).toFixed(0)}%</span><span>health</span><span>${(s.health * 100).toFixed(0)}%</span>
-      <span>food eaten</span><span>${(s.eaten * 1000).toFixed(1)} mg·eq</span><span>distance travelled</span><span>${(s.dist || 0).toFixed(1)} cm</span><span>takeoffs / flights</span><span>${s.jumps || 0} / ${s.flights || 0}</span><span>endogenous state</span><span>${s.drive || '–'}</span>${s.nm ? `<span>AKH / insulin</span><span>${s.nm.akh.toFixed(2)} / ${s.nm.dilp.toFixed(2)}</span><span>octopamine (AKHR neurons)</span><span>${s.nm.oa.toFixed(1)} Hz, arousal ${(s.nm.arousal * 100).toFixed(0)}%</span>` : ''}<span>walk drive (BDN2/oDN1/P9)</span><span>${(c.drive || 0).toFixed(0)} Hz</span>
-      <span>backward (MDN)</span><span>${(c.back || 0).toFixed(0)} Hz</span><span>steering (DNa01/02)</span><span>${(c.turn || 0).toFixed(2)}</span>
-      <span>giant fibre</span><span>${(c.escape || 0).toFixed(0)} Hz</span><span>MN9 (proboscis)</span><span>${(s.mn9 || 0).toFixed(0)} Hz</span>
-      <span>pharyngeal pump</span><span>${((s.feeding || 0) * 100).toFixed(0)}%</span><span>sensory neurons driven</span><span>${s.nSensory}</span></div>`;
+  return `<div class="kv"><span>${t('kv.behaviour')}</span><span style="color:var(--acc)">${behaviorLabel(s.behavior)}</span><span>${t('kv.energy')}</span><span>${(s.energy * 100).toFixed(0)}%</span><span>${t('kv.health')}</span><span>${(s.health * 100).toFixed(0)}%</span>
+      <span>${t('kv.foodEaten')}</span><span>${(s.eaten * 1000).toFixed(1)} mg·eq</span><span>${t('kv.distance')}</span><span>${(s.dist || 0).toFixed(1)} cm</span><span>${t('kv.takeoffs')}</span><span>${s.jumps || 0} / ${s.flights || 0}</span><span>${t('kv.drive')}</span><span>${s.drive || '–'}</span>${s.nm ? `<span>${t('kv.hormones')}</span><span>${s.nm.akh.toFixed(2)} / ${s.nm.dilp.toFixed(2)}</span><span>${t('kv.oa')}</span><span>${t('kv.arousal', { hz: s.nm.oa.toFixed(1), pct: (s.nm.arousal * 100).toFixed(0) })}</span>` : ''}<span>${t('kv.walkDrive')}</span><span>${(c.drive || 0).toFixed(0)} Hz</span>
+      <span>${t('kv.back')}</span><span>${(c.back || 0).toFixed(0)} Hz</span><span>${t('kv.steer')}</span><span>${(c.turn || 0).toFixed(2)}</span>
+      <span>${t('kv.gf')}</span><span>${(c.escape || 0).toFixed(0)} Hz</span><span>${t('kv.mn9')}</span><span>${(s.mn9 || 0).toFixed(0)} Hz</span>
+      <span>${t('kv.pump')}</span><span>${((s.feeding || 0) * 100).toFixed(0)}%</span><span>${t('kv.sensory')}</span><span>${s.nSensory}</span></div>`;
 }
 function paintFlyLabel(f) {
   const info = f.label?.element.querySelector('.fly-label-info');
@@ -2402,7 +2623,7 @@ function paintRaceVitals(force = false) {
     const s = f.last || {};
     row.classList.toggle('dead', s.alive === false);
     const beh = row.querySelector('.fly-behavior');
-    if (beh) beh.textContent = raceMobile() ? vitalsBehaviorLabel(s.behavior) : (s.behavior || '');
+    if (beh) beh.textContent = raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior);
     const eBar = row.querySelector('.bar-energy > i');
     if (eBar) eBar.style.width = `${(s.energy ?? 0) * 100}%`;
     const hBar = row.querySelector('.bar-health > i');
@@ -2418,7 +2639,7 @@ function renderFlyList() {
     else { selected = id; renderFlyList(); }
   });
   const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f;
-  $('#takeoff').textContent = f?.last?.takeoffPending ? (running ? 'Takeoff queued' : 'Takeoff queued · press Run') : 'Activate takeoff DNs';
+  $('#takeoff').textContent = f?.last?.takeoffPending ? (running ? t('panel.takeoffQueued') : t('panel.takeoffQueuedRun')) : t('panel.takeoff');
   $('#takeoff').disabled = !f?.ready || f.last?.flying || f.last?.alive === false;
   if (f?.last) $('#sel').innerHTML = flyKvHtml(f);
   for (const x of flies) paintFlyLabel(x);
@@ -2436,17 +2657,24 @@ function showGroupInInset(j) {
   hlPts.geometry.dispose(); hlPts.geometry = new THREE.BufferGeometry(); hlPts.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   hlPts.material.color.set(g.color);
 }
-function buildBrainPanel(data) {
-  groups = buildGroups(bodymap, meta.types, data.side);
-  $('#groups').innerHTML = groups.map((g, j) => `<div class="g" data-j="${j}">
-      <span class="name"><i style="background:${g.color}"></i>${g.label} <small>${g.L.length + g.R.length}</small><button class="q" title="what is this?">?</button></span>
+function paintGroupRows() {
+  const host = $('#groups');
+  if (!host || !groups.length) return;
+  const open = [...host.querySelectorAll('.info')].map(i => !i.hidden);
+  host.innerHTML = groups.map((g, j) => `<div class="g" data-j="${j}">
+      <span class="name"><i style="background:${g.color}"></i>${groupLabel(g)} <small>${g.L.length + g.R.length}</small><button class="q" title="${t('brain.what')}">?</button></span>
       <canvas width="236" height="48"></canvas><span class="v"><b class="l">–</b><b class="r">–</b></span>
-      <div class="info" hidden>${g.info}</div></div>`).join('');
-  $('#groups').querySelectorAll('.g').forEach(el => {
+      <div class="info" hidden>${groupInfo(g)}</div></div>`).join('');
+  host.querySelectorAll('.g').forEach(el => {
     const j = +el.dataset.j;
     el.onmouseenter = () => { hover = j; }; el.onmouseleave = () => { hover = -1; };
     el.querySelector('.q').onclick = () => { const i = el.querySelector('.info'); i.hidden = !i.hidden; };
+    if (open[j]) el.querySelector('.info').hidden = false;
   });
+}
+function buildBrainPanel(data) {
+  groups = buildGroups(bodymap, meta.types, data.side);
+  paintGroupRows();
   // eye columns: azimuth/elevation of each column's viewing direction; the front of each eye faces the middle
   const W = 168, H = 116;
   eyeDots = ['L', 'R'].map(sd => flyvisMap.eyes[sd].dirs.map(([x, y, z]) => {
@@ -2456,7 +2684,7 @@ function buildBrainPanel(data) {
   $('#brainpanel').hidden = false;
 }
 function onActivity(f, m) {
-  if (histFly !== f.id) { histFly = f.id; hist = groups.map(() => [[], []]); $('#bpTitle').innerHTML = `Inside ${f.name} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${f.color}"></i>`; }
+  if (histFly !== f.id) { histFly = f.id; hist = groups.map(() => [[], []]); $('#bpTitle').innerHTML = `${t('brain.inside', { name: f.name })} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${f.color}"></i>`; }
   const rows = $('#groups').children;
   groups.forEach((g, j) => {
     const h = hist[j]; h[0].push(m.groups[j * 2]); h[1].push(m.groups[j * 2 + 1]); if (h[0].length > HIST) { h[0].shift(); h[1].shift(); }
@@ -2586,7 +2814,7 @@ function animate() {
     raceAudio.setMotion({ flying: !!s?.flying, walk: s?.flying ? 0 : Math.abs(s?.cmd?.v || 0) });
   }
   if (sf?.last) { const t = sf.last.t / 1000; $('#simt').textContent = t.toFixed(2); if (now - lastSimReal > 1000) { $('#rt').textContent = ((t - lastSim) / ((now - lastSimReal) / 1000)).toFixed(2); lastSim = t; lastSimReal = now; } }
-  updateThreat(); if (!chaosCamHold) controls.update();
+  updateThreat(); if (!chaosCamHold || controls.enabled) controls.update();
   camera.position.z = Math.max(camera.position.z, 0.02);
   camera.updateMatrixWorld();
   if (isRace) updateDeadFlySprites(now);
@@ -2634,11 +2862,11 @@ main().catch(e => { if ($('#status')) status('error: ' + e.message); console.err
 // side panels fold to their title bar (chevron button, or the [ and ] keys); the choice persists
 function setupFolds() {
   const folds = isRace
-    ? [['#brainpanel', '#bpFold', ']', '>', '<', 'brain panel']]
-    : [['#panel', '#panelFold', '[', '‹', '›', 'controls'], ['#brainpanel', '#bpFold', ']', '›', '‹', 'brain panel']];
+    ? [['#brainpanel', '#bpFold', ']', '>', '<', t('brain.panel')]]
+    : [['#panel', '#panelFold', '[', '‹', '›', t('brain.controls')], ['#brainpanel', '#bpFold', ']', '›', '‹', t('brain.panel')]];
   const apply = ([panel, btn, key, open, shut, what], folded) => {
     $(panel).classList.toggle('folded', folded); const b = $(btn);
-    b.textContent = folded ? shut : open; b.title = `${folded ? 'Show' : 'Hide'} ${what} (${key})`; b.setAttribute('aria-expanded', String(!folded));
+    b.textContent = folded ? shut : open; b.title = folded ? (what === t('brain.panel') ? t('brain.show') : t('panel.showControls')) : (what === t('brain.panel') ? t('brain.hide') : t('panel.hideControls')); b.setAttribute('aria-expanded', String(!folded));
     try { localStorage.setItem(`fold${panel}`, folded ? '1' : ''); } catch {}
   };
   if (isRace) {

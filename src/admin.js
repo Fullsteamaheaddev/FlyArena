@@ -5,10 +5,13 @@ import {
 } from './chain.js';
 import { fetchSiteTickerUrl, saveSiteTickerUrl } from './ticker-url.js';
 import { fetchSiteMap, saveSiteMap } from './race-map.js';
+import { t, applyDom, onLocaleChange } from './i18n.js';
 
 const $ = s => document.querySelector(s);
 const status = s => { $('#adminStatus').textContent = s; };
 const sameAddr = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
+applyDom();
+onLocaleChange(() => { applyDom(); refresh().catch(() => {}); });
 
 function hidePanel() {
   const el = $('#adminPanel');
@@ -17,16 +20,16 @@ function hidePanel() {
 
 async function authorize() {
   hidePanel();
-  if (!chainConfigured()) { status('Pool not configured (set VITE_POOL / VITE_CHIP or deploy).'); return false; }
+  if (!chainConfigured()) { status(t('admin.notConfigured')); return false; }
   const a = getAccount();
-  if (!a) { status('Connect the owner wallet.'); return false; }
+  if (!a) { status(t('admin.statusConnect')); return false; }
   const owner = await poolContract().owner();
   if (!sameAddr(a, owner)) {
-    status('Not the owner wallet.');
+    status(t('admin.notOwner'));
     return false;
   }
   $('#adminPanel').hidden = false;
-  status('Connected ' + a.slice(0, 6) + '…' + a.slice(-4));
+  status(t('admin.connected', { addr: a.slice(0, 6) + '…' + a.slice(-4) }));
   return true;
 }
 
@@ -41,14 +44,14 @@ async function refresh() {
   const feeTo = await p.feeRecipient();
   let meta = { symbol: 'CHIP' };
   try { meta = await readChipMeta(); } catch {}
-  $('#adminInfo').innerHTML = `<span>chain</span><span>${CHAIN_ID}</span>
-    <span>pool</span><span>${p.target}</span>
-    <span>token</span><span>${token} (${meta.symbol})</span>
-    <span>operator</span><span>${op}</span>
-    <span>owner</span><span>${owner}</span>
-    <span>window</span><span>${windowSec} s</span>
-    <span>fee</span><span>${feeBps / 100}% (${feeBps} bps)</span>
-    <span>fee wallet</span><span>${feeTo}</span>`;
+  $('#adminInfo').innerHTML = `<span>${t('admin.info.chain')}</span><span>${CHAIN_ID}</span>
+    <span>${t('admin.info.pool')}</span><span>${p.target}</span>
+    <span>${t('admin.info.token')}</span><span>${token} (${meta.symbol})</span>
+    <span>${t('admin.info.operator')}</span><span>${op}</span>
+    <span>${t('admin.info.owner')}</span><span>${owner}</span>
+    <span>${t('admin.info.window')}</span><span>${t('admin.windowVal', { n: windowSec })}</span>
+    <span>${t('admin.info.fee')}</span><span>${t('admin.feeVal', { pct: feeBps / 100, bps: feeBps })}</span>
+    <span>${t('admin.info.feeWallet')}</span><span>${feeTo}</span>`;
   $('#adminWindow').value = windowSec;
   $('#adminToken').value = token;
   $('#adminOp').value = op;
@@ -62,7 +65,7 @@ async function refresh() {
   }
   $('#adminMap').value = await fetchSiteMap();
   const mint = $('#adminMint');
-  if (mint) mint.textContent = `Mint ${meta.symbol || chipSymbol()}`;
+  if (mint) mint.textContent = t('admin.mint', { symbol: meta.symbol || chipSymbol() });
 }
 
 $('#adminConnect').onclick = async () => {
@@ -80,29 +83,29 @@ window.ethereum?.on?.('accountsChanged', async () => {
 });
 
 $('#adminSetWindow').onclick = async () => {
-  try { if (!(await authorize())) return; await adminSetWindow(+$('#adminWindow').value); status('Window saved.'); await refresh(); }
+  try { if (!(await authorize())) return; await adminSetWindow(+$('#adminWindow').value); status(t('admin.windowSaved')); await refresh(); }
   catch (e) { status(e.message || String(e)); }
 };
 $('#adminSetToken').onclick = async () => {
-  try { if (!(await authorize())) return; await adminSetToken($('#adminToken').value.trim()); status('Token saved.'); await refresh(); }
+  try { if (!(await authorize())) return; await adminSetToken($('#adminToken').value.trim()); status(t('admin.tokenSaved')); await refresh(); }
   catch (e) { status(e.message || String(e)); }
 };
 $('#adminSetOp').onclick = async () => {
-  try { if (!(await authorize())) return; await adminSetOperator($('#adminOp').value.trim()); status('Operator saved.'); await refresh(); }
+  try { if (!(await authorize())) return; await adminSetOperator($('#adminOp').value.trim()); status(t('admin.opSaved')); await refresh(); }
   catch (e) { status(e.message || String(e)); }
 };
 $('#adminSetFee').onclick = async () => {
   try {
     if (!(await authorize())) return;
     const bps = Math.round((Number($('#adminFee').value) || 0) * 100);
-    if (bps < 0 || bps > 1000) { status('Fee must be between 0 and 10 percent.'); return; }
+    if (bps < 0 || bps > 1000) { status(t('admin.feeRange')); return; }
     await adminSetFeeBps(bps);
-    status('Fee saved.');
+    status(t('admin.feeSaved'));
     await refresh();
   } catch (e) { status(e.message || String(e)); }
 };
 $('#adminSetFeeTo').onclick = async () => {
-  try { if (!(await authorize())) return; await adminSetFeeRecipient($('#adminFeeTo').value.trim()); status('Fee wallet saved.'); await refresh(); }
+  try { if (!(await authorize())) return; await adminSetFeeRecipient($('#adminFeeTo').value.trim()); status(t('admin.feeWalletSaved')); await refresh(); }
   catch (e) { status(e.message || String(e)); }
 };
 $('#adminSetTicker').onclick = async () => {
@@ -111,7 +114,7 @@ $('#adminSetTicker').onclick = async () => {
     const url = $('#adminTicker').value.trim();
     try { localStorage.setItem('sugarRunTickerUrl', url); } catch {}
     await saveSiteTickerUrl(url);
-    status(url ? 'Ticker URL saved for the whole site (host and watchers).' : 'Ticker URL cleared.');
+    status(url ? t('admin.tickerSaved') : t('admin.tickerCleared'));
   } catch (e) {
     status(e.message || String(e));
   }
@@ -120,7 +123,7 @@ $('#adminSetMap').onclick = async () => {
   try {
     if (!(await authorize())) return;
     const map = await saveSiteMap($('#adminMap').value);
-    status(`Race map set to ${map}. The host switches at the next reset.`);
+    status(t('admin.mapSaved', { map }));
   } catch (e) {
     status(e.message || String(e));
   }
@@ -130,6 +133,6 @@ $('#adminMint').onclick = async () => {
     if (!(await authorize())) return;
     const to = $('#adminMintTo').value.trim() || getAccount();
     await adminMint(to, +$('#adminMintAmt').value || 100);
-    status('Minted.');
+    status(t('admin.minted'));
   } catch (e) { status(e.message || String(e)); }
 };
