@@ -17,6 +17,7 @@ import { preloadMapAssets } from './race-map-assets.js';
 import { windField, hawkAt } from './race-wind.js';
 import { fetchSiteMap, normalizeMapId } from './race-map.js';
 import { allocBrainMemory, MAX_FLIES } from './brainsetup.js';
+import { allocSharedBrain } from './brain-shared.js';
 import { parseFlyVis } from './flyvis.js';
 import { buildGroups } from './sim/groups.js';
 import { createRaceAudio } from './race-audio.js';
@@ -202,6 +203,7 @@ async function main() {
   status('writing connectome into shared memory');
   status('writing connectome and optic-lobe model into shared memory');
   brainMem = allocBrainMemory({ ...data, superclass: data.superclass }, shared.size, shared.sign, brainParams, MAX_FLIES, vision);
+  await startSharedBrain();
   flyvisMap = fvm;
   window.__data = data;
   buildBrainPanel(data);
@@ -634,6 +636,29 @@ function updateWingBlur(f, s) {
   for (const w of f.wingBlur) if (w) { w.src.visible = !s.flying; w.blur.visible = !!s.flying; }
 }
 
+// ---------------- shared GPU brain ----------------
+// One brain worker owns the only WebGPU device and the connectome on the GPU; every fly worker runs its brain
+// through a slot there. ?sharedgpu=0 (or any failure) keeps one device per fly worker; ?gpu=0 stays WASM.
+let brainWorker = null, sharedBrain = null, attachSeq = 0;
+async function startSharedBrain() {
+  if (brainParams.gpu === false || !navigator.gpu || new URLSearchParams(location.search).get('sharedgpu') === '0') return;
+  status('starting shared GPU brain');
+  try {
+    sharedBrain = allocSharedBrain(shared.N, MAX_FLIES);
+    brainWorker = new Worker(new URL('./sim/brain.worker.js', import.meta.url), { type: 'module' });
+    const r = await new Promise(res => {
+      brainWorker.onmessage = e => { if (e.data.type === 'ready') res(e.data); };
+      brainWorker.onerror = e => res({ ok: false, error: e.message || 'worker error' });
+      brainWorker.postMessage({ type: 'init', shared: sharedBrain, memory: brainMem.memory, graph: brainMem.graph, N: shared.N, E: shared.E, opts: brainMem.opts });
+    });
+    if (!r.ok) throw new Error(r.error);
+    console.info('shared GPU brain ready');
+  } catch (e) {
+    console.warn('shared GPU brain unavailable, one device per fly worker:', e);
+    brainWorker?.terminate(); brainWorker = null; sharedBrain = null;
+  }
+}
+
 // ---------------- flies ----------------
 let nextId = 0;
 async function addFly(pos, yaw, sex = 'm', ident = null) {
@@ -641,6 +666,13 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
   if (flies.length >= cap) { alert(`At most ${cap} flies`); return; }
   const id = nextId++; const color = ident?.color || FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
+  const seed = isRace ? Math.floor(Math.random() * 1e9) : 0;
+  let sharedGpu = null, brainPort = null;
+  if (brainWorker && id < MAX_FLIES) {
+    const ch = new MessageChannel(), attachId = ++attachSeq;
+    brainWorker.postMessage({ type: 'attach', slot: id, seed: 101 + id + seed, attachId, port: ch.port1 }, [ch.port1]);
+    sharedGpu = { shared: sharedBrain, attachId }; brainPort = ch.port2;
+  }
   const f = { id, worker, color, sex, name: ident?.name || (isRace ? RACE_NAMES[id] || `fly ${id}` : `fly ${id}`), ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
   scene.add(f.group); flies.push(f); batches.add(f);
   if (isRace) {
@@ -665,8 +697,8 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
   }
   worker.onmessage = e => onWorker(f, e.data);
   worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: MAX_FLIES - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: true, sex,
-    brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap,
-    ...(isRace ? { burstSteps: 64, burstMs: 64, fenceEvery: 4, seed: Math.floor(Math.random() * 1e9) } : {}) });
+    brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap, sharedGpu, brainPort,
+    ...(isRace ? { burstSteps: 64, burstMs: 64, fenceEvery: 4, seed } : {}) }, brainPort ? [brainPort] : []);
   await new Promise(res => { f.onReady = res; });
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });
@@ -675,6 +707,7 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
 }
 function removeFly(f) {
   f.worker?.terminate();
+  brainWorker?.postMessage({ type: 'detach', slot: f.id });
   batches.remove(f);
   scene.remove(f.group);
   if (f.beacon) disposeFlyBeacon(f.beacon);

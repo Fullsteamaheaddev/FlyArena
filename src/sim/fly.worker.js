@@ -20,13 +20,13 @@ onmessage = async (e) => {
     if (m.burstMs) burstMs = m.burstMs;
     if (m.fenceEvery) fenceEvery = m.fenceEvery;
     const seed = m.seed || 0;
-    const brain = await attachBrain(m.wasmModule, m.brainMem, m.slot, data, 101 + m.id + seed);
+    const brain = await attachBrain(m.wasmModule, m.brainMem, m.slot, data, 101 + m.id + seed, m.sharedGpu ? { ...m.sharedGpu, port: m.brainPort } : null);
     const flyvis = m.brainMem.fv ? { eyes: attachEyes(brain.instance, m.brainMem, m.slot), map: m.flyvisMap, gain: 150 } : null;
     fly = new FlyAgent({ brain, flyvis, mj, flyXML: m.flyXML, env, data, size: g.size, sign: g.sign, bodymap: m.bodymap, gait: m.gait, id: m.id,
       pos: m.pos, yaw: m.yaw, nProxies: m.nProxies, mode: m.mode, brainOpts: m.brainOpts, vision: m.vision, neuromod: { calib: m.neuromod }, sex: m.sex, seed });
     meter = new GroupMeter(buildGroups(m.bodymap, data.meta.types, data.side), g.N);
     proxyIds = Array.from({ length:m.nProxies }, (_,k) => fly.model.body_mocapid[fly.model.body(`proxy${k}`).id]);
-    postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj), backend: fly.brain.device ? 'WebGPU' : 'WASM' });
+    postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj), backend: fly.brain.backend || (fly.brain.device ? 'WebGPU' : 'WASM') });
     postPose();
     if (running) { lastReal = performance.now(); loop(loopEpoch); }
   } else if (m.type === 'run') {

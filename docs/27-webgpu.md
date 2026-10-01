@@ -18,8 +18,11 @@ Chrome's default `maxStorageBuffersPerShaderStage` is 8, so the kernel uses five
 
 ## A step
 
-Seven dispatches per 0.5 ms step: `applyDeltas` (once per pass) → `deliver` (arriving spikes scatter into
-gE/gI) → `driven` (Poisson sensory spikes) → `background` → `membrane` (N-wide integration) → `threshold`
+Seven dispatches per 0.5 ms step, after `applyDeltas` (once per pass): `deliver` (arriving spikes scatter into
+gE/gI; one 64-thread workgroup per arriving spike strides its synapse row — out-degree reaches ~7.7k, and a
+row walked by one thread gated the whole step, ~3–4 ms/step on an RTX 40-series) → `depress` (short-term
+depression of the delivered spikes, separate so every deliver thread reads the pre-spike resource) →
+`driven` (Poisson sensory spikes) → `background` → `membrane` (N-wide integration) → `threshold`
 (spike append) → `tick` (advances the delay-ring head, RNG and background accumulator on-device, and
 clears the delivered slot's spike count — a single thread doing it after all of `deliver`'s readers,
 whereas a store inside `deliver` could land before a late-scheduled workgroup's load and drop spikes).
@@ -42,6 +45,27 @@ guarantees ordering and memory visibility between dispatches in a pass.
   steps so the maps land mid-burst. Consequences: motor/behaviour readouts see spikes a few ms late (the
   readout EMA is 40 ms, so this is invisible), and the GF→TTMn electrical-synapse shortcut gains ~1–4 ms
   of extra delay.
+
+## Shared device (arena default)
+
+A `GPUDevice` cannot move between workers, so the arena starts one brain worker (`src/sim/brain.worker.js`)
+that owns the only device and uploads the connectome once (`LIFGpu.uploadGraph`). Each fly gets a slot:
+its own hdr/st/at/deltas buffers and bind group over the shared graph buffer. The fly worker's brain is a
+`LIFGpuProxy` (`src/brain-shared.js`) with the same API, talking to its slot through a SharedArrayBuffer:
+
+- `step()` bumps a request counter and blocks (Atomics.wait) only once it is more than 24 brain steps past
+  the readback; the brain worker encodes every attached slot's pending steps (≤16 each) into one command
+  buffer, submits once, and maps the readbacks into the slot's `spikeCount` / `trace` / fired views.
+- Deltas go through a 131,072-entry ring. Drive is coalesced per step (fly.js zeroes and re-sets ~33k
+  driven neurons every ms; only net changes are sent); the driven list is published with a seqlock.
+- Class physiology runs through the proxy, so its `thr`/`bias` shadows match what neuromod reads.
+- `?sharedgpu=0` keeps one device per fly worker (the old path, fenced every `fenceEvery` bursts); `?gpu=0`
+  is WASM. If the brain worker or a slot attach fails, the fly falls back to its own device, then WASM.
+
+Measured on an RTX 40-series, foraging preset, 3 flies at 2× target (Playwright Chrome): per-worker devices
+0.063× → shared 0.044× with the old deliver kernel (GPU-bound either way); with the cooperative deliver
+kernel, per-worker 0.073× vs shared 0.16×, and the proxies block ~0 ms — fly workers are now CPU-bound
+(physics, senses, flyvis), not brain-bound.
 
 ## Verified
 

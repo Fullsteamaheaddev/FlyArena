@@ -3,6 +3,7 @@ import { BRAIN_DEFAULTS, brainScales, applyClassPhysiology, modulatorySign } fro
 import { DEFAULTS as LIF_DEFAULTS } from './lif.js';
 import { graphBytes, brainBytes, writeGraph, LIFWasm } from './lifwasm.js';
 import { LIFGpu } from './lifgpu.js';
+import { LIFGpuProxy } from './brain-shared.js';
 import { FlyVis, flyvisBytes } from './flyvis.js';
 export const MAX_FLIES = 12;
 /** main thread: allocate memory for the connectome + MAX_FLIES brains and write the graph once */
@@ -33,10 +34,19 @@ export function attachEyes(instance, mem, slot) {
   return F.eyeBases[slot].map(base => new FlyVis(instance, mem.memory, base, { N, E, shared, bias: shared.bias, inputIdx: F.inputIdx, dt: 0.02 }));
 }
 /** worker: attach a brain to its slot. Uses the WebGPU kernel when available (opts.gpu !== false); the wasm
- * module is still instantiated either way because the flyvis eyes run on its fv_step. Falls back to WASM. */
-export async function attachBrain(wasmModuleOrBytes, mem, slot, data, seed) {
+ * module is still instantiated either way because the flyvis eyes run on its fv_step. Falls back to WASM.
+ * sharedGpu { shared, attachId, port }: run on the brain worker's shared device (src/brain-shared.js) first. */
+export async function attachBrain(wasmModuleOrBytes, mem, slot, data, seed, sharedGpu = null) {
   const inst = wasmModuleOrBytes instanceof WebAssembly.Module ? await WebAssembly.instantiate(wasmModuleOrBytes, { env: { memory: mem.memory } })
     : (await WebAssembly.instantiate(wasmModuleOrBytes, { env: { memory: mem.memory } })).instance;
+  if (sharedGpu && mem.opts.gpu !== false) {
+    try {
+      const pb = LIFGpuProxy.create({ shared: sharedGpu.shared, slot, attachId: sharedGpu.attachId, N: data.N, params: mem.opts, port: sharedGpu.port });
+      pb.instance = inst;
+      console.info('brain backend: WebGPU (shared device)');
+      return applyClassPhysiology(pb, data, mem.opts);
+    } catch (e) { console.warn('shared GPU brain unavailable, using a per-worker brain:', e); }
+  }
   if (mem.opts.gpu !== false && typeof navigator !== 'undefined' && navigator.gpu) {
     try {
       const buf = mem.memory.buffer, G = mem.graph, N = data.N, E = data.E;

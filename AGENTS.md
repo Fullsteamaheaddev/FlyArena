@@ -23,6 +23,7 @@ npm run deploy:robinhood-testnet # PlayChip + RacePool on Robinhood testnet (466
 | `/` | Live spectator + bets (`index.html` → `src/arena.js`); `/watch` redirects here |
 | `/arena.html` | Embodied arena (`src/arena.js`) |
 | `/arena.html?gpu=0` | Force WASM brain (no WebGPU) |
+| `/arena.html?sharedgpu=0` | One WebGPU device per fly worker (old path) instead of the shared brain worker |
 | `/arena.html?env=courtship` | Preset (`foraging` default; see `PRESETS` in `src/sim/world.js`) |
 | `/arena.html?env=race` | Sugar Run host (same as `/racehost`) |
 | `/racehost` | Sugar Run host (this machine runs it; password from `HOST_SECRET` on the relay) |
@@ -42,7 +43,7 @@ Needs Node 20+. Python/`uv` only to rebuild data (`docs/guide/pipeline.md`).
 
 ## Loop (1 ms sim, per fly)
 
-One fly = one worker (`src/sim/fly.worker.js`) + own MuJoCo world + slot in **shared** WASM memory. Other flies = kinematic proxies. Connectome graph written once (`src/brainsetup.js`, `MAX_FLIES = 12`).
+One fly = one worker (`src/sim/fly.worker.js`) + own MuJoCo world + slot in **shared** WASM memory. Other flies = kinematic proxies. Connectome graph written once (`src/brainsetup.js`, `MAX_FLIES = 12`). WebGPU brains all run in one brain worker (`src/sim/brain.worker.js`: one device, one graph buffer, one submit per batch); fly workers use `LIFGpuProxy` (`src/brain-shared.js`) over a per-slot SharedArrayBuffer (`docs/27-webgpu.md`).
 
 `FlyAgent.step()` in `src/sim/fly.js`:
 
@@ -120,7 +121,7 @@ Motor modes: `descending` (default, use this) vs `connectome` (experimental, fly
 
 Params: `public/data/brain_params.json`. Search: `scripts/calib_search.mjs`. Eval: `scripts/calib_eval.mjs`.
 
-WebGPU when available; flyvis **always** WASM (`fv_step`). `?gpu=0` sets `brainParams.gpu = false`.
+WebGPU when available; flyvis **always** WASM (`fv_step`). `?gpu=0` sets `brainParams.gpu = false`; `?sharedgpu=0` skips the shared brain worker. GPU `deliver` is one workgroup per arriving spike (out-degree up to ~7.7k; one thread per row made the GPU slower than it should be).
 
 ---
 
@@ -146,11 +147,11 @@ WebGPU when available; flyvis **always** WASM (`fv_step`). `?gpu=0` sets `brainP
 | Flight | `src/sim/flight.js` (`docs/24-flight.md`) |
 | Vision gain / mapping | `src/sim/vision.js`, worker `gain: 150` |
 | Brain equations / params | `src/brainmodel.js`, `src/wasm/lif.c`, `public/data/brain_params.json` |
-| Shared memory / GPU fallback | `src/brainsetup.js` |
+| Shared memory / GPU fallback | `src/brainsetup.js`, shared GPU `src/brain-shared.js` + `src/sim/brain.worker.js` |
 | Packed data / hashes | `src/codec/*`, `vite.config.js` `DATA_FILES`, `scripts/pack_data.mjs` |
 | Headless assay | `scripts/run_fly.mjs`, `diag_walk.mjs`, `behavior_report.mjs` |
 
-Roadmap (do not start unless asked): `docs/20-roadmap.md` — loom/feeding pathway fits, wall gait, dopamine gating, share GPU across flies.
+Roadmap (do not start unless asked): `docs/20-roadmap.md` — loom/feeding pathway fits, wall gait, dopamine gating.
 
 ---
 

@@ -5,7 +5,7 @@
 // buffer (gE | gI | spikeC | ring | ringCount | driven). Chrome's default maxStorageBuffersPerShaderStage
 // is 8, so the whole kernel uses five bindings: header, graph, f32 state, atomics, deltas.
 //
-// A step is seven dispatches: deliver -> driven -> background -> membrane -> threshold -> tick, with the
+// A step is seven dispatches (plus applyDeltas once per pass): deliver -> depress -> driven -> background -> membrane -> threshold -> tick, with the
 // CPU->GPU delta list applied at the head of each pass and zeroed at its tail. Steps are encoded into an
 // open compute pass and submitted in batches (~8 steps / every couple of ms wall): a `tick` kernel advances
 // the delay-ring head, slot, RNG and the background-event accumulator on-device, so a batch needs zero
@@ -77,20 +77,31 @@ fn spikeOut(i: u32) {
 
 @compute @workgroup_size(1) fn zeroDeltas() { deltas.n = 0u; }
 
-@compute @workgroup_size(64) fn deliver(@builtin(global_invocation_id) g: vec3u) {
+// one 64-thread workgroup per arriving spike, striding its synapse row: out-degree reaches ~7.7k, and a row
+// walked by a single thread would gate the whole step on that one serial chain of atomics
+@compute @workgroup_size(64) fn deliver(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) l: vec3u) {
   let na = u32(atomicLoad(&at[hdr.rcOff + hdr.head]));
-  for (var k = g.x; k < na; k += 4096u) {
+  for (var k = wg.x; k < na; k += 256u) {
     let pre = u32(atomicLoad(&at[hdr.ringOff + hdr.head * hdr.N + k]));
     let s = bitcast<f32>(graph[hdr.sOff + pre]) * RS(pre);
-    if (s != 0.0) { st[4u * hdr.N + pre] = RS(pre) - hdr.depU * RS(pre); }
     if (s == 0.0) { continue; }
     let a = graph[hdr.ipOff + pre]; let b = graph[hdr.ipOff + pre + 1u];
-    if (s > 0.0) { for (var j = a; j < b; j++) { let w = bitcast<f32>(graph[hdr.wOff + j]); if (w != 0.0) { atomicAdd(&at[graph[hdr.ixOff + j]], i32(w * s * GS)); } } }
-    else { for (var j = a; j < b; j++) { let w = bitcast<f32>(graph[hdr.wOff + j]); if (w != 0.0) { atomicAdd(&at[hdr.N + graph[hdr.ixOff + j]], i32(w * s * GS)); } } }
+    let base = select(hdr.N, 0u, s > 0.0);   // excitatory -> gE, inhibitory -> gI
+    for (var j = a + l.x; j < b; j += 64u) { let w = bitcast<f32>(graph[hdr.wOff + j]); if (w != 0.0) { atomicAdd(&at[base + graph[hdr.ixOff + j]], i32(w * s * GS)); } }
   }
   // the count is NOT zeroed here: workgroups have no ordering, so a finished workgroup could store 0
   // before a late-scheduled one has read it, silently dropping its share of the arriving spikes.
   // tick clears it — one thread, after every reader of this step is done.
+}
+
+// short-term depression of the spikes just delivered; a separate dispatch so every deliver thread has
+// read the pre-spike resource first
+@compute @workgroup_size(64) fn depress(@builtin(global_invocation_id) g: vec3u) {
+  let na = u32(atomicLoad(&at[hdr.rcOff + hdr.head]));
+  for (var k = g.x; k < na; k += 4096u) {
+    let pre = u32(atomicLoad(&at[hdr.ringOff + hdr.head * hdr.N + k]));
+    if (bitcast<f32>(graph[hdr.sOff + pre]) * RS(pre) != 0.0) { st[4u * hdr.N + pre] = RS(pre) - hdr.depU * RS(pre); }
+  }
 }
 
 @compute @workgroup_size(64) fn driven(@builtin(global_invocation_id) g: vec3u) {
@@ -151,28 +162,42 @@ const align = n => (n + 15) & ~15;
 const xs32 = x => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return x >>> 0; };   // same stream as the WGSL xs()
 const BATCH_STEPS = 8, BATCH_MS = 2;
 
+const graphOffsets = (N, E) => { const ipOff = 0, ixOff = align(N + 1), wOff = ixOff + align(E), sOff = wOff + align(E); return { ipOff, ixOff, wOff, sOff, gWords: sOff + align(N) }; };
+
 export class LIFGpu {
-  /** graph: { indptr, indices, weights, sign } as typed arrays (views into shared wasm memory are fine) */
-  static async create({ N, E, graph, params = {}, seed = 1, device = null }) {
-    if (!device) {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) throw new Error('no WebGPU adapter');
-      const info = adapter.info || {};
-      const soft = adapter.isFallbackAdapter || info.isFallbackAdapter
-        || /swiftshader|llvmpipe|basic render|warp/i.test(`${info.vendor || ''} ${info.architecture || ''} ${info.description || ''} ${info.device || ''}`);
-      if (soft) throw new Error(`software WebGPU adapter (${info.description || info.architecture || info.vendor || 'fallback'})`);   // slower than the WASM kernel
-      device = await adapter.requestDevice();
-    }
-    const b = new LIFGpu();
-    b.device = device; b.N = N; b.E = E; b.p = { ...DEFAULTS, ...params };
-    const p = b.p; b.nslots = Math.max(1, Math.round(p.delay / p.dt)) + 1;
-    const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
-    // graph pack: indptr | indices | weights | sign as u32 words
-    const ipOff = 0, ixOff = align(N + 1), wOff = ixOff + align(E), sOff = wOff + align(E), gWords = sOff + align(N);
+  /** a hardware device; software adapters are rejected (slower than the WASM kernel) */
+  static async requestDevice() {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error('no WebGPU adapter');
+    const info = adapter.info || {};
+    const soft = adapter.isFallbackAdapter || info.isFallbackAdapter
+      || /swiftshader|llvmpipe|basic render|warp/i.test(`${info.vendor || ''} ${info.architecture || ''} ${info.description || ''} ${info.device || ''}`);
+    if (soft) throw new Error(`software WebGPU adapter (${info.description || info.architecture || info.vendor || 'fallback'})`);
+    return adapter.requestDevice();
+  }
+  /** pack the read-only connectome (indptr | indices | weights | sign as u32 words) into one buffer; several
+   *  brains on the same device can bind it */
+  static uploadGraph(device, N, E, graph) {
+    const { ipOff, ixOff, wOff, sOff, gWords } = graphOffsets(N, E);
     const gArr = new Uint32Array(gWords);
     gArr.set(graph.indptr, ipOff); gArr.set(graph.indices, ixOff);
     gArr.set(new Uint32Array(graph.weights.buffer, graph.weights.byteOffset, E), wOff);
     gArr.set(new Uint32Array(graph.sign.buffer, graph.sign.byteOffset, N), sOff);
+    const g = device.createBuffer({ size: gArr.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(g, 0, gArr);
+    return g;
+  }
+  /** graph: { indptr, indices, weights, sign } as typed arrays (views into shared wasm memory are fine).
+   *  device / graphBuffer: reuse a shared device and an uploadGraph() buffer instead of creating them */
+  static async create({ N, E, graph, params = {}, seed = 1, device = null, graphBuffer = null }) {
+    if (!device) device = await LIFGpu.requestDevice();
+    const b = new LIFGpu();
+    b.device = device; b.N = N; b.E = E; b.p = { ...DEFAULTS, ...params };
+    const p = b.p; b.nslots = Math.max(1, Math.round(p.delay / p.dt)) + 1;
+    const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
+    const { ipOff, ixOff, wOff, sOff } = graphOffsets(N, E);
+    b._ownsGraph = !graphBuffer;
+    if (!graphBuffer) graphBuffer = LIFGpu.uploadGraph(device, N, E, graph);
     // f32 state pack: v | refr | trace | adapt | res | bias | thr | drive
     const st = new Float32Array(8 * N); st.fill(p.vRest, 0, N); st.fill(1, 4 * N, 5 * N);   // v=vRest, res=1
     // atomics pack: gE | gI | spikeC | ring | ringCount | driven
@@ -180,7 +205,7 @@ export class LIFGpu {
     const mk = (arr, usage = S) => { const g = device.createBuffer({ size: Math.max(16, arr.byteLength), usage }); device.queue.writeBuffer(g, 0, arr.buffer, arr.byteOffset, arr.byteLength); return g; };
     b.buf = {
       hdr: device.createBuffer({ size: 144, usage: S }),
-      graph: mk(gArr, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST),
+      graph: graphBuffer,
       st: mk(st), at: mk(new Int32Array(atWords)), deltas: device.createBuffer({ size: 16 + 16 * DELTA_CAP, usage: S }),
     };
     b._offs = { ipOff, ixOff, wOff, sOff, ringOff, rcOff, drvOff };
@@ -201,7 +226,7 @@ export class LIFGpu {
     const bgl = device.createBindGroupLayout({ entries: types.map((t, i) => ({ binding: i, visibility: GPUShaderStage.COMPUTE, buffer: { type: t } })) });
     const pll = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
     b._pipes = {};
-    for (const n of ['applyDeltas', 'zeroDeltas', 'deliver', 'driven', 'background', 'membrane', 'threshold', 'tick'])
+    for (const n of ['applyDeltas', 'zeroDeltas', 'deliver', 'depress', 'driven', 'background', 'membrane', 'threshold', 'tick'])
       b._pipes[n] = device.createComputePipeline({ layout: pll, compute: { module: mod, entryPoint: n } });
     b._bg = device.createBindGroup({ layout: bgl, entries: [b.buf.hdr, b.buf.graph, b.buf.st, b.buf.at, b.buf.deltas].map((r, i) => ({ binding: i, resource: { buffer: r } })) });
     b._hdrBuf = new ArrayBuffer(144); b._hd = new DataView(b._hdrBuf);
@@ -214,7 +239,7 @@ export class LIFGpu {
   _writeParams() {
     this._submit();
     const p = this.p, d = this._hd, L = true, o = this._offs;
-    for (const [off, val] of [[0, this.N], [4, this.nslots], [8, this.head], [12, (this.head + this.nslots - 1) % this.nslots], [16, p.coba ? 1 : 0], [20, this.drivenSet.size], [24, 0], [28, 0]]) d.setUint32(off, val, L);
+    for (const [off, val] of [[0, this.N], [4, this.nslots], [8, this.head], [12, (this.head + this.nslots - 1) % this.nslots], [16, p.coba ? 1 : 0], [20, this._drivenN ?? this.drivenSet.size], [24, 0], [28, 0]]) d.setUint32(off, val, L);
     for (const [off, val] of [[32, p.dt], [36, p.vRest], [40, p.vThresh], [44, p.vReset], [48, p.tRef], [52, p.adaptInc], [56, p.depU], [60, p.bgAmp || 0],
       [64, Math.exp(-p.dt / p.tauSyn)], [68, Math.exp(-p.dt / p.traceTau)], [72, Math.exp(-p.dt / p.adaptTau)], [76, p.dt / p.depTau], [80, p.dt / p.tauM], [84, p.dt / 1000],
       [88, p.eExc], [92, p.eInh], [96, 1 / (p.eExc - p.vRest)], [100, 1 / (p.vRest - p.eInh)]]) d.setFloat32(off, val, L);
@@ -245,46 +270,82 @@ export class LIFGpu {
   step() {
     const dev = this.device;
     if (!this._enc) { this._enc = dev.createCommandEncoder(); this._cp = this._enc.beginComputePass(); this._cp.setBindGroup(0, this._bg); this._stepsInPass = 0; this._flushDeltas(); this._flushDriven(); }
-    const cp = this._cp;
+    if (this._stepsInPass === 0) { this._cp.setPipeline(this._pipes.applyDeltas); this._cp.dispatchWorkgroups(16); }   // 16 x 256 = 4096 threads, matching the kernel stride
+    this._encodeStep(this._cp);
+    this._stepsInPass++;
+    if (this._stepsInPass >= BATCH_STEPS || performance.now() - this._lastSubmit >= BATCH_MS) this._submit();
+    return this._lastFired;
+  }
+
+  _encodeStep(cp) {
     const disp = (n, wg) => { cp.setPipeline(this._pipes[n]); cp.dispatchWorkgroups(wg); };
-    if (this._stepsInPass === 0) disp('applyDeltas', 16);   // 16 x 256 = 4096 threads, matching the kernel stride
-    disp('deliver', 64);        // 64 wg x 64 = 4096 threads, strided over the arriving-spike list
+    disp('deliver', 256);       // 256 wg (one arriving spike each, strided), 64 threads across its synapses
+    disp('depress', 64);        // 64 wg x 64 = 4096 threads, strided over the arriving-spike list
     disp('driven', 64);
     if (this.p.bgRate) disp('background', 64);
     disp('membrane', Math.ceil(this.N / 256));
     disp('threshold', Math.ceil(this.N / 256));
     disp('tick', 1);
-    this._stepsInPass++;
     this._lastSlot = (this.head + this.nslots - 1) % this.nslots;   // ring slot the GPU wrote this step
     this.head = (this.head + 1) % this.nslots;
     this.t += this.p.dt;
-    if (this._stepsInPass >= BATCH_STEPS || performance.now() - this._lastSubmit >= BATCH_MS) this._submit();
-    return this._lastFired;
+  }
+
+  /** shared-device batching: encode n steps (deltas + driven list applied at the head) as one compute pass
+   *  into a caller-owned encoder, so several brains go out in a single queue.submit */
+  encodeSteps(enc, n) {
+    this._submit();
+    this._flushDeltas(); this._flushDriven();
+    const cp = enc.beginComputePass(); cp.setBindGroup(0, this._bg);
+    cp.setPipeline(this._pipes.applyDeltas); cp.dispatchWorkgroups(16);
+    for (let s = 0; s < n; s++) this._encodeStep(cp);
+    cp.setPipeline(this._pipes.zeroDeltas); cp.dispatchWorkgroups(1);
+    cp.end();
+  }
+
+  /** copy spikeCount + trace + last-step fired list into a free staging buffer; returns its index or -1 */
+  appendReadback(enc) {
+    const k = this._rbK;
+    if (this._rbBusy[k]) return -1;
+    this._rbBusy[k] = true; this._rbK = (k + 1) % this._staging.length;
+    enc.copyBufferToBuffer(this.buf.at, 2 * this.N * 4, this._staging[k], 0, this.N * 4);                        // spikeC
+    enc.copyBufferToBuffer(this.buf.st, 2 * this.N * 4, this._staging[k], this.N * 4, this.N * 4);               // trace
+    enc.copyBufferToBuffer(this.buf.at, (this._offs.rcOff + this._lastSlot) * 4, this._staging[k], this.N * 8, 4);   // fired in the batch's last step
+    enc.copyBufferToBuffer(this.buf.at, (this._offs.ringOff + this._lastSlot * this.N) * 4, this._staging[k], this.N * 8 + 16, this._fireCap * 4);   // the fired indices themselves
+    return k;
+  }
+
+  /** after the submit holding appendReadback(k): map it and hand the bytes to sink (default: CPU shadows) */
+  readback(k, sink = null) {
+    return this._staging[k].mapAsync(GPUMapMode.READ).then(() => {
+      const src = this._staging[k].getMappedRange();
+      if (sink) sink(src, this.N, this._fireCap);
+      else {
+        this.spikeCount.set(new Uint32Array(src, 0, this.N)); this.trace.set(new Float32Array(src, this.N * 4, this.N));
+        const n = Math.max(0, Math.min(this.N, new Int32Array(src, this.N * 8, 1)[0])), fired = new Int32Array(n);
+        fired.set(new Int32Array(src, this.N * 8 + 16, Math.min(n, this._fireCap)));   // real indices; beyond the cap the tail stays 0
+        this._lastFired = fired;
+      }
+      this._staging[k].unmap(); this._rbBusy[k] = false;
+    }).catch(e => { console.warn('lifgpu readback:', e); this._rbBusy[k] = false; });
+  }
+
+  /** replace the driven list wholesale (shared-device path; the proxy owns membership) */
+  setDrivenList(list) {
+    const q = this.device.queue;
+    if (list.length) q.writeBuffer(this.buf.at, this._offs.drvOff * 4, list.buffer, list.byteOffset, list.byteLength);
+    q.writeBuffer(this.buf.hdr, 20, new Uint32Array([list.length]));
+    this._drivenN = list.length; this._drivenDirty = false;
   }
 
   _submit() {
     if (!this._enc) return;
     this._cp.setPipeline(this._pipes.zeroDeltas); this._cp.dispatchWorkgroups(1);
     this._cp.end();
-    const k = this._rbK;
-    let copied = false;
-    if (this._stepsInPass > 0 && !this._rbBusy[k]) {
-      this._rbBusy[k] = true; copied = true; this._rbK = (k + 1) % this._staging.length;
-      this._enc.copyBufferToBuffer(this.buf.at, 2 * this.N * 4, this._staging[k], 0, this.N * 4);                        // spikeC
-      this._enc.copyBufferToBuffer(this.buf.st, 2 * this.N * 4, this._staging[k], this.N * 4, this.N * 4);               // trace
-      this._enc.copyBufferToBuffer(this.buf.at, (this._offs.rcOff + this._lastSlot) * 4, this._staging[k], this.N * 8, 4);   // fired in the batch's last step
-      this._enc.copyBufferToBuffer(this.buf.at, (this._offs.ringOff + this._lastSlot * this.N) * 4, this._staging[k], this.N * 8 + 16, this._fireCap * 4);   // the fired indices themselves
-    }
+    const k = this._stepsInPass > 0 ? this.appendReadback(this._enc) : -1;
     this.device.queue.submit([this._enc.finish()]);
     this._enc = null; this._cp = null; this._lastSubmit = performance.now();
-    if (copied) this._staging[k].mapAsync(GPUMapMode.READ).then(() => {
-      const src = this._staging[k].getMappedRange();
-      this.spikeCount.set(new Uint32Array(src, 0, this.N)); this.trace.set(new Float32Array(src, this.N * 4, this.N));
-      const n = Math.max(0, Math.min(this.N, new Int32Array(src, this.N * 8, 1)[0])), fired = new Int32Array(n);
-      fired.set(new Int32Array(src, this.N * 8 + 16, Math.min(n, this._fireCap)));   // real indices; beyond the cap the tail stays 0
-      this._lastFired = fired;
-      this._staging[k].unmap(); this._rbBusy[k] = false;
-    }).catch(e => { console.warn('lifgpu readback:', e); this._rbBusy[k] = false; });
+    if (k >= 0) this.readback(k);
   }
 
   _pushDelta(idx, kind, val) {
@@ -328,5 +389,5 @@ export class LIFGpu {
     q.writeBuffer(this.buf.at, 0, new Int32Array(3 * N + this.nslots * N + this.nslots));   // gE, gI, spikeC, ring, ringCount
     this.spikeCount.fill(0); this.trace.fill(0); this.t = 0; this.head = 0; this._writeParams();
   }
-  destroy() { for (const k in this.buf) this.buf[k].destroy(); for (const s of this._staging) s.destroy(); }
+  destroy() { for (const k in this.buf) if (k !== 'graph' || this._ownsGraph) this.buf[k].destroy(); for (const s of this._staging) s.destroy(); }
 }
