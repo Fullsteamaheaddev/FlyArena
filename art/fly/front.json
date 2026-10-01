@@ -9,6 +9,6 @@
   ],
   "view": "front",
   "seconds_including_scene_setup": 36.3,
-  "render": "/Users/lulzx/work/fly-brain/art/fly/front.png",
-  "blend": "/Users/lulzx/work/fly-brain/art/fly/fly-macro.blend"
+  "render": "art/fly/front.png",
+  "blend": "art/fly/fly-macro.blend"
 }

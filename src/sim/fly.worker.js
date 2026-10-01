@@ -47,9 +47,10 @@ onmessage = async (e) => {
   else if (m.type === 'chaos') {
     if (fly) {
       fly.applyChaos(m);
-      if (m.op === 'kill' || m.op === 'impulse' || m.op === 'flip' || m.op === 'spin' || m.op === 'dish' || m.op === 'loose') {
+      if (m.op === 'dish') { fly.syncPose(); postPose(true); }
+      else if (m.op === 'kill' || m.op === 'impulse' || m.op === 'flip' || m.op === 'spin' || m.op === 'loose') {
         fly.kickPhysics();
-        postPose();
+        postPose(true);
       }
     }
   }
@@ -68,10 +69,10 @@ function setProxies() {
     d.mocap_pos[mid * 3] = o.x; d.mocap_pos[mid * 3 + 1] = o.y; d.mocap_pos[mid * 3 + 2] = o.z ?? 0.13;
     d.mocap_quat[mid * 4] = Math.cos(o.yaw / 2); d.mocap_quat[mid * 4 + 1] = 0; d.mocap_quat[mid * 4 + 2] = 0; d.mocap_quat[mid * 4 + 3] = Math.sin(o.yaw / 2); });
 }
-function postPose() {
+function postPose(chaos = false) {
   lastPose = performance.now();
   const p = fly.pose(); const st = fly.state();
-  postMessage({ type: 'pose', id: fly.id, t: fly.t, xpos: p.xpos, xquat: p.xquat, cmd: fly.cmd, energy: fly.energy, health: fly.health, alive: fly.alive, eaten: fly.eaten, takeoffPending:fly.takeoffPending,
+  postMessage({ type: 'pose', id: fly.id, t: fly.t, chaos, dishSeq: fly.dishSeq || 0, xpos: p.xpos, xquat: p.xquat, cmd: fly.cmd, energy: fly.energy, health: fly.health, alive: fly.alive, eaten: fly.eaten, takeoffPending:fly.takeoffPending,
     mn9: fly.motor.mean(fly.motor.muscles.find(x => x.name.startsWith('MN9'))?.idx || []), feeding: fly.motor.feeding(), heat: st.heat || 0, nSensory: fly.driven.length,
     foodEaten: fly.foodEaten.splice(0, fly.foodEaten.length, ...fly.foodEaten.map(() => 0)), behavior: fly.behavior(st), drive: fly.intrinsic?.label(), nm: fly.neuromod?.readout(), flying: fly.flight.active, flights: fly.flights, dist: fly.dist, jumps: fly.jumps, pos: st.pos, yaw: Math.atan2(fly.mjd.xmat[fly.bid.thorax * 9 + 3], fly.mjd.xmat[fly.bid.thorax * 9]) }, [p.xpos.buffer, p.xquat.buffer]);
 }

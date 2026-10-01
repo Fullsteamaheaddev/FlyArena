@@ -6,10 +6,9 @@ physics-simulated body, in a web browser, and then asks a simple question: which
 fly's behaviours does the wiring produce on its own, and which had to be added from
 outside the graph? The second list turned out to be as interesting as the first.
 
-**Try it:** [arena](https://lulzx.com/fly-brain/arena.html) ·
-[connectome viewer](https://lulzx.com/fly-brain/) ·
-[algorithmic structures](https://lulzx.com/fly-brain/structures.html) ·
-[the textbook](https://lulzx.com/fly-brain/textbook/)
+**Try it:** [run it locally](docs/guide/run.md) from
+[this repository](https://github.com/Fullsteamaheaddev/FlyArena) — the arena, the connectome
+viewer, the structures page and the textbook are all served by `npm run dev`
 (desktop Chrome, Edge or Firefox; the viewer downloads about 30 MB, the arena about 23 MB)
 
 ## Start here
@@ -41,8 +40,7 @@ outside the graph? The second list turned out to be as interesting as the first.
 - [Compiling the Fly Brain](docs/textbook/) is a research monograph on candidate
   computations, connectome-constrained model families, and experiments that distinguish
   them. It separates established biology, recorded model results, and open predictions.
-  [Read online](https://lulzx.com/fly-brain/textbook/) or
-  [download the PDF](public/fly-brain-textbook.pdf). Executable instructions live in the
+  [Download the PDF](public/fly-brain-textbook.pdf). Executable instructions live in the
   [technical reproduction companion](docs/textbook-reproduction.md).
 - [Sources and credits](docs/guide/sources.md). The connectome, the body, the eye, the
   walking data, and the licences.

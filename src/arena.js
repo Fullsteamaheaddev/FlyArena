@@ -702,7 +702,7 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
   worker.onmessage = e => onWorker(f, e.data);
   worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: MAX_FLIES - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: true, sex,
     brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap, sharedGpu, brainPort,
-    ...(isRace ? { burstSteps: 64, burstMs: 64, fenceEvery: 4, seed } : {}) }, brainPort ? [brainPort] : []);
+    ...(isRace ? { burstSteps: 24, burstMs: 24, fenceEvery: 4, seed } : {}) }, brainPort ? [brainPort] : []);
   await new Promise(res => { f.onReady = res; });
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });
@@ -730,7 +730,9 @@ function onWorker(f, m) {
     buildWingBlur(f, m.wingPoses); f.onReady?.();
   }
   else if (m.type === 'pose') {
-    f.prev = f.last; f.last = m; shadowDirty = true;
+    // A chaos kick is already the post-impulse pose: easing into it from the pre-impulse one
+    // would show the hit a whole pose interval after the FX.
+    f.prev = m.chaos ? m : f.last; f.last = m; shadowDirty = true;
     f.onPose?.(); f.onPose = null;
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
@@ -910,6 +912,7 @@ function setupRaceChrome() {
     scene: () => scene,
     envGroup: () => envGroup,
     dishCakeGroup: () => chaosCakeGroup,
+    drawnDishSeq,
     camera: () => camera,
     controls: () => controls,
     flies: () => flies,
@@ -1498,6 +1501,20 @@ function sampleWatchPose(f, now) {
   return { a: prev || a, b: a, blend: 1, extra: prev ? Math.min(WATCH_POSE_EXTRAP, renderAt - a.hostAt) : 0 };
 }
 function flyDrawPos(f) { return f.drawPos || f.last?.pos; }
+/** Dish pose the flies currently on screen were standing on. Watchers replay the cue on their own
+ *  delayed timeline, so they keep drawing the newest pose (null). */
+function drawnDishSeq() {
+  if (isWatch) return null;
+  const now = performance.now();
+  let seq = null;
+  for (const f of flies) {
+    if (!f.worker || !f.last) continue;
+    if (now - (f.recvAt || 0) > 400) continue;   // stalled worker: it must not hold the floor back
+    const s = (f.prev ?? f.last).dishSeq || 0;
+    if (seq == null || s < seq) seq = s;
+  }
+  return seq;
+}
 function applyWatchBodies(f, a, b, blend, extra) {
   const ax = a.xpos, bx = b.xpos, aq = a.xquat, bq = b.xquat;
   if (!bx?.length) return;

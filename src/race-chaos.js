@@ -88,6 +88,9 @@ export function createRaceChaos(api) {
   let savedWind = null, savedRadial = null;
   let lastScorchPaint = 0;
   let dishAnim = null, dishPhysics = false, lastDishKey = '';
+  const DISH_FLAT = { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 };
+  const DISH_HISTORY = 240, DISH_MAX_LAG = 180;   // floor follows the slowest fly, but never off the end of the history
+  let dishSeq = 0, dishHistory = [{ seq: 0, pose: DISH_FLAT }], dishLatest = DISH_FLAT, dishDrawn = null;
   let camShot = null;
   let shakes = [];
   let sceneFlashes = [];
@@ -489,22 +492,40 @@ export function createRaceChaos(api) {
   function identityDish() { return { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 }; }
 
   function applyDish(pose, physics) {
-    const g = api.envGroup();
-    if (g) {
-      g.position.set(pose.x, pose.y, pose.z);
-      g.quaternion.set(pose.qx, pose.qy, pose.qz, pose.qw);
-      g.scale.set(1, 1, 1);
-    }
     const key = `${pose.x.toFixed(4)}|${pose.y.toFixed(4)}|${pose.z.toFixed(4)}|${pose.qw.toFixed(5)}|${pose.qx.toFixed(5)}|${pose.qy.toFixed(5)}|${pose.qz.toFixed(5)}`;
     if (physics && key !== lastDishKey) {
       lastDishKey = key;
-      postEvery({ op: 'dish', ...pose });
+      dishSeq += 1;
+      dishHistory.push({ seq: dishSeq, pose });
+      if (dishHistory.length > DISH_HISTORY) dishHistory.shift();
+      postEvery({ op: 'dish', seq: dishSeq, ...pose });
     }
+    dishLatest = pose;
+    syncDishVisual();
+  }
+
+  /** Draw the dish where the flies on screen are standing, not where physics has already moved it:
+   *  poses arrive a frame or two late, so a floor drawn at the newest pose sweeps up over them. */
+  function syncDishVisual() {
+    const g = api.envGroup();
+    if (!g) return;
+    let pose = dishLatest;
+    const seq = api.drawnDishSeq?.();
+    if (seq != null && dishHistory.length) {
+      const want = Math.max(seq, dishHistory[dishHistory.length - 1].seq - DISH_MAX_LAG);
+      for (const e of dishHistory) if (e.seq <= want) pose = e.pose;
+    }
+    if (pose === dishDrawn) return;
+    dishDrawn = pose;
+    g.position.set(pose.x, pose.y, pose.z);
+    g.quaternion.set(pose.qx, pose.qy, pose.qz, pose.qw);
+    g.scale.set(1, 1, 1);
   }
 
   function resetEnvPose() {
     dishAnim = null;
     lastDishKey = '';
+    dishHistory = [{ seq: dishSeq, pose: DISH_FLAT }];
     applyDish(identityDish(), true);
   }
 
@@ -1792,7 +1813,7 @@ export function createRaceChaos(api) {
       } else {
         applyDish(dishPoseAt(t), dishPhysics);
       }
-    }
+    } else syncDishVisual();   // poses still catching up after the animation ends
     if (dishAnim?.kind === 'quake') {
       const cam = api.camera();
       const k = Math.max(0, 1 - (t - dishAnim.t0) / dishAnim.dur);

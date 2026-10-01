@@ -205,6 +205,7 @@ export class FlyAgent {
       d.mocap_quat[id * 4 + 2] = nqy;
       d.mocap_quat[id * 4 + 3] = nqz;
       this.dishPose = { x: nx, y: ny, z: nz, qw: nqw, qx: nqx, qy: nqy, qz: nqz };
+      if (m.seq != null) this.dishSeq = m.seq;   // the renderer draws the floor at the seq the flies carry
       return;
     }
     if (op === 'bias') {
@@ -245,6 +246,12 @@ export class FlyAgent {
     mj.mj_forward(M, d);
     for (let s = 0; s < this.physPerMs; s++) mj.mj_step(M, d);
     this.guardDish();
+  }
+  /** Refresh xpos after a direct qpos write, with no integration: the dish stream arrives at frame
+   *  rate, and stepping physics for each one drives the fly through the plate. */
+  syncPose() {
+    this.guardDish();
+    this.mj.mj_forward(this.model, this.mjd);
   }
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
   state() {

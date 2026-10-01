@@ -4,7 +4,7 @@
 
 A numerical claim is most useful when a reader can recover the experiment that produced it. The prose explains what a result means; the computational record must explain how it was obtained. This appendix describes that relationship, while the separate technical reproduction companion retains the executable commands and implementation details.
 
-The [project repository](https://github.com/Lulzx/fly-brain) contains the model source, analysis stages, and saved reports. The present edition rewrites the interpretation of those reports and checks several disputed claims against the implementation. It does not constitute a fresh rerun of the scientific experiments. A saved result, a source inspection, and an independently repeated experiment are different kinds of evidence.
+The [project repository](https://github.com/Fullsteamaheaddev/FlyArena) contains the model source, analysis stages, and saved reports. The present edition rewrites the interpretation of those reports and checks several disputed claims against the implementation. It does not constitute a fresh rerun of the scientific experiments. A saved result, a source inspection, and an independently repeated experiment are different kinds of evidence.
 
 ## Starting from the same object
 

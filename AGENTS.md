@@ -1,6 +1,6 @@
 # fly-brain — agent shorthand
 
-Upstream: [Lulzx/fly-brain](https://github.com/Lulzx/fly-brain). Browser sim of the male *Drosophila* CNS: **165,122** LIF neurons, **10.5M** synapses (≥3), flybody MuJoCo body, flyvis compound eye. Full docs live in `docs/` (index: `docs/README.md`). Design notes: `PLAN.md`. This file is the working map — do not duplicate the textbook here.
+Browser sim of the male *Drosophila* CNS: **165,122** LIF neurons, **10.5M** synapses (≥3), flybody MuJoCo body, flyvis compound eye. Full docs live in `docs/` (index: `docs/README.md`). Design notes: `PLAN.md`. This file is the working map — do not duplicate the textbook here.
 
 **Working rule:** do not rewrite the project or add features unless asked. Prefer the smallest local change. Data in `public/` is committed; do not regenerate unless asked.
 
