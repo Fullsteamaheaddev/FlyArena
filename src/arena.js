@@ -55,7 +55,7 @@ const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
 let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0, raceChaos = null, raceFloorPaintCtx = null;
 let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null, watchWingPoses = null, lastSentWingPoses = null;
-const WATCH_POSE_DELAY = 250, WATCH_POSE_EXTRAP = 120, WATCH_POSE_RING = 20;
+const WATCH_POSE_DELAY = 250, WATCH_POSE_DELAY_MOBILE = 450, WATCH_POSE_EXTRAP = 120, WATCH_POSE_RING = 24;
 const WATCH_OFFSET_WINDOW = 2000, WATCH_CUE_STALE_MS = 3000;
 let hostOffset = 0, hostOffsetSamples = [], pendingCues = [], lastWatchCueId = -1, watchYipeeMatch = null;
 let betClosesAt = null, poolSnap = [], lobbyTimer = null, lastPoolRead = 0, chainSettled = false, betFlyId = null, lastLobbyKind = '', lastPoolKey = '', lastLobbyTickSec = null;
@@ -1471,6 +1471,12 @@ function applyWatchOverlay(st) {
   watchOverlayPhase = 'wait';
   lastLobbyKind = '';
 }
+function watchPoseDelay() {
+  return raceMobile() ? WATCH_POSE_DELAY_MOBILE : WATCH_POSE_DELAY;
+}
+function watchRenderAt(now) {
+  return now - hostOffset - watchPoseDelay();
+}
 function pushWatchPose(f, row, recvAt, hostAt) {
   const buf = f.poseBuf || (f.poseBuf = []);
   buf.push({ t: row.t, recvAt, hostAt, xpos: row.xpos, xquat: row.xquat, pos: row.pos, flying: !!row.flying });
@@ -1479,7 +1485,7 @@ function pushWatchPose(f, row, recvAt, hostAt) {
 function sampleWatchPose(f, now) {
   const buf = f.poseBuf;
   if (!buf?.length) return null;
-  const renderAt = now - hostOffset - WATCH_POSE_DELAY;
+  const renderAt = watchRenderAt(now);
   let i = 0;
   while (i + 1 < buf.length && buf[i + 1].hostAt <= renderAt) i++;
   const a = buf[i], b = buf[i + 1];
@@ -1566,25 +1572,43 @@ function noteHostClock(sentAt, recvAt) {
   const off = recvAt - sentAt;
   hostOffsetSamples.push({ recvAt, off });
   while (hostOffsetSamples.length && recvAt - hostOffsetSamples[0].recvAt > WATCH_OFFSET_WINDOW) hostOffsetSamples.shift();
-  let min = Infinity;
-  for (const s of hostOffsetSamples) if (s.off < min) min = s.off;
-  hostOffset = min;
+  const n = hostOffsetSamples.length;
+  const v = hostOffsetSamples.map(s => s.off).sort((a, b) => a - b);
+  hostOffset = v[Math.min(n - 1, Math.max(0, Math.ceil(n * 0.9) - 1))];
   return true;
+}
+function watchPosesCover(hostT) {
+  let any = false;
+  for (const f of flies) {
+    const buf = f.poseBuf;
+    if (!buf?.length) continue;
+    any = true;
+    if (buf[buf.length - 1].hostAt >= hostT) return true;
+  }
+  return !any;
 }
 function queueWatchCue(c, recvAt, hasHost) {
   if (!c || c.id === lastWatchCueId) return;
   lastWatchCueId = c.id;
-  const playAt = (c.t != null && hasHost) ? c.t + hostOffset + WATCH_POSE_DELAY : recvAt;
-  if (recvAt - playAt > WATCH_CUE_STALE_MS) return;
-  pendingCues.push({ cue: c, playAt });
+  const renderAt = watchRenderAt(recvAt);
+  if (c.t != null && hasHost && renderAt - c.t > WATCH_CUE_STALE_MS) return;
+  pendingCues.push({ cue: c, hasHost, recvAt });
 }
 function drainWatchCues(now) {
   if (!pendingCues.length) return;
   const keep = [];
+  const renderAt = watchRenderAt(now);
   for (const item of pendingCues) {
-    if (now < item.playAt) { keep.push(item); continue; }
-    if (now - item.playAt > WATCH_CUE_STALE_MS) continue;
-    raceChaos?.playCue(item.cue);
+    const c = item.cue;
+    if (c.t != null && item.hasHost) {
+      if (renderAt < c.t) { keep.push(item); continue; }
+      if (renderAt - c.t > WATCH_CUE_STALE_MS) continue;
+      if (!watchPosesCover(c.t) && renderAt - c.t < 800) { keep.push(item); continue; }
+      raceChaos?.playCue(c);
+      continue;
+    }
+    if (now < item.recvAt) { keep.push(item); continue; }
+    raceChaos?.playCue(c);
   }
   pendingCues = keep;
 }
@@ -2578,7 +2602,9 @@ function easeInBack(t, s = 1.7) { return t * t * ((s + 1) * t - s); }
 function flyLabelZ(f) {
   const k = raceLabelFollowK(f);
   const z0 = env.map === 'desert' ? RACE_LABEL_Z * 1.15 : RACE_LABEL_Z;
-  return z0 + (RACE_LABEL_Z_CHASE - z0) * k;
+  let z = z0 + (RACE_LABEL_Z_CHASE - z0) * k;
+  if (raceMobile() && raceFollow == null) z *= 1.1;
+  return z;
 }
 function chaseCam(f, outPos, outTarget) {
   const p = flyDrawPos(f) || f.last.pos, yaw = f.last.yaw || 0;
