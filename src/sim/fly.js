@@ -239,6 +239,13 @@ export class FlyAgent {
       d.qvel[5] += m.wz || 0;
     }
   }
+  /** Integrate qvel/qpos into xpos without a brain step (chaos poses). */
+  kickPhysics() {
+    const mj = this.mj, M = this.model, d = this.mjd;
+    mj.mj_forward(M, d);
+    for (let s = 0; s < this.physPerMs; s++) mj.mj_step(M, d);
+    this.guardDish();
+  }
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
   state() {
     const d = this.mjd, xp = d.xpos, B = this.bid;
@@ -368,7 +375,13 @@ export class FlyAgent {
     const nd = new Int32Array(rates.size); let k = 0; for (const [i, hz] of rates) { B.setDriveOne(i, hz); nd[k++] = i; } this.driven = nd;
     // GF -> TTMn electrical synapse (not in the chemical connectome): GF spikes depolarise TTMn directly
     const before = this.brain.spikeCount[this.motor.dn.escape[0]] + this.brain.spikeCount[this.motor.dn.escape[1]];
-    this.brain.step(); this.brain.step();
+    const a = this.brain.step();
+    const b = a?.then ? a.then(() => this.brain.step()) : this.brain.step();
+    if (b?.then) return b.then(() => this._afterBrain(before, st));
+    this._afterBrain(before, st);
+  }
+  _afterBrain(before, st) {
+    const mj = this.mj, M = this.model, d = this.mjd;
     const after = this.brain.spikeCount[this.motor.dn.escape[0]] + this.brain.spikeCount[this.motor.dn.escape[1]];
     if (after > before) this.brain.pulse(this.motor.ttmn, 20);
     this.motor.readBrain(this.brain.spikeCount, 1);

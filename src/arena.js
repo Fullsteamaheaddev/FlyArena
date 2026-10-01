@@ -55,9 +55,9 @@ const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
 let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0, raceChaos = null, raceFloorPaintCtx = null;
 let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null, watchWingPoses = null, lastSentWingPoses = null;
-const WATCH_POSE_DELAY = 250, WATCH_POSE_DELAY_MOBILE = 450, WATCH_POSE_EXTRAP = 120, WATCH_POSE_RING = 24;
-const WATCH_OFFSET_WINDOW = 2000, WATCH_CUE_STALE_MS = 3000;
-let hostOffset = 0, hostOffsetSamples = [], pendingCues = [], lastWatchCueId = -1, watchYipeeMatch = null;
+const WATCH_POSE_DELAY = 100, WATCH_POSE_DELAY_MOBILE = 160, WATCH_POSE_EXTRAP = 80, WATCH_POSE_RING = 24;
+const WATCH_OFFSET_WINDOW = 2000, WATCH_CUE_STALE_MS = 3000, WATCH_JITTER_CAP = 120;
+let hostOffset = 0, hostJitter = 0, hostOffsetSamples = [], pendingCues = [], lastWatchCueId = -1, watchYipeeMatch = null;
 let betClosesAt = null, poolSnap = [], lobbyTimer = null, lastPoolRead = 0, chainSettled = false, betFlyId = null, lastLobbyKind = '', lastPoolKey = '', lastLobbyTickSec = null;
 let poolStatus = null, poolOpError = null, betWindowSec = DEFAULT_WINDOW, betWindowArmed = false, lobbyStartedAt = 0, resultsAt = 0, settledAt = 0;
 let resultActions = { key: '', claim: false, refund: false, note: '' }, profileSeq = 0, profileAcct = null;
@@ -1475,7 +1475,7 @@ function watchPoseDelay() {
   return raceMobile() ? WATCH_POSE_DELAY_MOBILE : WATCH_POSE_DELAY;
 }
 function watchRenderAt(now) {
-  return now - hostOffset - watchPoseDelay();
+  return now - hostOffset - hostJitter - watchPoseDelay();
 }
 function pushWatchPose(f, row, recvAt, hostAt) {
   const buf = f.poseBuf || (f.poseBuf = []);
@@ -1568,24 +1568,16 @@ function applyWatchFlyIdent(f, row) {
   else if (f.ring?.material?.color) f.ring.material.color.set(f.color);
 }
 function noteHostClock(sentAt, recvAt) {
-  if (sentAt == null || !Number.isFinite(sentAt)) { hostOffset = 0; return false; }
+  if (sentAt == null || !Number.isFinite(sentAt)) { hostOffset = 0; hostJitter = 0; return false; }
   const off = recvAt - sentAt;
   hostOffsetSamples.push({ recvAt, off });
   while (hostOffsetSamples.length && recvAt - hostOffsetSamples[0].recvAt > WATCH_OFFSET_WINDOW) hostOffsetSamples.shift();
   const n = hostOffsetSamples.length;
   const v = hostOffsetSamples.map(s => s.off).sort((a, b) => a - b);
-  hostOffset = v[Math.min(n - 1, Math.max(0, Math.ceil(n * 0.9) - 1))];
+  hostOffset = v[0];
+  const p90 = v[Math.min(n - 1, Math.max(0, Math.ceil(n * 0.9) - 1))];
+  hostJitter = Math.min(WATCH_JITTER_CAP, Math.max(0, p90 - hostOffset));
   return true;
-}
-function watchPosesCover(hostT) {
-  let any = false;
-  for (const f of flies) {
-    const buf = f.poseBuf;
-    if (!buf?.length) continue;
-    any = true;
-    if (buf[buf.length - 1].hostAt >= hostT) return true;
-  }
-  return !any;
 }
 function queueWatchCue(c, recvAt, hasHost) {
   if (!c || c.id === lastWatchCueId) return;
@@ -1603,11 +1595,9 @@ function drainWatchCues(now) {
     if (c.t != null && item.hasHost) {
       if (renderAt < c.t) { keep.push(item); continue; }
       if (renderAt - c.t > WATCH_CUE_STALE_MS) continue;
-      if (!watchPosesCover(c.t) && renderAt - c.t < 800) { keep.push(item); continue; }
       raceChaos?.playCue(c);
       continue;
     }
-    if (now < item.recvAt) { keep.push(item); continue; }
     raceChaos?.playCue(c);
   }
   pendingCues = keep;
@@ -1632,6 +1622,7 @@ function applyWatchState(st) {
     poolOpError = null;
     hostOffsetSamples = [];
     hostOffset = 0;
+    hostJitter = 0;
     pendingCues = [];
   }
   betClosesAt = st.betClosesAt ?? null;

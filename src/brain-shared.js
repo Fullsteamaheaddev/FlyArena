@@ -3,7 +3,7 @@
 //
 // Per-slot layout (bytes): ctrl Int32[64] | delta ring (idx, kind, f32 val) x RING_CAP | driven list Int32[N]
 // | spikeCount Uint32[N] | trace Float32[N] | last fired Int32[fireCap].
-// The fly side requests brain steps (REQ) and blocks once it is more than MAX_AHEAD steps past what the
+// The fly side requests brain steps (REQ) and waitAsync-yields once it is more than MAX_AHEAD steps past what the
 // brain worker has read back (DONE). Deltas go through a single-producer / single-consumer ring; the driven
 // list is published with a seqlock (DRV_GEN odd while writing). spikeCount / trace are written by the brain
 // worker after each readback, so they lag the fly by up to MAX_AHEAD brain steps (as LIFGpu's shadows did).
@@ -101,10 +101,30 @@ export class LIFGpuProxy {
     this._flushDrive(); this._publishRing();
     const c = this.ctrl, req = (this._req + 1) | 0; this._req = req;
     Atomics.store(c, C.REQ, req); this._kick();
-    for (let n = 0; n < MAX_WAITS; n++) {
+    return this._waitCaughtUp(req, 0);
+  }
+
+  /** Fast path returns EMPTY; yields a Promise only when the brain worker is behind. */
+  _waitCaughtUp(req, n) {
+    const c = this.ctrl;
+    while (n < MAX_WAITS) {
       const done = Atomics.load(c, C.DONE);
-      if (((req - done) | 0) <= MAX_AHEAD) { this.stalled = false; break; }
-      if (Atomics.wait(c, C.DONE, done, WAIT_MS) === 'timed-out' && n === MAX_WAITS - 1) this.stalled = true;
+      if (((req - done) | 0) <= MAX_AHEAD) { this.stalled = false; this.t += this.p.dt; return EMPTY; }
+      if (typeof Atomics.waitAsync === 'function') {
+        const w = Atomics.waitAsync(c, C.DONE, done, WAIT_MS);
+        if (w.async) {
+          return w.value.then(result => {
+            if (result === 'timed-out' && n === MAX_WAITS - 1) {
+              this.stalled = true; this.t += this.p.dt; return EMPTY;
+            }
+            return this._waitCaughtUp(req, n + 1);
+          });
+        }
+        if (w.value === 'timed-out' && n === MAX_WAITS - 1) this.stalled = true;
+      } else if (Atomics.wait(c, C.DONE, done, WAIT_MS) === 'timed-out' && n === MAX_WAITS - 1) {
+        this.stalled = true;
+      }
+      n++;
     }
     this.t += this.p.dt;
     return EMPTY;

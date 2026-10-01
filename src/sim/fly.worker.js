@@ -44,7 +44,15 @@ onmessage = async (e) => {
   else if (m.type === 'mode') fly.motor.mode = m.mode;
   else if (m.type === 'stimulate') fly.brain.setDrive(m.indices, m.rate);
   else if (m.type === 'takeoff') { fly.requestTakeoff(); postPose(); }
-  else if (m.type === 'chaos') { if (fly) { fly.applyChaos(m); if (m.op === 'kill' || m.op === 'impulse' || m.op === 'flip' || m.op === 'spin') postPose(); } }
+  else if (m.type === 'chaos') {
+    if (fly) {
+      fly.applyChaos(m);
+      if (m.op === 'kill' || m.op === 'impulse' || m.op === 'flip' || m.op === 'spin' || m.op === 'dish' || m.op === 'loose') {
+        fly.kickPhysics();
+        postPose();
+      }
+    }
+  }
   else if (m.type === 'activity') {
     const eyes = fly.fv ? fly.fv.lumEye.map(e => e.slice(0)) : null;
     const groups = meter.read(fly.brain.spikeCount, fly.t);
@@ -74,7 +82,12 @@ async function loop(epoch = loopEpoch) {
   const t0 = performance.now(); let steps = 0;
   // Bound both CPU bursts and GPU work in flight. An unbounded compute queue stalls WebGL
   // and leaves the motor reading increasingly old brain state when many flies share the GPU.
-  while (running && epoch === loopEpoch && simAhead >= 1 && steps < burstSteps && performance.now() - t0 < burstMs) { fly.step(); simAhead -= 1; steps++; }
+  while (running && epoch === loopEpoch && simAhead >= 1 && steps < burstSteps && performance.now() - t0 < burstMs) {
+    const r = fly.step();
+    if (r?.then) await r;
+    simAhead -= 1; steps++;
+    if (steps % 4 === 0) await 0;
+  }
   fly.brain.flush?.();
   if (steps && fly.brain.device && (++fenceN % Math.max(1, fenceEvery) === 0)) await fly.brain.device.queue.onSubmittedWorkDone();
   if (epoch !== loopEpoch) { loopActive = false; return; }
