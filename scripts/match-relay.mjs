@@ -59,6 +59,48 @@ let poolBusy = false, poolWant = null, poolState = null, poolErr = null;
 function send(ws, msg) {
   if (ws.readyState === 1) ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
 }
+function prefsKey(p) {
+  if (!p) return 'full';
+  return `${p.act ? 1 : 0}${p.vision ? 1 : 0}`;
+}
+function normalizePrefs(p) {
+  if (!p || typeof p !== 'object') return null;
+  if (!('act' in p) && !('vision' in p)) return null;
+  return { act: !!p.act, vision: !!p.vision };
+}
+function stripState(st, p) {
+  if (!p || (p.act && p.vision)) return st;
+  const m = { ...st };
+  if (!p.act) m.act = null;
+  if (!p.vision) { m.visions = null; m.eyes = null; m.groups = null; }
+  return m;
+}
+let packedFull = JSON.stringify(lastState);
+const packedByPrefs = new Map();
+function cachePacked(st) {
+  lastState = st;
+  packedFull = JSON.stringify(st);
+  packedByPrefs.clear();
+}
+function packedFor(prefs) {
+  const k = prefsKey(prefs);
+  if (k === 'full' || (prefs?.act && prefs?.vision)) return packedFull;
+  let s = packedByPrefs.get(k);
+  if (!s) {
+    s = JSON.stringify(stripState(lastState, prefs));
+    packedByPrefs.set(k, s);
+  }
+  return s;
+}
+function sendStateTo(ws) {
+  send(ws, packedFor(ws.prefs));
+}
+function broadcastState(skip) {
+  for (const c of wss.clients) {
+    if (c === skip || c.readyState !== 1) continue;
+    sendStateTo(c);
+  }
+}
 function broadcast(msg, skip) {
   const packed = typeof msg === 'string' ? msg : JSON.stringify(msg);
   for (const c of wss.clients) if (c !== skip && c.readyState === 1) c.send(packed);
@@ -169,22 +211,28 @@ wss.on('connection', ws => {
         return;
       }
       ws.role = 'watch';
+      ws.prefs = normalizePrefs(msg.prefs);
       send(ws, { type: 'hello-ok', role: 'watch' });
-      send(ws, lastState);
+      sendStateTo(ws);
       if (poolState && poolState.matchId === lastState.matchId) send(ws, poolState);
       if (poolErr && poolErr.matchId === lastState.matchId) send(ws, { type: 'pool', matchId: poolErr.matchId, status: poolState?.matchId === poolErr.matchId ? poolState.status : null, winnerFly: null, opError: poolErr.reason });
       return;
     }
+    if (ws.role === 'watch' && msg.type === 'prefs') {
+      ws.prefs = normalizePrefs(msg);
+      sendStateTo(ws);
+      return;
+    }
     if (ws.role !== 'host' || msg.type !== 'state') return;
-    lastState = msg;
-    broadcast(msg, ws);
+    cachePacked(msg);
+    broadcastState(ws);
     queuePool(msg);
   });
   ws.on('close', () => {
     if (ws !== host) return;
     host = null;
-    lastState = idle();
-    broadcast(lastState);
+    cachePacked(idle());
+    broadcastState();
   });
 });
 

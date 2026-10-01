@@ -2,7 +2,7 @@ import { chaosCopy } from './i18n.js';
 import {
   makeThumb, makeHand, makeFinger, fadeGroup, fadeMeteorChunk, prepareMeshFade, makeCakeSlice, makeLeaf,
 } from './race-chaos-props.js';
-import { cloneChaosProp, getChaosSmokeTexture } from './race-chaos-assets.js';
+import { cloneChaosProp, getChaosSmokeTexture, chaosPropKeys } from './race-chaos-assets.js';
 import { celMat } from './cel-shade.js';
 import { createUfoBeam, tickUfoBeam, setUfoBeamOpacity } from './race-chaos-ufo-beam.js';
 import { setUfoSaucerFade } from './ufo-rim-glow.js';
@@ -100,6 +100,9 @@ export function createRaceChaos(api) {
   let sugarRainSession = null;
   let ufoSession = null;
   let spikesSession = null;
+  const LIGHT_POOL_N = 8;
+  let lightPool = null, lightFree = [];
+  const rimWorld = new T.Vector3();
 
   function radius() { return api.env()?.arena?.radius || 12.5; }
   /** Linear size vs the 12.5 cm dish. Desert inscribed radius is 25 → 2×. */
@@ -120,6 +123,46 @@ export function createRaceChaos(api) {
     fxRoot.matrixAutoUpdate = true;
     api.scene()?.add(fxRoot);
     return fxRoot;
+  }
+  function lightGroup() {
+    if (lightPool && lightPool.parent) return lightPool;
+    if (!lightPool) {
+      lightPool = new T.Group();
+      lightPool.name = 'ChaosLightPool';
+      lightFree = [];
+      for (let i = 0; i < LIGHT_POOL_N; i++) {
+        const l = new T.PointLight('#ffffff', 0, 8, 2);
+        l.visible = true;
+        lightPool.add(l);
+        lightFree.push(l);
+      }
+    }
+    api.scene()?.add(lightPool);
+    return lightPool;
+  }
+  function borrowLight({ color = '#ffffff', distance = 8, decay = 2 } = {}) {
+    lightGroup();
+    const l = lightFree.pop();
+    if (!l) return null;
+    l.color.set(color);
+    l.distance = distance;
+    l.decay = decay;
+    l.intensity = 0;
+    l.visible = true;
+    return l;
+  }
+  function releaseLight(l) {
+    if (!l) return;
+    l.intensity = 0;
+    if (!lightFree.includes(l)) lightFree.push(l);
+  }
+  function releaseAllLights() {
+    if (!lightPool) return;
+    lightFree = [];
+    for (const l of lightPool.children) {
+      l.intensity = 0;
+      lightFree.push(l);
+    }
   }
   function dishCakeGroup() {
     const g = api.dishCakeGroup?.();
@@ -599,10 +642,8 @@ export function createRaceChaos(api) {
     root.add(bolt);
     const t0 = now();
     const lightPeak = opts.thin ? 18 : opts.hit ? 48 : 34;
-    const light = new T.PointLight(opts.hit ? '#e8f0ff' : '#d7eeff', 0, opts.thin ? 10 : 18);
-    light.position.set(x, y, 3.2);
-    light.matrixAutoUpdate = true;
-    root.add(light);
+    const light = borrowLight({ color: opts.hit ? '#e8f0ff' : '#d7eeff', distance: opts.thin ? 10 : 18 });
+    if (light) light.position.set(x, y, 3.2);
     const flashR = opts.thin ? 0.7 : opts.hit ? 1.45 : 1.15;
     const flash = new T.Mesh(
       new T.CircleGeometry(flashR, 28),
@@ -614,11 +655,11 @@ export function createRaceChaos(api) {
       const e = boltPulse(u);
       const elapsed = now() - t0;
       bolt.scale.z = Math.max(0.02, e.reveal);
-      light.intensity = lightPeak * e.glow;
+      if (light) light.intensity = lightPeak * e.glow;
       flash.material.opacity = (opts.hit ? 1 : 0.85) * e.flash;
       flash.scale.setScalar(0.85 + 0.35 * e.flash);
       setBoltPulse(bolt, e, elapsed);
-    }, () => { disposeObj(bolt); disposeObj(flash); light.parent?.remove(light); });
+    }, () => { disposeObj(bolt); disposeObj(flash); releaseLight(light); });
   }
 
   function thumbAt(f, physics) {
@@ -774,10 +815,9 @@ export function createRaceChaos(api) {
       const a = randRange(0, Math.PI * 2);
       const mat = celMat('#d6ff7a', 1.4);
       const s = new T.Mesh(new T.SphereGeometry(0.09, 12, 10), mat);
-      const light = new T.PointLight('#c8ff6a', 1.6, 2.4);
-      s.add(light);
+      const light = borrowLight({ color: '#c8ff6a', distance: 2.4 });
       root.add(s);
-      dots.push({ s, a, wob: randRange(0.5, 1.3), z: randRange(0.35, 0.7) });
+      dots.push({ s, light, a, wob: randRange(0.5, 1.3), z: randRange(0.35, 0.7) });
     }
     const speed = 7000 / 3000;
     tween(7000, u => {
@@ -785,10 +825,12 @@ export function createRaceChaos(api) {
         const a = d.a + u * d.wob * speed;
         d.s.position.set((R - 0.55) * Math.cos(a), (R - 0.55) * Math.sin(a), d.z + 0.18 * Math.sin(u * 14 * speed + d.wob));
         d.s.material.opacity = u < 0.12 ? u / 0.12 : u > 0.82 ? (1 - u) / 0.18 : 1;
-        const pl = d.s.children[0];
-        if (pl) pl.intensity = 1.6 * d.s.material.opacity;
+        if (d.light) {
+          d.light.position.copy(d.s.position);
+          d.light.intensity = 1.6 * d.s.material.opacity;
+        }
       }
-    }, () => { for (const d of dots) disposeObj(d.s); });
+    }, () => { for (const d of dots) { disposeObj(d.s); releaseLight(d.light); } });
   }
 
   function seeds() {
@@ -945,7 +987,8 @@ export function createRaceChaos(api) {
     }
     if (ufoSession.saucer) disposeObj(ufoSession.saucer);
     if (ufoSession.beam) disposeObj(ufoSession.beam);
-    if (ufoSession.glow) ufoSession.glow.parent?.remove(ufoSession.glow);
+    releaseLight(ufoSession.glow);
+    if (ufoSession.rimLights) for (const l of ufoSession.rimLights) releaseLight(l);
     api.audio()?.stopUfoSting?.(3);
     ufoSession = null;
   }
@@ -1172,9 +1215,19 @@ export function createRaceChaos(api) {
     if (!saucer) return;
     setUfoSaucerFade(saucer, 0);
     const beam = createUfoBeam(T, 1);
-    const glow = new T.PointLight('#88ffdd', 0, 16);
-    glow.position.set(p0[0], p0[1], 2.5);
-    root.add(saucer, beam, glow);
+    const glow = borrowLight({ color: '#88ffdd', distance: 16 });
+    if (glow) glow.position.set(p0[0], p0[1], 2.5);
+    root.add(saucer, beam);
+    const rimLights = [];
+    const rimAnchors = saucer.getObjectByName('RimLampLights');
+    if (rimAnchors) {
+      for (const a of rimAnchors.children) {
+        const l = borrowLight({ color: 0x99eeff, distance: 0.55, decay: 2 });
+        if (!l) break;
+        l.intensity = 0.35;
+        rimLights.push(l);
+      }
+    }
     const top0 = UFO_SAUCER_TOP0;
     saucer.position.set(p0[0], p0[1], top0);
     placeUfoBeam(beam, p0[0], p0[1], 0.05, top0 - 0.35, 0);
@@ -1186,8 +1239,9 @@ export function createRaceChaos(api) {
       saucer,
       beam,
       glow,
+      rimLights,
+      rimAnchors,
       physics: !!physics,
-      spinRadPerSec: UFO_SPIN_RAD_PER_SEC,
       lastSpinT: t0,
       abducting: false,
     };
@@ -1215,6 +1269,7 @@ export function createRaceChaos(api) {
       saucer.position.set(p[0], p[1], top);
       const fadeIn = Math.min(1, u / UFO_FADE_IN_FRAC);
       setUfoSaucerFade(saucer, fadeIn);
+      if (ufoSession) ufoSession.fade = fadeIn;
       const beamCore = 0.5 + k * 0.32;
       placeUfoBeam(beam, p[0], p[1], 0.05, top - 0.35, beamCore * fadeIn);
       if (ufoSession?.glow) {
@@ -1239,6 +1294,7 @@ export function createRaceChaos(api) {
           const fadeStart = 1 - UFO_FADE_OUT_FRAC;
           const fadeOut = u < fadeStart ? 1 : 1 - easeInOut((u - fadeStart) / UFO_FADE_OUT_FRAC);
           setUfoSaucerFade(saucer, fadeOut);
+          if (ufoSession) ufoSession.fade = fadeOut;
           placeUfoBeam(beam, p[0], p[1], 0.05, top - 0.2, 0.55 * fadeOut);
           if (ufoSession?.glow) ufoSession.glow.intensity = 18 * fadeOut;
         }, () => endUfo());
@@ -1696,6 +1752,7 @@ export function createRaceChaos(api) {
     if (fxRoot) {
       while (fxRoot.children.length) disposeObj(fxRoot.children[0]);
     }
+    releaseAllLights();
   }
 
   function reset() {
@@ -1767,6 +1824,17 @@ export function createRaceChaos(api) {
       ufoSession.lastSpinT = t;
     }
     if (ufoSession?.beam) tickUfoBeam(ufoSession.beam, t);
+    if (ufoSession?.rimLights?.length) {
+      const anchors = ufoSession.rimAnchors?.children || [];
+      const fade = ufoSession.fade ?? 1;
+      for (let i = 0; i < ufoSession.rimLights.length; i++) {
+        const a = anchors[i], l = ufoSession.rimLights[i];
+        if (!a || !l) continue;
+        a.getWorldPosition(rimWorld);
+        l.position.copy(rimWorld);
+        l.intensity = 0.35 * fade;
+      }
+    }
     tickUfoAbductFly();
     tickSugarRain(t);
     if (spikesSession?.armed && spikesSession.physics && t < spikesSession.armedUntil) {
@@ -1826,5 +1894,33 @@ export function createRaceChaos(api) {
     return key;
   }
 
-  return { arm, reset, stopLive, holdRoulette, tick, playCue, getCue, getScorches, showToast, hideToast, relocalizeToast, debugFire, previewProp, kinds: KINDS, camBusy: () => !!camShot };
+  async function warmup(renderer, camera) {
+    const sc = api.scene();
+    if (!renderer?.compileAsync || !sc || !camera) return;
+    lightGroup();
+    const root = new T.Group();
+    root.name = 'ChaosWarmup';
+    sc.add(root);
+    for (const name of chaosPropKeys()) {
+      const m = cloneChaosProp(name);
+      if (!m) continue;
+      m.position.set(0, 0, -80);
+      root.add(m);
+    }
+    root.add(makeBolt(T, 0, 0, { height: 4, hit: true, fork: true }));
+    root.add(new T.Mesh(new T.CircleGeometry(1.2, 28), boltGroundFlashMaterial(T, true)));
+    root.add(createUfoBeam(T, 1));
+    const borrowed = [];
+    for (let i = 0; i < LIGHT_POOL_N; i++) {
+      const l = borrowLight({ color: i % 2 ? '#e8f0ff' : '#88ffdd', distance: 10 });
+      if (l) { l.intensity = 1; borrowed.push(l); }
+    }
+    try { await renderer.compileAsync(sc, camera); }
+    catch (e) { console.warn('chaos warmup', e); }
+    for (const l of borrowed) releaseLight(l);
+    while (root.children.length) disposeObj(root.children[0]);
+    root.parent?.remove(root);
+  }
+
+  return { arm, reset, stopLive, holdRoulette, tick, playCue, getCue, getScorches, showToast, hideToast, relocalizeToast, debugFire, previewProp, warmup, kinds: KINDS, camBusy: () => !!camShot };
 }

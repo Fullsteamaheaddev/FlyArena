@@ -23,13 +23,18 @@ export function matchUrl() {
 }
 
 export function createMatchLink({ role, onState, onStatus, onPool, secret }) {
-  let ws, alive = true, timer = null, paused = false;
+  let ws, alive = true, timer = null, paused = false, prefs = null;
   const secretVal = () => (typeof secret === 'function' ? secret() : secret) || '';
   function sendHello() {
     if (ws?.readyState !== 1) return;
     const hello = { type: 'hello', role };
     if (role === 'host') hello.secret = secretVal();
+    if (role !== 'host' && prefs) hello.prefs = prefs;
     ws.send(JSON.stringify(hello));
+  }
+  function sendPrefs() {
+    if (role === 'host' || !prefs || ws?.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: 'prefs', ...prefs }));
   }
   function connect() {
     if (!alive || paused) return;
@@ -91,6 +96,10 @@ export function createMatchLink({ role, onState, onStatus, onPool, secret }) {
       try { ws?.close(); } catch {}
       connect();
     },
+    setPrefs(p) {
+      prefs = { act: !!p?.act, vision: !!p?.vision };
+      sendPrefs();
+    },
   };
 }
 
@@ -132,7 +141,16 @@ export function unpackEyes(packed) {
   });
 }
 
+const rN = (n, k) => Math.round(n * k) / k;
+const rArr = (a, k) => {
+  if (!a?.length) return a && a.length === 0 ? [] : (a ? Array.from(a) : a);
+  const out = new Array(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = rN(a[i], k);
+  return out;
+};
+
 export function buildMatchState({ matchId, phase, flies, clock, winner, bodyNames, wingPoses, resetIn, why, selected, eyes, groups, visions, act, betClosesAt, pools, tickerUrl, chaosCue, map }) {
+  const vis = visions || null;
   return {
     type: 'state',
     matchId,
@@ -147,11 +165,12 @@ export function buildMatchState({ matchId, phase, flies, clock, winner, bodyName
     pools: pools || [],
     tickerUrl: tickerUrl || '',
     chaosCue: chaosCue || null,
+    sentAt: performance.now(),
     winner: winner ? { id: winner.id, name: winner.name, color: winner.color, why: why || null } : null,
     selected: selected ?? null,
-    eyes: eyes || null,
-    groups: groups || null,
-    visions: visions || null,
+    eyes: vis?.length ? null : (eyes || null),
+    groups: vis?.length ? null : (groups || null),
+    visions: vis,
     act: act || null,
     flies: flies.filter(f => f.last).map(f => ({
       id: f.id,
@@ -159,13 +178,13 @@ export function buildMatchState({ matchId, phase, flies, clock, winner, bodyName
       color: f.color,
       sex: f.sex,
       t: f.last.t,
-      pos: f.last.pos ? Array.from(f.last.pos) : [0, 0, 0],
-      yaw: f.last.yaw || 0,
-      xpos: f.last.xpos ? Array.from(f.last.xpos) : [],
-      xquat: f.last.xquat ? Array.from(f.last.xquat) : [],
+      pos: f.last.pos ? rArr(f.last.pos, 1e4) : [0, 0, 0],
+      yaw: f.last.yaw ? rN(f.last.yaw, 1e4) : 0,
+      xpos: f.last.xpos ? rArr(f.last.xpos, 1e4) : [],
+      xquat: f.last.xquat ? rArr(f.last.xquat, 1e4) : [],
       alive: f.last.alive,
-      energy: f.last.energy,
-      health: f.last.health,
+      energy: f.last.energy != null ? rN(f.last.energy, 1e3) : f.last.energy,
+      health: f.last.health != null ? rN(f.last.health, 1e3) : f.last.health,
       flying: !!f.last.flying,
       takeoffPending: !!f.last.takeoffPending,
       cmd: f.last.cmd || null,

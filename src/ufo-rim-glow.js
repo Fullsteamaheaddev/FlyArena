@@ -3,7 +3,6 @@ import { applyCelShading } from './cel-shade.js';
 
 const RIM_CORE = 0xa8f4ff;
 const RIM_HALO = 0x40d8ff;
-const RIM_LIGHT_COLOR = 0x99eeff;
 
 let coreMat = null;
 let haloMat = null;
@@ -117,7 +116,8 @@ export function setUfoSaucerFade(root, opacity) {
   });
 }
 
-/** Rim lamps: bright panels + soft camera-facing glow sprites (no scene spotlights). */
+/** Rim lamps: bright panels + soft camera-facing glow sprites (no scene spotlights).
+ *  sceneLights: empty Object3D anchors named RimLampLights so race-chaos can borrow pooled PointLights. */
 export function applyUfoRimGlow(root, { sceneLights = false } = {}) {
   root.getObjectByName('RimGlowHalos')?.removeFromParent();
   root.getObjectByName('RimLampLights')?.removeFromParent();
@@ -170,9 +170,9 @@ export function applyUfoRimGlow(root, { sceneLights = false } = {}) {
     for (let i = 0; i < lampPts.length; i += step) {
       if (lights.children.length >= 6) break;
       const L = lampPts[i];
-      const pl = new THREE.PointLight(RIM_LIGHT_COLOR, 0.35, 0.55, 2);
-      pl.position.set(L.px, L.py, L.pz);
-      lights.add(pl);
+      const a = new THREE.Object3D();
+      a.position.set(L.px, L.py, L.pz);
+      lights.add(a);
     }
     if (lights.children.length) root.add(lights);
   }

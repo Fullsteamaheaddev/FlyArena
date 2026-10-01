@@ -55,7 +55,9 @@ const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
 let raceWinner = null, raceWinnerWhy = null, raceResetTimer = null, raceResetting = false, raceStartWall = null, labelRenderer = null, raceAudio = null, raceSpotRot = 0, raceChaos = null, raceFloorPaintCtx = null;
 let matchLink = null, matchId = 0, matchPhase = 'lobby', matchResetIn = null, lastMatchSend = 0, lastActSend = 0, watchBodyNames = null, watchWingPoses = null, lastSentWingPoses = null;
-const WATCH_POSE_DELAY = 250, WATCH_POSE_EXTRAP = 120, WATCH_POSE_RING = 10;
+const WATCH_POSE_DELAY = 250, WATCH_POSE_EXTRAP = 120, WATCH_POSE_RING = 20;
+const WATCH_OFFSET_WINDOW = 2000, WATCH_CUE_STALE_MS = 3000;
+let hostOffset = 0, hostOffsetSamples = [], pendingCues = [], lastWatchCueId = -1, watchYipeeMatch = null;
 let betClosesAt = null, poolSnap = [], lobbyTimer = null, lastPoolRead = 0, chainSettled = false, betFlyId = null, lastLobbyKind = '', lastPoolKey = '', lastLobbyTickSec = null;
 let poolStatus = null, poolOpError = null, betWindowSec = DEFAULT_WINDOW, betWindowArmed = false, lobbyStartedAt = 0, resultsAt = 0, settledAt = 0;
 let resultActions = { key: '', claim: false, refund: false, note: '' }, profileSeq = 0, profileAcct = null;
@@ -214,6 +216,7 @@ async function main() {
   if (isRace) {
     await preloadChaosAssets(THREE, BASE);
     setupRaceChrome();
+    await raceChaos?.warmup?.(renderer, camera);
   }
   await spawnPresetFlies();
   if (isRace) {
@@ -242,6 +245,7 @@ async function mainWatch() {
   buildBrainPanel(data);
   await preloadChaosAssets(THREE, BASE);
   setupRaceChrome();
+  await raceChaos?.warmup?.(renderer, camera);
   setupFolds();
   setRaceBrainFolded(true, { instant: true });
   setupWatchBrainPanel();
@@ -1338,6 +1342,7 @@ function setupMatchLink() {
       if (isHost) onHostLinkStatus(s);
     },
   });
+  pushWatchPrefs();
 }
 let simRateRef = null, simRate = null;
 function sampleSimRate(now) {
@@ -1466,25 +1471,25 @@ function applyWatchOverlay(st) {
   watchOverlayPhase = 'wait';
   lastLobbyKind = '';
 }
-function pushWatchPose(f, row, recvAt) {
+function pushWatchPose(f, row, recvAt, hostAt) {
   const buf = f.poseBuf || (f.poseBuf = []);
-  buf.push({ t: row.t, recvAt, xpos: row.xpos, xquat: row.xquat, pos: row.pos, flying: !!row.flying });
+  buf.push({ t: row.t, recvAt, hostAt, xpos: row.xpos, xquat: row.xquat, pos: row.pos, flying: !!row.flying });
   if (buf.length > WATCH_POSE_RING) buf.shift();
 }
 function sampleWatchPose(f, now) {
   const buf = f.poseBuf;
   if (!buf?.length) return null;
-  const renderAt = now - WATCH_POSE_DELAY;
+  const renderAt = now - hostOffset - WATCH_POSE_DELAY;
   let i = 0;
-  while (i + 1 < buf.length && buf[i + 1].recvAt <= renderAt) i++;
+  while (i + 1 < buf.length && buf[i + 1].hostAt <= renderAt) i++;
   const a = buf[i], b = buf[i + 1];
   if (b) {
-    const span = Math.max(1, b.recvAt - a.recvAt);
-    return { a, b, blend: Math.min(1, Math.max(0, (renderAt - a.recvAt) / span)), extra: 0 };
+    const span = Math.max(1, b.hostAt - a.hostAt);
+    return { a, b, blend: Math.min(1, Math.max(0, (renderAt - a.hostAt) / span)), extra: 0 };
   }
-  if (renderAt < a.recvAt) return { a, b: a, blend: 1, extra: 0 };
+  if (renderAt < a.hostAt) return { a, b: a, blend: 1, extra: 0 };
   const prev = i > 0 ? buf[i - 1] : null;
-  return { a: prev || a, b: a, blend: 1, extra: prev ? Math.min(WATCH_POSE_EXTRAP, renderAt - a.recvAt) : 0 };
+  return { a: prev || a, b: a, blend: 1, extra: prev ? Math.min(WATCH_POSE_EXTRAP, renderAt - a.hostAt) : 0 };
 }
 function flyDrawPos(f) { return f.drawPos || f.last?.pos; }
 function applyWatchBodies(f, a, b, blend, extra) {
@@ -1492,7 +1497,7 @@ function applyWatchBodies(f, a, b, blend, extra) {
   if (!bx?.length) return;
   let ex = 0, ey = 0, ez = 0;
   if (extra > 0 && a !== b && a.pos && b.pos) {
-    const k = extra / Math.max(1, b.recvAt - a.recvAt);
+    const k = extra / Math.max(1, b.hostAt - a.hostAt);
     ex = (b.pos[0] - a.pos[0]) * k; ey = (b.pos[1] - a.pos[1]) * k; ez = (b.pos[2] - a.pos[2]) * k;
   }
   const u = blend;
@@ -1556,9 +1561,38 @@ function applyWatchFlyIdent(f, row) {
   if (f.beacon) setFlyBeaconColor(f.beacon, f.color);
   else if (f.ring?.material?.color) f.ring.material.color.set(f.color);
 }
+function noteHostClock(sentAt, recvAt) {
+  if (sentAt == null || !Number.isFinite(sentAt)) { hostOffset = 0; return false; }
+  const off = recvAt - sentAt;
+  hostOffsetSamples.push({ recvAt, off });
+  while (hostOffsetSamples.length && recvAt - hostOffsetSamples[0].recvAt > WATCH_OFFSET_WINDOW) hostOffsetSamples.shift();
+  let min = Infinity;
+  for (const s of hostOffsetSamples) if (s.off < min) min = s.off;
+  hostOffset = min;
+  return true;
+}
+function queueWatchCue(c, recvAt, hasHost) {
+  if (!c || c.id === lastWatchCueId) return;
+  lastWatchCueId = c.id;
+  const playAt = (c.t != null && hasHost) ? c.t + hostOffset + WATCH_POSE_DELAY : recvAt;
+  if (recvAt - playAt > WATCH_CUE_STALE_MS) return;
+  pendingCues.push({ cue: c, playAt });
+}
+function drainWatchCues(now) {
+  if (!pendingCues.length) return;
+  const keep = [];
+  for (const item of pendingCues) {
+    if (now < item.playAt) { keep.push(item); continue; }
+    if (now - item.playAt > WATCH_CUE_STALE_MS) continue;
+    raceChaos?.playCue(item.cue);
+  }
+  pendingCues = keep;
+}
 function applyWatchState(st) {
   if (st.map && normalizeMapId(st.map) !== raceMapId) { watchRaceMap(st.map); return; }
   if (mapSwap) return;
+  const received = performance.now();
+  const hasHost = noteHostClock(st.sentAt, received);
   const wasLive = watchOverlayPhase === 'live';
   matchPhase = st.phase || matchPhase;
   if (st.bodyNames) watchBodyNames = st.bodyNames;
@@ -1572,6 +1606,9 @@ function applyWatchState(st) {
     matchId = st.matchId;
     poolStatus = null;
     poolOpError = null;
+    hostOffsetSamples = [];
+    hostOffset = 0;
+    pendingCues = [];
   }
   betClosesAt = st.betClosesAt ?? null;
   if (st.pools) poolSnap = st.pools;
@@ -1579,7 +1616,7 @@ function applyWatchState(st) {
     watchTickerUrl = st.tickerUrl || '';
     paintRaceTicker(watchTickerUrl);
   }
-  if (st.chaosCue) raceChaos?.playCue(st.chaosCue);
+  if (st.chaosCue) queueWatchCue(st.chaosCue, received, hasHost);
   if (st.clock) {
     paintSimRate(st.phase === 'live' ? st.clock.sim : null);
     if (st.phase === 'live') {
@@ -1592,6 +1629,7 @@ function applyWatchState(st) {
   }
   const names = watchBodyNames;
   const seen = new Set();
+  const hostAt = hasHost ? st.sentAt : received;
   for (const row of st.flies || []) {
     seen.add(row.id);
     let f = flies.find(x => x.id === row.id);
@@ -1603,10 +1641,9 @@ function applyWatchState(st) {
     f.prev = f.last; f.last = row;
     syncFlyDeathVisual(f);
     cueSelectedTakeoff(f);
-    const received = performance.now();
     f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received - f.recvAt)) : 1000 / 30;
     f.recvAt = received;
-    if (isWatch) pushWatchPose(f, row, received);
+    if (isWatch) pushWatchPose(f, row, received, hostAt);
     paintFlyLabel(f);
   }
   for (let i = flies.length - 1; i >= 0; i--) if (!seen.has(flies[i].id)) { removeFly(flies[i]); flies.splice(i, 1); }
@@ -1626,9 +1663,12 @@ function applyWatchState(st) {
   if (wasLive && st.phase !== 'live') raceChaos?.stopLive();
   if (isWatch && isRace && st.phase === 'lobby') {
     raceChaos?.reset();
+    pendingCues = [];
+    lastWatchCueId = -1;
     for (const f of flies) syncFlyDeathVisual(f);
   }
-  if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && !raceWinner) {
+  if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && st.matchId !== watchYipeeMatch) {
+    watchYipeeMatch = st.matchId;
     announceRace(t('race.wins', { name: st.winner.name }), st.winner.color);
     raceAudio?.setMotion({ flying: false, walk: 0 });
     raceAudio?.playBed('menu');
@@ -1836,9 +1876,18 @@ function setRaceBrainFolded(folded, { user = false, instant = false } = {}) {
     const f = flies.find(x => x.id === selected);
     if (f?.ready && f.worker && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
   }
+  pushWatchPrefs();
 }
 function raceMobile() {
   return matchMedia('(max-width: 700px), (max-height: 500px)').matches;
+}
+function watchBrainPrefs() {
+  const folded = !!$('#brainpanel')?.classList.contains('folded');
+  return { act: !folded, vision: !(raceMobile() && folded) };
+}
+function pushWatchPrefs() {
+  if (!isWatch || !matchLink?.setPrefs) return;
+  matchLink.setPrefs(watchBrainPrefs());
 }
 function scheduleRaceBrainFold() {
   clearTimeout(raceBrainTimer);
@@ -2787,6 +2836,7 @@ function animate() {
   requestAnimationFrame(animate);
   if (document.hidden) return;
   const now = performance.now(); const dt = Math.min(0.1, (now - lastFrame) / 1000); fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
+  if (isWatch) drainWatchCues(now);
   for (const f of flies) {
     const s = f.last; if (!s || !f.bodyGroups) continue;
     if (isWatch && f.poseBuf?.length) {

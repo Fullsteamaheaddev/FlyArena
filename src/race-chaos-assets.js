@@ -78,6 +78,7 @@ export function cloneChaosProp(name) {
   return root;
 }
 
+export function chaosPropKeys() { return Object.keys(PATHS); }
 export function hasChaosProp(name) {
   return !!templates[name];
 }
