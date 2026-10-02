@@ -6,7 +6,7 @@ next race reset. Watchers follow the map in the host's match snapshots.
 
 | Id | Arena | Spawns | Notes |
 |---|---|---|---|
-| `dish` | 12.5 cm radius circular plate | 3 at 10.5 cm | Warm sand, wooden fence rim, swaying grass (render-only) |
+| `dish` | 18.75 cm radius circular plate | 3 at 15.75 cm | Warm sand, wooden fence rim, swaying grass (render-only) |
 | `desert` | 50 × 50 cm walled square, night | 3 at 19 cm (lanes at 90° / 210° / 330°) | Flat sand, pools, palms, ruins, lamps |
 
 **Code:** `src/sim/world.js` (`RACE_MAPS`, `raceMap`, square branch of `buildWorldXML`),

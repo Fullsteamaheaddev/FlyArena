@@ -35,14 +35,15 @@ function swayPatch(shader, crown) {
   shader.vertexShader = (crown ? '#define SWAY_CROWN\n' : '') + SWAY_HEAD + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n${SWAY_BODY}`);
 }
 const swayDepth = new Map();
-export function swayMaterials(mesh) {
-  const crown = mesh.name === 'PalmFronds';
-  const m = mesh.material;
-  if (!m.userData.sway) {
-    m.userData.sway = true;
-    m.onBeforeCompile = sh => swayPatch(sh, crown);
-    m.customProgramCacheKey = () => `sway${crown ? 'C' : ''}`;
-  }
+
+function patchSwayMaterial(m, crown) {
+  if (!m || m.userData.sway) return;
+  m.userData.sway = true;
+  m.onBeforeCompile = sh => swayPatch(sh, crown);
+  m.customProgramCacheKey = () => `sway${crown ? 'C' : ''}:${m.type}`;
+}
+
+function swayDepthMaterial(crown) {
   const key = crown ? 'crown' : 'plain';
   if (!swayDepth.has(key)) {
     const d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
@@ -53,7 +54,20 @@ export function swayMaterials(mesh) {
   }
   return swayDepth.get(key);
 }
-export const SWAY_KINDS = new Set(['palm', 'reed', 'lilypad']);
+
+export function swayMaterials(mesh) {
+  const crown = mesh.name === 'PalmFronds';
+  patchSwayMaterial(mesh.material, crown);
+  return swayDepthMaterial(crown);
+}
+
+/** Sway + depth material for a custom lit material (dish grass cel shading). */
+export function swayForMaterial(mat, meshName = '') {
+  const crown = meshName === 'PalmFronds';
+  patchSwayMaterial(mat, crown);
+  return swayDepthMaterial(crown);
+}
+export const SWAY_KINDS = new Set(['palm', 'reed', 'grass', 'lilypad']);
 
 export function applySwayWind(wind, tSec) {
   const ts = tSec % 3600;

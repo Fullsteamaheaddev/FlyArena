@@ -2,7 +2,7 @@
 // obstacles and food discs, and kinematic (mocap) proxies standing in for the other flies.
 // Units follow flybody: cm, g, s. The floor is z = 0; a standing fly's thorax sits at z ~ 0.13.
 import { desertEnv, desertSpots } from './maps/desert.js';
-import { dishEnv } from './maps/dish.js';
+import { dishEnv, dishSpots } from './maps/dish.js';
 
 export const DEFAULT_ENV = {
   arena: { radius: 2.5, wallHeight: 1.2, segments: 48, wallFriction: 1 },    // head/body grip walls; legs slide along them (see buildWorldXML); tall enough to fly in
@@ -66,7 +66,7 @@ export const PRESETS = {
 
 // Sugar Run maps. `dish` is the original plate; `desert` is the 50 cm night square (src/sim/maps/desert.js).
 export const RACE_MAPS = {
-  dish: { label: 'Dish', flySpots: PRESETS.race.flySpots, env: () => dishEnv(PRESETS.race.env()) },
+  dish: { label: 'Dish', flySpots: dishSpots(), env: () => dishEnv(PRESETS.race.env()) },
   desert: { label: 'Desert', flySpots: desertSpots(), env: () => desertEnv(DEFAULT_ENV) },
 };
 export const RACE_MAP_IDS = Object.keys(RACE_MAPS);

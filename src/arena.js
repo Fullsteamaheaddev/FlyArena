@@ -96,8 +96,10 @@ async function wantedRaceMap() {
 /** Swap the shared env object in place (workers get it at init; chaos and senses hold the reference). */
 async function setRaceEnv(id) {
   id = normalizeMapId(id) || 'dish';
-  if (!isRace || id === raceMapId) return false;
+  if (!isRace) return false;
   await preloadMapAssets(BASE, id);
+  // PRESETS.race.env() sets map=dish but not render props; do not skip until props are applied.
+  if (id === raceMapId && Array.isArray(env.props)) return false;
   const next = raceMap(id).env();
   for (const k of Object.keys(env)) delete env[k];
   Object.assign(env, next);
@@ -2120,6 +2122,8 @@ async function paintResultActions(id) {
   injectResultActions(id);
 }
 function selectBetFly(id, card = $('#raceCard')) {
+  id = +id;
+  if (betFlyId !== id) raceAudio?.playSelect(id);
   betFlyId = id;
   card?.querySelectorAll('.bet-fly').forEach(b => b.classList.toggle('on', +b.dataset.fly === id));
 }

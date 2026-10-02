@@ -432,6 +432,32 @@ function buildReed() {
   return normalize(root, { h: 1, centerXY: false });   // origin = clump centre
 }
 
+// ---------- grass tuft (height 1, blades only — dish map) ----------
+function buildGrass() {
+  const geos = [];
+  const sway = (pp, i) => [Math.max(0, Math.min(1, pp.getZ(i))), 1];
+  const bladeHs = [0.72, 0.88, 0.95, 0.82, 1.0, 0.9, 0.78, 0.93, 0.86, 0.98, 0.84, 0.91];
+  for (let k = 0; k < bladeHs.length; k++) {
+    const a = k / bladeHs.length * Math.PI * 2 + 0.15;
+    const h = bladeHs[k];
+    const lean = 0.08 + k * 0.01;
+    // Open-ended, needle tip: closed square caps show as black tiles under the inverted-hull outline.
+    const blade = zUp(new THREE.CylinderGeometry(0.0012, 0.026, h, 4, 1, true));
+    blade.translate(0, 0, h / 2);
+    const p = blade.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const t = p.getZ(i) / h;
+      const d = lean * t * t + 0.012;
+      p.setXY(i, p.getX(i) + Math.cos(a) * d, p.getY(i) + Math.sin(a) * d);
+    }
+    blade.computeVertexNormals();
+    geos.push(prep(blade, k % 2 ? '#6f8f3a' : '#839c45', sway));
+  }
+  const root = new THREE.Group(); root.name = 'Grass';
+  root.add(meshOf(geos, mat('#ffffff', 0.8, { vertexColors: true }), 'GrassMesh'));
+  return normalize(root, { h: 1, centerXY: false });
+}
+
 // ---------- lily pad (radius 1) ----------
 function buildLilypad() {
   const geos = [];
@@ -544,6 +570,7 @@ const jobs = {
   pebble: () => exportGlb('pebble.glb', buildRock('Pebble', 0, 0.15, '#9c8866')),
   cactus: () => exportGlb('cactus.glb', buildCactus()),
   reed: () => exportGlb('reed.glb', buildReed()),
+  grass: () => exportGlb('grass.glb', buildGrass()),
   lilypad: () => exportGlb('lilypad.glb', buildLilypad()),
   skull: () => exportGlb('skull.glb', buildSkull()),
   tumbleweed: () => exportGlb('tumbleweed.glb', buildTumbleweed()),

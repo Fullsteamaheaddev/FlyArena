@@ -47,6 +47,15 @@ export function celMat(color, glow = 0) {
   });
 }
 
+/** Vertex-colored props (e.g. dish grass GLB) with banded lighting. */
+export function celMatVertexColors() {
+  return new THREE.MeshToonMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    gradientMap: celRamp(),
+  });
+}
+
 function toonFrom(old) {
   const color = old?.color?.clone?.() ?? new THREE.Color(0x888888);
   const glow = old?.emissiveIntensity > 0.01 ? old.emissiveIntensity : 0;

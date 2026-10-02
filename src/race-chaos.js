@@ -1343,21 +1343,20 @@ export function createRaceChaos(api) {
     mesh.rotation.z = payload.yaw || 0;
     fxGroup().add(mesh);
     const riseMs = 520;
-    const armedMs = 2200;
+    const holdMs = 2200;
     const t0 = now();
     spikesSession = {
-      mesh, x, y, half, physics: !!physics, armed: false, armedUntil: 0, lastHit: 0,
-      until: t0 + riseMs + armedMs + 600,
+      mesh, x, y, half, physics: !!physics, stabbing: true, hitIds: new Set(),
+      until: t0 + riseMs + holdMs + 600,
     };
     busyUntil = Math.max(busyUntil, spikesSession.until);
     tween(riseMs, u => {
       mesh.position.z = -0.55 + (0.02 - -0.55) * easeInOut(u);
+      // Lethal only while the points are punching up through a fly already on the pad.
+      if (physics && u > 0.42) spikeTrapHits();
     }, () => {
-      spikesSession.armed = true;
-      spikesSession.armedUntil = now() + armedMs;
-      if (physics) spikeTrapHits();
-      later(armedMs, () => {
-        spikesSession.armed = false;
+      if (spikesSession) spikesSession.stabbing = false;
+      later(holdMs, () => {
         tween(480, u => {
           mesh.position.z = 0.02 + (-0.55 - 0.02) * easeInOut(u);
         }, () => endSpikes());
@@ -1368,13 +1367,17 @@ export function createRaceChaos(api) {
   }
 
   function spikeTrapHits() {
-    if (!spikesSession?.armed || !spikesSession.physics) return;
+    if (!spikesSession?.stabbing || !spikesSession.physics) return;
     const { x, y, half } = spikesSession;
     for (const f of liveFlies(flies())) {
+      if (spikesSession.hitIds.has(f.id)) continue;
       const p = f.last?.pos;
       if (!p) continue;
       if (Math.abs(p[0] - x) > half || Math.abs(p[1] - y) > half) continue;
-      if ((p[2] || 0) > 0.58) continue;
+      if (f.last.flying) continue;
+      const z = p[2] || 0;
+      if (z > 0.28) continue;
+      spikesSession.hitIds.add(f.id);
       post(f, { op: 'kill' });
       hideToast();
     }
@@ -1873,12 +1876,6 @@ export function createRaceChaos(api) {
     }
     tickUfoAbductFly();
     tickSugarRain(t);
-    if (spikesSession?.armed && spikesSession.physics && t < spikesSession.armedUntil) {
-      if (t - spikesSession.lastHit > 90) {
-        spikesSession.lastHit = t;
-        spikeTrapHits();
-      }
-    }
     if (scorches.length && t - lastScorchPaint > 500) {
       scorches = scorches.filter(s => t < s.until + 4000);
       lastScorchPaint = t;

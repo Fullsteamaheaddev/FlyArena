@@ -6,7 +6,7 @@ export function propScale(p) {
     case 'arch': return [p.w, p.w, p.h * 1.2];
     case 'pillar_broken': return [1.17, 1.17, p.h];
     case 'rock_a': case 'rock_b': case 'rock_c': case 'pebble': return [p.r, p.r, p.h];
-    case 'reed': return [1.2 * s, 1.2 * s, 1.2 * s];
+    case 'reed': case 'grass': return [1.2 * s, 1.2 * s, 1.2 * s];
     case 'lilypad': return [0.45 * s, 0.45 * s, 0.45 * s];
     default: return [p.h * s, p.h * s, p.h * s];
   }
