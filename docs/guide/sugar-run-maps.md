@@ -1,8 +1,9 @@
 # Sugar Run maps
 
 Sugar Run (`/racehost`, `/`, `arena.html?env=race`) can race on more than one map. The
-owner picks the map at `/admin`; the choice is site-wide and takes effect at the host's
-next race reset. Watchers follow the map in the host's match snapshots.
+owner picks the map at `/admin`; the host can also switch it from the lobby card.
+The choice is site-wide. A host lobby pick applies immediately (scene rebuild +
+respawn on the new spots). Watchers follow the map in the host's match snapshots.
 
 | Id | Arena | Spawns | Notes |
 |---|---|---|---|
@@ -14,7 +15,7 @@ next race reset. Watchers follow the map in the host's match snapshots.
 `src/race-map-assets.js` (prop GLB loader), `src/race-wind.js` (visual wind + hawk),
 `src/race-audio.js` (`startAmbience` / `setAmbience` / `stopAmbience`),
 `src/race-map.js` + `netlify/functions/map.js` (site-wide choice), `src/arena.js`
-(`setRaceEnv`, `fitRaceView`, `watchRaceMap`).
+(`setRaceEnv`, `fitRaceView`, `watchRaceMap`, `hostPickRaceMap`).
 
 ---
 
@@ -23,7 +24,11 @@ next race reset. Watchers follow the map in the host's match snapshots.
 - **Admin:** `/admin` → *Race map* → *Save map*. Writes `raceMap` into the
   `sugar-run` Netlify Blobs store through `PUT /api/map`, and also saves it to
   `localStorage` `sugarRunMap`.
-- **Host:** reads `/api/map` at boot and at every `resetRace`. If there's no function
+- **Host:** reads `/api/map` at boot and at every `resetRace`. The host lobby card
+  has Dish / Desert buttons (watchers do not). Picking one calls `saveSiteMap`
+  and rebuilds the arena immediately — same `setRaceEnv` / `rebuildEnv` path as a
+  reset, but fly id / name / color stay so open bets still match. After that,
+  `wantedRaceMap` prefers the lobby pick for later resets. If there's no function
   (plain `vite` dev), it falls back to `localStorage` `sugarRunMap`, then `dish`.
 - **Dev override:** `?map=desert` / `?map=dish` on the host URL (dev builds only).
 - **Watchers:** boot on `/api/map`, then switch whenever a snapshot's `map` differs

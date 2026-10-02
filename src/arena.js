@@ -10,13 +10,13 @@ import { loadBlenderFly, createBlenderFly, loadArenaDetail, blenderOutput } from
 import { ArenaBatches } from './arena-batches.js';
 import { RenderResolution } from './render-resolution.js';
 import { loadConnectome, loadNeurons } from './data.js';
-import { PRESETS, raceMap } from './sim/world.js';
+import { PRESETS, raceMap, RACE_MAP_IDS } from './sim/world.js';
 import { groundAt } from './sim/senses.js';
 import { buildDesertScene } from './race-map-desert.js';
 import { buildDishScene } from './race-map-dish.js';
 import { preloadMapAssets } from './race-map-assets.js';
 import { windField, hawkAt } from './race-wind.js';
-import { fetchSiteMap, normalizeMapId } from './race-map.js';
+import { fetchSiteMap, saveSiteMap, normalizeMapId } from './race-map.js';
 import { allocBrainMemory, MAX_FLIES } from './brainsetup.js';
 import { allocSharedBrain } from './brain-shared.js';
 import { parseFlyVis } from './flyvis.js';
@@ -24,6 +24,7 @@ import { buildGroups } from './sim/groups.js';
 import { createRaceAudio } from './race-audio.js';
 import { createRaceChaos, paintChaosScorches, CHAOS_KINDS } from './race-chaos.js';
 import { preloadChaosAssets } from './race-chaos-assets.js';
+import { preloadSiteAssets } from './preload-site.js';
 import { matchRole, isWatchPath, isRaceHostPath, matchUrl, createMatchLink, buildMatchState, packAct, unpackAct, packEyes, unpackEyes } from './match.js';
 import { fetchSiteTickerUrl, normalizeTickerHref } from './ticker-url.js';
 import {
@@ -87,9 +88,11 @@ let lastRaceFliesKey = '';
 let watchTickerUrl = null;
 let siteTickerUrl = '';
 let raceMapId = env.map || 'dish', desertScene = null, dishScene = null, mapSwap = null;
+let hostMapChoice = null;
 
-/** Host: dev ?map= wins, else the site-wide admin choice. */
+/** Host: lobby pick wins, else dev ?map=, else the site-wide admin choice. */
 async function wantedRaceMap() {
+  if (hostMapChoice) return hostMapChoice;
   const q = import.meta.env.DEV ? normalizeMapId(new URLSearchParams(location.search).get('map')) : null;
   return q || fetchSiteMap();
 }
@@ -145,6 +148,53 @@ function watchRaceMap(id) {
   })().finally(() => { mapSwap = null; });
 }
 
+function lobbyMapHtml() {
+  const picks = RACE_MAP_IDS.map(id => {
+    const on = id === raceMapId ? ' on' : '';
+    const busy = mapSwap ? ' disabled' : '';
+    return `<button type="button" class="lobby-map-pick${on}" data-map="${id}"${busy}>${t(`map.${id}`)}</button>`;
+  }).join('');
+  return `<div class="lobby-map" role="group" aria-label="${t('lobby.map')}">
+      <span>${t('lobby.map')}</span>
+      <div class="lobby-map-picks">${picks}</div>
+    </div>`;
+}
+
+/** Host lobby: apply the map now (scene + fly spots) and persist for later resets. */
+function hostPickRaceMap(id) {
+  id = normalizeMapId(id);
+  if (!isHost || matchPhase !== 'lobby' || !id || id === raceMapId || mapSwap) return;
+  mapSwap = (async () => {
+    lastLobbyKind = '';
+    paintLobbyOverlay(true);
+    hostMapChoice = id;
+    try { await saveSiteMap(id); } catch (e) { console.warn('saveSiteMap', e); }
+    const kept = flies.slice().sort((a, b) => a.id - b.id).map(f => ({ name: f.name, color: f.color, sex: f.sex }));
+    const keepSelected = selected;
+    const keepBet = betFlyId;
+    for (const f of flies) { f.worker?.postMessage({ type: 'pause' }); removeFly(f); }
+    flies.length = 0;
+    nextId = 0;
+    selected = 0;
+    await setRaceEnv(id);
+    raceChaos?.reset();
+    fitRaceView();
+    rebuildEnv();
+    snapRaceOverview();
+    const spots = raceMap(id).flySpots || [];
+    for (let i = 0; i < spots.length; i++) {
+      const s = spots[i], ident = kept[i];
+      await addFly(s.pos, s.yaw, ident?.sex || s.sex, ident);
+    }
+    if (keepSelected != null && flies.some(f => f.id === keepSelected)) selected = keepSelected;
+    if (keepBet != null) betFlyId = keepBet;
+    await waitRacePoses();
+    lastLobbyKind = '';
+    paintLobbyOverlay(true);
+    publishMatchState(true);
+  })().catch(e => console.warn('hostPickRaceMap', e)).finally(() => { mapSwap = null; paintLobbyOverlay(true); });
+}
+
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
 function fireChaos(kind, extra) {
@@ -184,9 +234,25 @@ async function loadLocalChaosHarness() {
   mountChaosTestPanel();
 }
 
+function startRaceAssetLoads() {
+  if (!isRace) return { site: Promise.resolve(), chaos: Promise.resolve(), maps: Promise.resolve() };
+  return {
+    site: preloadSiteAssets(BASE),
+    chaos: preloadChaosAssets(THREE, BASE),
+    maps: Promise.all(['dish', 'desert'].map(id => preloadMapAssets(BASE, id))),
+  };
+}
+
+async function waitRaceAssets(loads) {
+  if (!isRace) return;
+  status('loading interface');
+  await Promise.all([loads.site, loads.chaos, loads.maps]);
+}
+
 async function main() {
   if (isWatch) return mainWatch();
   if (isRace) document.body.classList.add('race');
+  const raceAssets = startRaceAssetLoads();
   if (isHost) await gateHost();
   if (!crossOriginIsolated) console.warn('not cross-origin isolated: SharedArrayBuffer unavailable');
   const data = await loadConnectome(status);
@@ -216,12 +282,12 @@ async function main() {
   if (isRace) await setRaceEnv(await wantedRaceMap());
   buildScene(data);
   buildUI();
-  $('#loading').remove();
+  await waitRaceAssets(raceAssets);
   if (isRace) {
-    await preloadChaosAssets(THREE, BASE);
     setupRaceChrome();
     await raceChaos?.warmup?.(renderer, camera);
   }
+  $('#loading').remove();
   await spawnPresetFlies();
   if (isRace) {
     await waitRacePoses();
@@ -234,6 +300,7 @@ async function main() {
 }
 
 async function mainWatch() {
+  const raceAssets = startRaceAssetLoads();
   status('loading arena');
   const [blender, levels, output, detail, fvm, data, bm, wingPoses] = await Promise.all([
     loadBlenderFly(BASE, status), loadArenaDetail(BASE), blenderOutput(BASE), loadCuticleDetail(`${BASE}body/cuticle_detail.png`),
@@ -247,7 +314,7 @@ async function mainWatch() {
   await setRaceEnv(await fetchSiteMap());
   buildScene(data);
   buildBrainPanel(data);
-  await preloadChaosAssets(THREE, BASE);
+  await waitRaceAssets(raceAssets);
   setupRaceChrome();
   await raceChaos?.warmup?.(renderer, camera);
   setupFolds();
@@ -2131,6 +2198,9 @@ function wireLobbyCard(card) {
   card.querySelectorAll('.bet-fly').forEach(b => {
     b.onclick = () => selectBetFly(+b.dataset.fly, card);
   });
+  card.querySelectorAll('.lobby-map-pick').forEach(b => {
+    b.onclick = () => hostPickRaceMap(b.dataset.map);
+  });
   const connect = card.querySelector('#betConnect');
   if (connect) {
     connect.classList.toggle('connect-btn', !getAccount());
@@ -2231,7 +2301,7 @@ function paintLobbyOverlay(force = false) {
   if (!card) return;
   const clock = lobbyClockLabel();
   const acct = getAccount();
-  const kind = `${isWatch ? 'w' : 'h'}:${matchId}:${acct || '0'}:${poolStatus}:${flies.map(f => f.id).join(',')}`;
+  const kind = `${isWatch ? 'w' : 'h'}:${matchId}:${acct || '0'}:${poolStatus}:${raceMapId}:${flies.map(f => f.id).join(',')}`;
   const skip = !force && card.dataset.kind === 'lobby' && lastLobbyKind === kind && card.querySelector('#lobbyClock');
   if (skip) {
     const el = card.querySelector('#lobbyClock'); if (el) el.textContent = clock;
@@ -2274,6 +2344,7 @@ function paintLobbyOverlay(force = false) {
     card.innerHTML = `<h1>Sugar Run</h1><p>${t('lobby.blurb')}</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       <p class="flyt">${t('lobby.autoStart')}</p>
+      ${lobbyMapHtml()}
       ${poolRowsHtml()}${raceHistoryHtml(loadRaceHistory())}`;
   }
   showRaceOverlayCard(card, { enter: overlayWasHidden });
@@ -2295,7 +2366,7 @@ function armBetWindow() {
   publishMatchState(true);
 }
 async function tickLobby() {
-  if (matchPhase !== 'lobby') return;
+  if (matchPhase !== 'lobby' || mapSwap) return;
   if (isHost && !betWindowArmed && Date.now() - lobbyStartedAt > OPEN_GRACE_MS) armBetWindow();
   await refreshPoolSnap();
   paintLobbyOverlay();

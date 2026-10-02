@@ -147,6 +147,7 @@ const LOAD_EXACT = {
   'writing connectome into shared memory': 'load.shared',
   'writing connectome and optic-lobe model into shared memory': 'load.sharedVision',
   'loading arena': 'load.arena',
+  'loading interface': 'load.site',
   'decoding Blender detail': 'load.blenderDecode',
   'applying Cycles lighting': 'load.cycles',
   'preparing lighting': 'load.lighting',

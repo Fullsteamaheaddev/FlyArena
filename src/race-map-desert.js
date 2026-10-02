@@ -360,7 +360,7 @@ export function buildDesertScene(envGroup, env, ctx) {
   function update(nowMs, wind, tSec) {
     const t = tSec ?? nowMs / 1000, dt = lastT == null ? 0 : Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
     // t is wall-clock seconds (~1.8e9): wrap it before it reaches float32 shader math or phase terms
-    applySwayWind(wind, t);
+    const ts = applySwayWind(wind, t);
     waterN.offset.set((ts * 0.02) % 1, (ts * 0.013) % 1);
     for (const rp of rippleMats) {
       const u = (t / 8.5 + rp.phase) % 1, s = 0.2 + u * rp.r * 0.9;

@@ -724,6 +724,33 @@ body.race .race-card button.bet-fly.on {
   box-shadow: 0 0 0 2px var(--wood-cream), 0 0 0 5px var(--wood-line);
   transform: scale(1.04);
 }
+body.race .race-card .lobby-map {
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  width: 90%; margin: 0 auto 16px;
+}
+body.race .race-card .lobby-map > span {
+  font: 600 12px/1 ui-sans-serif, system-ui, sans-serif;
+  color: var(--wood-ink-dim); letter-spacing: .06em; text-transform: uppercase;
+}
+body.race .race-card .lobby-map-picks {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;
+}
+body.race .race-card button.lobby-map-pick {
+  min-width: 0; width: 100%; padding: 8px 10px;
+  font: 600 13px/1.2 ui-sans-serif, system-ui, sans-serif;
+  border-radius: 10px;
+  color: var(--wood-ink);
+  background: var(--wood-cream);
+  border-color: var(--wood-line);
+  outline: none; box-shadow: none;
+  transition: transform .15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow .12s ease;
+}
+body.race .race-card button.lobby-map-pick:active { transform: scale(1.06); }
+body.race .race-card button.lobby-map-pick.on {
+  box-shadow: 0 0 0 2px var(--wood-cream), 0 0 0 5px var(--wood-line);
+  transform: scale(1.04);
+}
+body.race .race-card button.lobby-map-pick:disabled { opacity: .55; pointer-events: none; }
 body.race .race-card .bet-stake {
   display: flex; flex-direction: column; gap: 8px; align-items: center; margin: 0;
 }
@@ -1128,6 +1155,7 @@ body.race #groups .v { color: var(--wood-ink); }
     align-self: center;
   }
   body.race .race-card button.bet-fly { min-width: 0; align-self: stretch; }
+  body.race .race-card button.lobby-map-pick { min-width: 0; align-self: stretch; min-height: 40px; padding: 8px 10px; }
   body.race #enterGate {
     padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   }

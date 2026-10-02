@@ -6,7 +6,7 @@ import { DESERT_MAP_PROP_NAMES } from './desert-prop-scale.js';
 
 const MAP_PROPS = {
   desert: DESERT_MAP_PROP_NAMES,
-  dish: ['grass'],
+  dish: ['grass', 'doghouse'],
 };
 
 export { DESERT_MAP_PROP_NAMES };
