@@ -76,6 +76,13 @@ function postPose(chaos = false) {
     mn9: fly.motor.mean(fly.motor.muscles.find(x => x.name.startsWith('MN9'))?.idx || []), feeding: fly.motor.feeding(), heat: st.heat || 0, nSensory: fly.driven.length,
     foodEaten: fly.foodEaten.splice(0, fly.foodEaten.length, ...fly.foodEaten.map(() => 0)), behavior: fly.behavior(st), drive: fly.intrinsic?.label(), nm: fly.neuromod?.readout(), flying: fly.flight.active, flights: fly.flights, dist: fly.dist, jumps: fly.jumps, pos: st.pos, yaw: Math.atan2(fly.mjd.xmat[fly.bid.thorax * 9 + 3], fly.mjd.xmat[fly.bid.thorax * 9]) }, [p.xpos.buffer, p.xquat.buffer]);
 }
+// A microtask yield (`await 0`) does not let queued messages in, so a chaos cue would wait for the
+// whole burst. A MessageChannel hop is a real task yield with none of setTimeout's 4 ms clamp.
+const taskPort = new MessageChannel();
+let taskWaiters = [];
+taskPort.port1.onmessage = () => { const w = taskWaiters; taskWaiters = []; for (const r of w) r(); };
+function yieldTask() { return new Promise(r => { taskWaiters.push(r); taskPort.port2.postMessage(0); }); }
+
 async function loop(epoch = loopEpoch) {
   if (!running || epoch !== loopEpoch || loopActive) return;
   loopActive = true;
@@ -87,7 +94,7 @@ async function loop(epoch = loopEpoch) {
     const r = fly.step();
     if (r?.then) await r;
     simAhead -= 1; steps++;
-    if (steps % 4 === 0) await 0;
+    if (steps % 4 === 0) await yieldTask();
   }
   fly.brain.flush?.();
   if (steps && fly.brain.device && (++fenceN % Math.max(1, fenceEvery) === 0)) await fly.brain.device.queue.onSubmittedWorkDone();
