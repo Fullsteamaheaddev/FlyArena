@@ -140,6 +140,9 @@ body.race {
   --wood-cream: #fff8ee;
   --wood-slice: 72 60 62 60;
   --wood-border: 30px;
+  /* container-lobby.png 1280×759 — slice past wood so grass/leaves stay in corners */
+  --lobby-slice: 170 210 210 210;
+  --lobby-border: 60px;
   /* Extra clearance so scroll content stays on the cream board, not the bottom wood rail */
   --wood-board-pad-bottom: 16px;
 }
@@ -651,10 +654,106 @@ body.race .race-card {
   padding: 14px 18px 18px;
   box-sizing: border-box;
 }
+body.race #raceCard {
+  border: var(--lobby-border) solid transparent;
+  border-image-source: url("/container-lobby.png");
+  border-image-slice: var(--lobby-slice) fill;
+  border-image-width: var(--lobby-border);
+  border-image-repeat: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 2px 6px 6px;
+  box-sizing: border-box;
+}
+body.race #raceCard > * { margin-left: 0; margin-right: 0; }
+body.race #raceCard h1 {
+  font-size: 28px;
+  margin: 0;
+  line-height: 1.05;
+}
+body.race #raceCard > p {
+  margin: 0;
+  line-height: 1.25;
+}
+body.race #raceCard .sub,
+body.race #raceCard #lobbyClock {
+  min-height: 0;
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.15;
+}
+body.race #raceCard .flyt { margin: 0; }
+body.race #raceCard .bet-rows {
+  width: 100%;
+  gap: 7px;
+  margin: 2px 0 0;
+}
+body.race #raceCard button.bet-fly {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 7px 12px;
+  column-gap: 10px;
+}
+body.race #raceCard button.bet-fly span { min-width: 5.4em; }
+body.race #raceCard button.bet-fly i { min-width: 2.6em; }
+body.race #raceCard .lobby-map {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+}
+body.race #raceCard .lobby-map > span { display: none; }
+body.race #raceCard .lobby-map-picks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+body.race #raceCard button.lobby-map-pick {
+  min-height: 40px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.15;
+}
+body.race #raceCard .bet-stake { margin: 4px 0 0; }
+body.race #raceCard .bet-stake-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+body.race #raceCard .bet-stake input {
+  width: 4.2em;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 2px solid var(--wood-line);
+  border-radius: 10px;
+  background: var(--wood-cream);
+  color: var(--wood-ink);
+  font: 600 16px/1.1 ui-sans-serif, system-ui, sans-serif;
+  text-align: center;
+}
+body.race #raceCard .bet-stake-row > span {
+  font: 600 13px/1 ui-sans-serif, system-ui, sans-serif;
+  color: var(--wood-ink-dim);
+}
+body.race #raceCard #betPlace {
+  min-width: 88px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 16px;
+}
+body.race #raceCard .bet-wallet { margin: 2px 0 0; gap: 6px; }
+body.race #raceCard .race-hist { margin: 4px 0 0; padding-top: 6px; }
+body.race #raceCard h2.hist { margin: 0; }
 body.race #raceCard[data-kind="results"] {
   width: min(340px, calc(100vw - 32px));
   max-width: 340px;
-  padding: 20px 22px 18px;
+  padding: 10px 12px 12px;
 }
 body.race #raceCard[data-kind="results"] h1 {
   font-size: 28px;
@@ -1045,7 +1144,7 @@ body.race #groups .q:hover { color: var(--wood-ink); }
 body.race #groups .v { color: var(--wood-ink); }
 
 @media (max-width: 700px), (max-height: 500px) {
-  body.race { --wood-border: 22px; }
+  body.race { --wood-border: 22px; --lobby-border: 48px; }
   body.race #raceHud:not([hidden]) {
     top: max(8px, env(safe-area-inset-top));
     left: max(8px, env(safe-area-inset-left));

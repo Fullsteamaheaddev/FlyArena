@@ -568,7 +568,7 @@ function rebuildEnv() {
   } else if (isRace && env.map === 'dish') {
     ++raceFloorPaint;
     dishScene = buildDishScene(envGroup, env, {
-      renderer, scene, sun, hemi: hemiLight, rim: rimLight,
+      renderer, scene, sun, hemi: hemiLight, rim: rimLight, composer,
       getLogos: () => ({ logo: raceFloorLogo, ticker: raceWallLogo }),
     });
     floorMesh = dishScene.floor;

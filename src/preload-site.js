@@ -3,6 +3,7 @@
 const IMAGES = [
   { path: 'container.png', high: true },
   { path: 'container-headless.png', high: true },
+  { path: 'container-lobby.png', high: true },
   { path: 'button.png', high: true },
   { path: 'FruitFlyText.png' },
   { path: 'FLYticker.webp' },
