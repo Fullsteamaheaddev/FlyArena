@@ -135,7 +135,7 @@ export function createRaceChaos(api) {
       lightFree = [];
       for (let i = 0; i < LIGHT_POOL_N; i++) {
         const l = new T.PointLight('#ffffff', 0, 8, 2);
-        l.visible = true;
+        l.visible = false;
         lightPool.add(l);
         lightFree.push(l);
       }
@@ -157,6 +157,7 @@ export function createRaceChaos(api) {
   function releaseLight(l) {
     if (!l) return;
     l.intensity = 0;
+    l.visible = false;
     if (!lightFree.includes(l)) lightFree.push(l);
   }
   function releaseAllLights() {
@@ -164,6 +165,7 @@ export function createRaceChaos(api) {
     lightFree = [];
     for (const l of lightPool.children) {
       l.intensity = 0;
+      l.visible = false;
       lightFree.push(l);
     }
   }

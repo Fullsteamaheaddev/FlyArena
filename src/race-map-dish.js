@@ -4,9 +4,8 @@ import { groundAt } from './sim/senses.js';
 import { mapPropMeshes } from './race-map-assets.js';
 import { propScale } from './desert-prop-scale.js';
 import { applySwayWind, SWAY_KINDS, swayForMaterial, swayMaterials } from './race-map-sway.js';
-import { applyCelShading, celMatVertexColors, celOutlineMat } from './cel-shade.js';
+import { applyCelShading, celOutlineMat } from './cel-shade.js';
 import { dishDoghouseProps, dishGrassProps } from './sim/maps/dish.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 const GRASS_INK = '#182012';
 const HOUSE_INK = '#1c120c';
@@ -187,10 +186,10 @@ function dishSkyTexture() {
 /**
  * @param {THREE.Group} envGroup
  * @param {object} env dish env
- * @param {{ renderer, scene, sun, hemi, rim, composer, getLogos: () => { logo, ticker } }} ctx
+ * @param {{ renderer, scene, sun, hemi, rim, getLogos: () => { logo, ticker } }} ctx
  */
 export function buildDishScene(envGroup, env, ctx) {
-  const { renderer, scene, sun, hemi, rim, composer, getLogos } = ctx;
+  const { renderer, scene, sun, hemi, rim, getLogos } = ctx;
   env.props = [...dishGrassProps(), ...dishDoghouseProps()];
   const R = env.arena.radius;
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
@@ -262,6 +261,7 @@ export function buildDishScene(envGroup, env, ctx) {
   const sc = new THREE.Vector3(), ps = new THREE.Vector3();
   const grassInk = celOutlineMat(THREE, GRASS_INK);
   grassInk.side = THREE.BackSide;
+  swayForMaterial(grassInk);
   const houseInk = celOutlineMat(THREE, HOUSE_INK);
   houseInk.side = THREE.BackSide;
   own.push(grassInk, houseInk);
@@ -279,14 +279,15 @@ export function buildDishScene(envGroup, env, ctx) {
           m.polygonOffsetUnits = 1;
         }
       }
-      const grassMat = isGrass ? keep(celMatVertexColors()) : null;
+      const grassMat = isGrass ? keep(new THREE.MeshBasicMaterial({
+        color: new THREE.Color(3.8, 3.2, 4.5),
+        vertexColors: true,
+      })) : null;
       if (grassMat) {
-        grassMat.color.setRGB(3.8, 3.2, 4.5);
-        grassMat.emissive.setRGB(0.22, 0.4, 0.08);
-        grassMat.emissiveIntensity = 0.28;
         grassMat.polygonOffset = true;
         grassMat.polygonOffsetFactor = 1;
         grassMat.polygonOffsetUnits = 1;
+        swayForMaterial(grassMat);
       }
       const place = (im, outline) => {
         list.forEach((p, i) => {
@@ -310,18 +311,15 @@ export function buildDishScene(envGroup, env, ctx) {
         place(imOl, true);
         imOl.castShadow = imOl.receiveShadow = false;
         imOl.renderOrder = 0;
-        if (isGrass) imOl.customDepthMaterial = swayForMaterial(ink);
         root.add(imOl);
       }
       const im = keep(new THREE.InstancedMesh(tm.geometry, isGrass ? grassMat : tm.material, list.length));
       im.name = `${kind}:${tm.name}`;
       place(im, false);
-      im.castShadow = true;
-      im.receiveShadow = true;
+      im.castShadow = !isGrass;
+      im.receiveShadow = !isGrass;
       im.renderOrder = 1;
-      if (SWAY_KINDS.has(kind)) {
-        im.customDepthMaterial = isGrass ? swayForMaterial(grassMat, tm.name) : swayMaterials(tm);
-      }
+      if (SWAY_KINDS.has(kind) && !isGrass) im.customDepthMaterial = swayMaterials(tm);
       root.add(im);
     }
   }
@@ -344,13 +342,6 @@ export function buildDishScene(envGroup, env, ctx) {
   if (hemi) { hemi.color.set('#f4f8ff'); hemi.groundColor.set('#d2bc96'); hemi.intensity = 0.58; }
   if (sun) { sun.color.set('#fff6e8'); sun.intensity = 2.55; }
   if (rim) { rim.color.set('#ffe8c8'); rim.intensity = 0.71; }
-  let bloom = null;
-  if (composer) {
-    const size = new THREE.Vector2();
-    renderer.getDrawingBufferSize(size);
-    bloom = new UnrealBloomPass(size, 0.05, 0.42, 0.97);
-    composer.addPass(bloom);
-  }
 
   function update(_nowMs, wind, tSec) {
     applySwayWind(wind, tSec ?? _nowMs / 1000);
@@ -368,10 +359,6 @@ export function buildDishScene(envGroup, env, ctx) {
     for (const r of own) r.dispose();
     ft.dispose();
     scene.remove(fill);
-    if (bloom && composer) {
-      composer.removePass(bloom);
-      bloom.dispose();
-    }
     scene.background = saved.bg;
     scene.fog = saved.fog;
     scene.environmentIntensity = saved.envI;

@@ -81,14 +81,14 @@ export function dishGrassProps() {
   const props = [];
   const r = rng(90210);
   const baseScale = DISH_GRASS_HEIGHT_CM * GRASS_SCALE_PER_CM;
-  const clumps = 144;
+  const clumps = 96;
   for (let c = 0; c < clumps; c++) {
     let a = r() * Math.PI * 2;
     for (let try_ = 0; try_ < 8 && nearSpawn(a); try_++) a = r() * Math.PI * 2;
     const rad = 2.4 + r() * 15.3;
     if (rad < 1.4) continue;
     const cx = rad * Math.cos(a), cy = rad * Math.sin(a);
-    const n = 26 + Math.floor(r() * 16);
+    const n = 8 + Math.floor(r() * 6);
     const patchR = 0.22 + r() * 0.28;
     if (nearDoghouse(cx, cy, patchR)) continue;
     for (let k = 0; k < n; k++) {
