@@ -13,7 +13,7 @@ a { color: var(--acc); }
 #brainpanel { position: fixed; top: 12px; right: 12px; bottom: 12px; width: 360px; display: flex; flex-direction: column; gap: 0; background: var(--panel); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; z-index: 3; }
 #brainpanel[hidden] { display: none; }
 #brainpanel.folded { bottom: auto; width: auto; }
-#brainpanel.folded #bpBody, #brainpanel.folded #brain, #brainpanel.folded .lr { display: none; }
+#brainpanel.folded #bpBody, #brainpanel.folded .brain-inset, #brainpanel.folded .lr { display: none; }
 
 /* collapsible side panels: folded to their title bar, toggled by the chevron or the [ and ] keys */
 .fold { flex: none; padding: 0 8px; line-height: 20px; font-size: 14px; }
@@ -45,7 +45,25 @@ a { color: var(--acc); }
 #groups .v { font-variant-numeric: tabular-nums; font-size: 11px; text-align: right; line-height: 1.2; }
 #groups .v .l, #groups .v .r { background: none; display: block; }
 #groups .info { grid-column: 1 / -1; color: var(--dim); font-size: 11.5px; padding: 2px 0 4px 14px; }
-#brain { flex: none; width: 100%; height: 220px; border-top: 1px solid var(--line); background: rgba(5,7,12,.6); }
+.brain-inset {
+  flex: none;
+  margin-top: 10px;
+  --inset-pad: 6px;
+  padding: var(--inset-pad) var(--inset-pad) calc(var(--inset-pad) * 1.1);
+  box-sizing: border-box;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: rgba(5, 7, 12, .55);
+}
+#brain {
+  display: block;
+  width: 100%;
+  height: 200px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
 
 #scoreboard { position: fixed; top: 12px; left: 12px; right: auto; width: 340px; max-height: calc(100% - 24px); overflow: auto; background: var(--panel); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 10px; padding: 0 0 8px; z-index: 3; }
 #scoreboard[hidden], #raceHud[hidden] { display: none; }
@@ -122,6 +140,8 @@ body.race {
   --wood-cream: #fff8ee;
   --wood-slice: 72 60 62 60;
   --wood-border: 30px;
+  /* Extra clearance so scroll content stays on the cream board, not the bottom wood rail */
+  --wood-board-pad-bottom: 16px;
 }
 body.race #loading {
   z-index: 30;
@@ -463,10 +483,16 @@ body.race #scoreboard header {
 }
 body.race #brainpanel {
   bottom: auto;
-  max-height: calc(100vh - 24px);
-  overflow: visible;
+  overflow: hidden;
   transform-origin: top right;
   transition: width var(--race-fold-duration) var(--race-fold-ease);
+}
+body.race #brainpanel:not(.folded) {
+  display: flex;
+  flex-direction: column;
+  max-height: calc((100dvh - 24px) / 2);
+  padding-bottom: var(--wood-board-pad-bottom);
+  box-sizing: border-box;
 }
 body.race #brainpanel header {
   border-bottom-color: rgba(90, 58, 34, .22);
@@ -474,10 +500,15 @@ body.race #brainpanel header {
 }
 body.race #brainpanel.folded { width: 240px; max-height: none; overflow: visible; }
 body.race #brainpanel.folded header { border-bottom: 0; }
-body.race #brainpanel.folded #bpBody { display: block; padding: 8px 10px 10px; overflow: hidden; }
+body.race #brainpanel.folded #bpBody {
+  display: block;
+  padding: 8px 10px calc(8px + var(--wood-board-pad-bottom));
+  overflow: hidden;
+  box-sizing: border-box;
+}
 body.race #brainpanel.folded #groups,
 body.race #brainpanel.folded .note,
-body.race #brainpanel.folded #brain,
+body.race #brainpanel.folded .brain-inset,
 body.race #brainpanel.folded .lr { display: none; }
 body.race #brainpanel.folded .eyes { gap: 6px; }
 body.race #brainpanel.folded .eyes figcaption { font-size: 10px; margin-top: 2px; }
@@ -547,22 +578,54 @@ body.race #chaosToast p {
   from { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(.86); }
   to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
-body.race #bpBody { flex: none; }
-/* 12 named groups; show about half so the panel stays shorter */
-body.race #groups {
-  max-height: calc(6 * 34px);
-  overflow-y: scroll;
+body.race #bpBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,.4) rgba(255,255,255,.08);
+  scrollbar-color: rgba(90, 58, 34, .4) rgba(90, 58, 34, .12);
+  padding: 8px 14px calc(6px + var(--wood-board-pad-bottom));
+  box-sizing: border-box;
 }
-body.race #groups::-webkit-scrollbar { width: 8px; }
-body.race #groups::-webkit-scrollbar-track {
-  background: rgba(255,255,255,.08);
+body.race #bpBody::-webkit-scrollbar { width: 8px; }
+body.race #bpBody::-webkit-scrollbar-track {
+  background: rgba(90, 58, 34, .12);
   border-radius: 8px;
 }
-body.race #groups::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,.35);
+body.race #bpBody::-webkit-scrollbar-thumb {
+  background: rgba(90, 58, 34, .4);
+  border-radius: 8px;
+}
+body.race #groups {
+  max-height: none;
+  overflow: visible;
+}
+body.race .brain-inset {
+  margin-top: 12px;
+  margin-bottom: 4px;
+  --inset-pad: 10px;
+  padding: var(--inset-pad) var(--inset-pad) calc(var(--inset-pad) * 1.15);
+  border-radius: 10px;
+  border-color: rgba(90, 58, 34, .32);
+  background: var(--wood-cream);
+  box-shadow: inset 0 0 0 1px rgba(255, 248, 236, .65);
+}
+body.race #brain {
+  height: 168px;
+  border-radius: 8px;
+}
+body.race .eyes figure {
+  --eye-inset-pad: 6px;
+  padding: var(--eye-inset-pad) var(--eye-inset-pad) calc(var(--eye-inset-pad) * 1.1);
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid rgba(90, 58, 34, .22);
+  background: rgba(255, 248, 236, .35);
+}
+body.race .eyes canvas {
+  background: rgba(42, 24, 16, .08);
+  border: 0;
   border-radius: 8px;
 }
 body.race #scoreboard h1,
@@ -870,32 +933,60 @@ body.race .fly-label { position: relative; display: inline-block; }
 body.race .fly-label-chip { font-family: var(--race-title); font-weight: 400; }
 body.race .fly-label:hover, body.race .fly-label:focus-visible { z-index: 2; }
 body.race #raceVitals {
-  display: flex; flex-direction: column; gap: 12px; padding: 0;
+  display: flex; flex-direction: column; gap: 10px; padding: 2px 4px 6px;
   background: transparent; border: 0; box-shadow: none; backdrop-filter: none;
 }
 body.race #raceVitals .fly {
-  padding: 8px 12px; border-radius: 999px; background: rgba(18,16,24,.88);
-  border: 3px solid var(--fly, var(--race-outline));
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: var(--wood-ink);
+  background: color-mix(in srgb, var(--fly, var(--wood-line)) 16%, var(--wood-cream));
+  border: 2px solid color-mix(in srgb, var(--fly, var(--wood-line)) 50%, var(--wood-line));
   cursor: pointer;
-  transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+}
+body.race #raceVitals .fly:hover {
+  background: color-mix(in srgb, var(--fly, var(--wood-line)) 22%, var(--wood-cream));
 }
 body.race #raceVitals .fly.sel {
-  transform: scale(1.05);
-  background: rgba(36, 32, 48, .95);
-  box-shadow: 0 0 0 2px rgba(255,255,255,.7), 0 0 14px var(--fly, #fff);
+  transform: scale(1.04);
+  background: color-mix(in srgb, var(--fly, var(--wood-line)) 28%, var(--wood-cream));
+  border-color: color-mix(in srgb, var(--fly, var(--wood-line)) 65%, var(--wood-line));
+  box-shadow: 0 0 0 2px var(--wood-cream), 0 0 0 4px var(--wood-line);
 }
 body.race #raceVitals .fly.dead {
-  opacity: 0.5;
-  filter: grayscale(1);
-  border-color: var(--race-outline);
+  opacity: 0.62;
+  filter: grayscale(0.75);
+  background: rgba(255, 248, 236, .5);
+  border-color: rgba(90, 58, 34, .28);
   box-shadow: none;
 }
 body.race #raceVitals .fly.dead.sel {
-  transform: scale(1.03);
-  box-shadow: none;
+  transform: scale(1.02);
+  box-shadow: 0 0 0 2px var(--wood-cream), 0 0 0 3px rgba(90, 58, 34, .35);
 }
-body.race #raceVitals .dot { width: 14px; height: 14px; }
-body.race #raceVitals .fly-name { font-family: var(--race-title); font-weight: 400; font-size: 16px; }
+body.race #raceVitals .dot { width: 14px; height: 14px; flex: none; }
+body.race #raceVitals .fly-name {
+  font-family: var(--race-title);
+  font-weight: 400;
+  font-size: 16px;
+  color: var(--wood-ink);
+}
+body.race #raceVitals .fly-behavior {
+  color: color-mix(in srgb, var(--fly, var(--wood-ink)) 55%, var(--wood-ink-dim));
+  font-family: var(--race-body);
+  font-weight: 400;
+}
+body.race #raceVitals .bar {
+  background: rgba(90, 58, 34, .16);
+  border-radius: 3px;
+}
+body.race #raceVitals .bar-energy > i { background: #c9922a !important; }
+body.race #raceVitals .bar-health > i { background: #3d9a52 !important; }
 body.race .fly-label-info {
   position: absolute; bottom: calc(100% + 8px); top: auto; left: 50%; width: 280px; padding: 10px 12px; text-align: left; color: var(--fg);
   background: var(--panel); border: 4px solid var(--race-outline); border-radius: 18px; box-shadow: none;
@@ -925,9 +1016,6 @@ body.race #groups .g:hover { background: rgba(90, 58, 34, .08); }
 body.race #groups .q { color: var(--wood-ink-dim); }
 body.race #groups .q:hover { color: var(--wood-ink); }
 body.race #groups .v { color: var(--wood-ink); }
-body.race #groups::-webkit-scrollbar-track { background: rgba(90, 58, 34, .12); }
-body.race #groups::-webkit-scrollbar-thumb { background: rgba(90, 58, 34, .4); }
-body.race #brain { border-top-color: rgba(90, 58, 34, .28); }
 
 @media (max-width: 700px), (max-height: 500px) {
   body.race { --wood-border: 22px; }
@@ -962,6 +1050,7 @@ body.race #brain { border-top-color: rgba(90, 58, 34, .28); }
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: color-mix(in srgb, var(--fly, var(--wood-ink)) 50%, var(--wood-ink-dim));
   }
   body.race #raceVitals .dot { width: 12px; height: 12px; }
   body.race #raceVitals .fly-t { display: none; }
@@ -984,8 +1073,8 @@ body.race #brain { border-top-color: rgba(90, 58, 34, .28); }
   body.race #brainpanel:not(.folded) {
     display: flex;
     flex-direction: column;
-    max-height: 42dvh;
-    overflow: visible;
+    max-height: 21dvh;
+    overflow: hidden;
   }
   body.race #brainpanel:not(.folded) header {
     position: sticky;
@@ -994,14 +1083,13 @@ body.race #brain { border-top-color: rgba(90, 58, 34, .28); }
     background: var(--wood-cream);
   }
   body.race #brainpanel:not(.folded) #bpBody {
-    flex: none;
+    flex: 1;
     min-height: 0;
-    overflow: visible;
+    overflow-y: auto;
   }
-  body.race #brainpanel:not(.folded) #brain { flex: none; }
   body.race #brainpanel.folded header { border-bottom: 0; padding: 8px 12px; }
   body.race #brainpanel.folded #bpBody,
-  body.race #brainpanel.folded #brain { display: none; }
+  body.race #brainpanel.folded .brain-inset { display: none; }
   body.race #brainpanel h2 { font-size: 14px; }
   body.race #raceSocials {
     bottom: max(72px, calc(env(safe-area-inset-bottom) + 64px));
@@ -1009,12 +1097,10 @@ body.race #brain { border-top-color: rgba(90, 58, 34, .28); }
   body.race #bpFold { font-size: 20px; padding: 6px 12px; min-height: 44px; min-width: 44px; }
   body.race #bpHint:not([hidden]) { display: grid; place-items: center; }
   body.race #brain {
-    width: min(280px, 100%);
-    height: 160px;
-    margin: 0 auto;
-    border-top: 1px solid var(--line);
+    width: 100%;
+    height: 140px;
   }
-  body.race #groups { max-height: calc(6 * 28px); }
+  body.race .brain-inset { margin-top: 8px; border-radius: 8px; }
   body.race #groups .g { grid-template-columns: 1fr auto; }
   body.race #groups canvas { display: none; }
   body.race #groups .v { font-size: 10px; }
@@ -1198,8 +1284,8 @@ body.race #brain { border-top-color: rgba(90, 58, 34, .28); }
 }
 
 @media (max-height: 500px) {
-  body.race #brainpanel:not(.folded) { max-height: min(70vh, calc(100dvh - 24px)); }
-  body.race #brain { width: min(220px, 100%); height: min(140px, 40vh); }
+  body.race #brainpanel:not(.folded) { max-height: min(35vh, calc((100dvh - 24px) / 2)); }
+  body.race #brain { height: min(128px, 32vh); }
   body.race #enterGate .enter-card {
     width: min(92vw, calc((94dvh - 12px) * 1800 / 1773));
   }

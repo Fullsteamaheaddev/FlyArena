@@ -457,6 +457,16 @@ function buildScene(data) {
   hlPts = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, transparent: true, opacity: 1, depthWrite: false, depthTest: false }));
   hlPts.visible = false; brainScene.add(hlPts);
   brainCam.position.set(0, 0, 1050); brainCam.lookAt(0, 0, 0); brainAct = new Float32Array(data.N);
+  syncBrainClear();
+  const brainInset = document.querySelector('.brain-inset');
+  if (brainInset && typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => syncBrainInset()).observe(brainInset);
+  }
+}
+function syncBrainClear() {
+  if (!brainRenderer) return;
+  const race = document.body.classList.contains('race');
+  brainRenderer.setClearColor(race ? 0xfff8ee : 0x000000, race ? 1 : 0);
 }
 let pd = null;
 function discMesh(r, color, opacity = 1, z = ARENA_FLOOR_DECAL_Z) {
@@ -895,6 +905,8 @@ function setupRaceChrome() {
   if (capR) capR.textContent = t('brain.right');
   const note = $('#bpBody .note');
   if (note) note.textContent = t('brain.eyesNoteRace');
+  syncBrainClear();
+  requestAnimationFrame(syncBrainInset);
   raceAudio = createRaceAudio(`${BASE}yipee.wav`, `${BASE}gong.wav`, {
     boop: `${BASE}boop.wav`,
     thunder: `${BASE}Thundersound.wav`,
@@ -2730,8 +2742,10 @@ function flyRowHtml(f, selectedId = selected, raceVitals = false) {
   const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
   const gender = raceVitals ? '' : `${f.sex === 'f' ? '♀' : '♂'} `;
   const timer = raceVitals ? '' : `<span class="fly-t" style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span>`;
+  const beh = raceVitals ? (raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior)) : behaviorLabel(s.behavior);
+  const behAttr = raceVitals ? '' : ' style="color:var(--acc)"';
   return `<div class="fly ${f.id === selectedId ? 'sel' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
-      <div>${gender}<span class="fly-name">${f.name}</span> <span class="fly-behavior" style="color:var(--acc)">${raceVitals ? (raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior)) : behaviorLabel(s.behavior)}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
+      <div>${gender}<span class="fly-name">${f.name}</span> <span class="fly-behavior"${behAttr}>${beh}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
       ${timer}</div>`;
 }
 function flyKvHtml(f) {
