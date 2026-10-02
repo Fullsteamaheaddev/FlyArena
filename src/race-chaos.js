@@ -1,6 +1,6 @@
 import { chaosCopy } from './i18n.js';
 import {
-  makeThumb, makeHand, makeFinger, fadeGroup, fadeMeteorChunk, prepareMeshFade, makeCakeSlice, makeLeaf,
+  makeThumb, makeHand, makeFinger, fadeGroup, prepareMeshFade, makeCakeSlice, makeLeaf,
 } from './race-chaos-props.js';
 import { cloneChaosProp, getChaosSmokeTexture, chaosPropKeys } from './race-chaos-assets.js';
 import { celMat } from './cel-shade.js';
@@ -545,6 +545,23 @@ export function createRaceChaos(api) {
     return [r * Math.cos(a), r * Math.sin(a)];
   }
 
+  function clampIntoArena(x, y, margin = 1.2) {
+    const arena = api.env()?.arena || {};
+    const lim = (arena.half || arena.radius || 12.5) - margin;
+    if (arena.shape === 'square') {
+      return [Math.max(-lim, Math.min(lim, x)), Math.max(-lim, Math.min(lim, y))];
+    }
+    const r = Math.hypot(x, y);
+    if (r <= lim || r < 1e-6) return [x, y];
+    const k = lim / r;
+    return [x * k, y * k];
+  }
+
+  function sugarDisc() {
+    const f = api.env()?.food?.[0];
+    return { x: f?.x ?? 0, y: f?.y ?? 0, r: f?.r ?? 0.5 };
+  }
+
   /** Evenly spaced around the dish with jittered angle and radius. */
   function cakeDropPoints(n = CAKE_SLICE_COUNT) {
     const R = radius();
@@ -990,11 +1007,6 @@ export function createRaceChaos(api) {
   }
 
   function endSugarRain() {
-    if (sugarRainSession?.crumbs) {
-      for (const c of sugarRainSession.crumbs) {
-        if (c?.parent) disposeObj(c);
-      }
-    }
     sugarRainSession = null;
   }
   function endUfo() {
@@ -1041,6 +1053,7 @@ export function createRaceChaos(api) {
   const METEOR_ELEV_MIN = Math.PI * 50 / 180;
   const METEOR_ELEV_MAX = Math.PI * 82 / 180;
   const METEOR_Z_GROUND = 0.18 * METEOR_SCALE;
+  const METEOR_BLAST_R = 0.55;
   function meteorSlant(strike = {}) {
     const h = strike.h ?? boltHeight() * randRange(0.82, 1.02);
     const elev = strike.elev ?? randRange(METEOR_ELEV_MIN, METEOR_ELEV_MAX);
@@ -1050,7 +1063,18 @@ export function createRaceChaos(api) {
     return { slantAz, slantR, h, elev };
   }
 
-  function meteorImpact(strike, physics, opts = {}) {
+  function randomMeteorStrike() {
+    const sugar = sugarDisc();
+    const minR = sugar.r + METEOR_BLAST_R;
+    for (let i = 0; i < 40; i++) {
+      const [x, y] = randomInDish(1);
+      if (Math.hypot(x - sugar.x, y - sugar.y) >= minR) return { x, y, ...meteorSlant() };
+    }
+    const a = Math.random() * Math.PI * 2;
+    return { x: sugar.x + Math.cos(a) * minR, y: sugar.y + Math.sin(a) * minR, ...meteorSlant() };
+  }
+
+  function meteorImpact(strike, physics) {
     ensureMeteorSmoke();
     const { x, y } = strike;
     const { slantAz, slantR, h } = meteorSlant(strike);
@@ -1094,17 +1118,16 @@ export function createRaceChaos(api) {
       }
       burstMeteorSmoke(x, y, zGround, smokeBatch);
       sealMeteorSmokeBatch(smokeBatch, landT);
-      camShake(200, opts.kill ? 0.26 : 0.18);
-      pokeSceneFlash({ thin: !opts.kill });
-      scorches.push({ x, y, r: (opts.kill ? 0.65 : 0.45) * scorchScale(), until: now() + 15000 });
+      camShake(200, 0.22);
+      pokeSceneFlash({ thin: true });
+      scorches.push({ x, y, r: 0.5 * scorchScale(), until: now() + 15000 });
       api.repaintFloor?.();
       if (physics) {
-        const killR = opts.kill ? 0.92 : 0;
         const impulseR = 1.65;
         for (const f of liveFlies(flies())) {
           const p = f.last.pos;
           const d = Math.hypot(p[0] - x, p[1] - y);
-          if (opts.kill && d < killR && (p[2] || 0) < 0.58) {
+          if (d < METEOR_BLAST_R && (p[2] || 0) < 0.58) {
             post(f, { op: 'kill' });
             hideToast();
           } else if (d < impulseR && d > 0.02) {
@@ -1113,19 +1136,6 @@ export function createRaceChaos(api) {
           }
         }
       }
-      later(15000, () => {
-        if (!mesh?.parent || mesh.userData.meteorDespawning) return;
-        mesh.userData.meteorDespawning = true;
-        tween(700, u => {
-          const ink = 1 - easeInOut(Math.min(1, u / 0.32));
-          const body = u < 0.28 ? 1 : 1 - easeInOut((u - 0.28) / 0.72);
-          fadeMeteorChunk(mesh, body, ink);
-        }, () => {
-          fadeMeteorChunk(mesh, 0);
-          mesh.visible = false;
-          disposeObj(mesh);
-        });
-      });
     });
   }
 
@@ -1134,10 +1144,8 @@ export function createRaceChaos(api) {
       ? payload.strikes.slice()
       : [{ x: payload.x, y: payload.y, slantAz: payload.slantAz, slantR: payload.slantR }, ...(payload.points || [])];
     if (strikes.length > 3) strikes = strikes.slice(0, 3);
-    let hit = payload.hitIndex;
-    if (hit != null && hit >= strikes.length) hit = null;
     strikes.forEach((st, i) => {
-      const go = () => meteorImpact(st, physics, { kill: hit === i });
+      const go = () => meteorImpact(st, physics);
       if (i === 0) go();
       else later(160 * i + randRange(0, 80), go);
     });
@@ -1149,7 +1157,7 @@ export function createRaceChaos(api) {
     endSugarRain();
     const dur = 5200;
     const t0 = now();
-    sugarRainSession = { until: t0 + dur, nextCrumb: t0, nextBump: t0 + 180, physics: !!physics, crumbs: [] };
+    sugarRainSession = { until: t0 + dur, nextCrumb: t0, nextBump: t0 + 180, physics: !!physics };
     busyUntil = Math.max(busyUntil, t0 + dur);
     camPullBack(1.06, 700, { orbit: true });
     later(dur, () => {
@@ -1166,13 +1174,15 @@ export function createRaceChaos(api) {
     const z0 = boltHeight() * randRange(0.55, 0.95);
     mesh.position.set(x, y, z0);
     root.add(mesh);
-    sugarRainSession?.crumbs?.push(mesh);
     const spin = randRange(4, 9);
     tween(900 + randRange(0, 400), u => {
       mesh.position.z = z0 + (0.12 - z0) * (u * u);
       mesh.rotation.z += spin * 0.02;
     }, () => {
-      tween(800, u => fadeGroup(mesh, 0.85 * (1 - u)), () => disposeObj(mesh));
+      later(10000, () => {
+        if (!mesh.parent) return;
+        tween(800, u => fadeGroup(mesh, 0.85 * (1 - u)), () => disposeObj(mesh));
+      });
     });
   }
 
@@ -1585,34 +1595,33 @@ export function createRaceChaos(api) {
     } else if (kind === 'meteor') {
       const n = 3;
       const strikes = [];
-      for (let i = 0; i < n; i++) {
-        const [px, py] = randomInDish(1);
-        strikes.push({ x: px, y: py, ...meteorSlant() });
-      }
-      let hitIndex = null;
-      let mFlyId = null;
-      let mName = '';
-      let mColor = '#fff';
-      if (live.length && Math.random() < 0.15) {
-        const victim = pick(live);
-        hitIndex = Math.floor(Math.random() * n);
-        const pos = { x: victim.last.pos[0], y: victim.last.pos[1] };
-        strikes[hitIndex] = { ...strikes[hitIndex], x: pos.x, y: pos.y };
-        mFlyId = victim.id;
-        mName = victim.name || '';
-        mColor = victim.color || '#fff';
-      }
+      for (let i = 0; i < n; i++) strikes.push(randomMeteorStrike());
       x = strikes[0].x;
       y = strikes[0].y;
       return {
-        kind, flyId: mFlyId, name: mName, color: mColor, x, y, yaw: Math.random() * Math.PI * 2, deg: 0,
-        points: strikes.slice(1), strikes, hitIndex, hitBolt: null, killed: hitIndex != null,
+        kind, flyId: null, name: '', color: '#fff', x, y, yaw: Math.random() * Math.PI * 2, deg: 0,
+        points: strikes.slice(1), strikes, hitIndex: null, hitBolt: null, killed: false,
       };
     } else if (kind === 'spikes') {
-      [x, y] = randomInDish(1.4);
+      const half = randRange(0.98, 1.23);
+      const victim = live.length ? pick(live) : null;
+      const hit = !!(victim?.last && Math.random() < 0.2);
+      if (victim?.last) {
+        x = victim.last.pos[0];
+        y = victim.last.pos[1];
+        if (!hit) {
+          const a = Math.random() * Math.PI * 2;
+          const d = randRange(1.6, 2.4);
+          x += Math.cos(a) * d;
+          y += Math.sin(a) * d;
+          [x, y] = clampIntoArena(x, y, 1.4);
+        }
+      } else {
+        [x, y] = randomInDish(1.4);
+      }
       return {
         kind, flyId: null, name: '', color: '#fff', x, y,
-        yaw: Math.random() * Math.PI * 2, half: randRange(0.98, 1.23), deg: 0,
+        yaw: Math.random() * Math.PI * 2, half, deg: 0,
         points: [], hitBolt: null, killed: false,
       };
     } else if (kind === 'ufo') {
@@ -1734,8 +1743,16 @@ export function createRaceChaos(api) {
   function holdRoulette() { nextAt = Infinity; }
 
   function pickKind() {
-    const pool = KINDS.filter(k => k !== lastKind);
-    return pick(pool.length ? pool : KINDS);
+    const weighted = kinds => {
+      const pool = [];
+      for (const k of kinds) {
+        pool.push(k);
+        if (k === 'laser') pool.push(k);
+      }
+      return pool;
+    };
+    const pool = weighted(KINDS.filter(k => k !== lastKind));
+    return pick(pool.length ? pool : weighted(KINDS));
   }
 
   function arm() {

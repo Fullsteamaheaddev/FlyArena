@@ -903,7 +903,6 @@ function setupRaceChrome() {
     laserToast: `${BASE}LaserToast.wav`,
     laserBeam: `${BASE}LaserBeam.wav`,
     laserKill: `${BASE}LaserKill.wav`,
-    theme: `${BASE}Theme.wav`,
     xfiles: `${BASE}xfiles.wav`,
   });
   if (env.map === 'desert') raceAudio.startAmbience();

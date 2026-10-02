@@ -1,10 +1,8 @@
 // Volumetric-style abduction cone (Z-up arena).
 
 const BEAM_VERT = `
-  varying vec2 vUv;
   varying vec3 vPos;
   void main() {
-    vUv = uv;
     vPos = position;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
@@ -23,10 +21,11 @@ const BEAM_FRAG = `
   }
 
   void main() {
-    float radial = abs(vUv.x - 0.5) * 2.0;
-    float along = vUv.y;
-    float core = pow(1.0 - radial, 2.2);
-    float fall = smoothstep(0.0, 1.0, 1.0 - along);
+    float along = clamp(vPos.z, 0.0, 1.0);
+    float maxR = mix(1.35, 0.22, along);
+    float radial = length(vPos.xy) / max(maxR, 0.001);
+    float core = pow(max(0.0, 1.0 - radial), 2.2);
+    float fall = mix(0.35, 1.0, along);
     float n = hash(vec2(along * 24.0 + uTime * 0.002, radial * 8.0));
     float shimmer = 0.85 + 0.15 * sin(along * 40.0 - uTime * 0.004);
     float a = uOpacity * core * fall * shimmer * (0.55 + 0.45 * n);
@@ -36,7 +35,10 @@ const BEAM_FRAG = `
 `;
 
 export function createUfoBeam(T, height = 5) {
+  // Cylinder is Y-up (narrow +Y, wide −Y). Arena is Z-up, so bake Rx so local +Z is up:
+  // z=0 is the wide floor ring, z=1 is the narrow saucer ring. Then scale.z is beam length.
   const geo = new T.CylinderGeometry(0.22, 1.35, 1, 32, 12, true);
+  geo.rotateX(Math.PI / 2);
   geo.translate(0, 0, 0.5);
   const mat = new T.ShaderMaterial({
     uniforms: {
@@ -54,7 +56,6 @@ export function createUfoBeam(T, height = 5) {
     toneMapped: false,
   });
   const mesh = new T.Mesh(geo, mat);
-  mesh.rotation.x = Math.PI / 2;
   mesh.scale.set(1, 1, height);
   mesh.userData.ufoBeam = true;
   return mesh;

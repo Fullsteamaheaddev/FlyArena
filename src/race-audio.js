@@ -8,14 +8,12 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   const laserToastUrl = extraUrls.laserToast;
   const laserBeamUrl = extraUrls.laserBeam;
   const laserKillUrl = extraUrls.laserKill;
-  const themeUrl = extraUrls.theme;
   const xfilesUrl = extraUrls.xfiles;
   let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf, boopBuf, thunderBuf, thumbBuf, splatter1Buf, splatter2Buf;
   let xfilesBuf;
-  let laserToastBuf, laserBeamBuf, laserKillBuf, themeBuf;
+  let laserToastBuf, laserBeamBuf, laserKillBuf;
   let laserBeamSrc, laserBeamGain;
   let xfilesSrc, xfilesGain;
-  let themeLoopActive = false, themeGapTimer = null, themeSrc = null;
   let currentBed = null, lastStep = 0, muted = false, keepOsc = null;
 
   async function decodeUrl(url) {
@@ -86,7 +84,6 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     if (laserToastUrl && !laserToastBuf) laserToastBuf = await decodeUrl(laserToastUrl);
     if (laserBeamUrl && !laserBeamBuf) laserBeamBuf = await decodeUrl(laserBeamUrl);
     if (laserKillUrl && !laserKillBuf) laserKillBuf = await decodeUrl(laserKillUrl);
-    if (themeUrl && !themeBuf) themeBuf = await decodeUrl(themeUrl);
     if (xfilesUrl && !xfilesBuf) xfilesBuf = await decodeUrl(xfilesUrl);
     if (ambWanted && !amb) startAmbience();
   }
@@ -101,23 +98,6 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     const ng = ctx.createGain(); ng.gain.value = 0.35;
     noise.connect(nbp); nbp.connect(ng); ng.connect(buzzGain); noise.start();
   }
-  function stopThemeBed(fadeOut = true) {
-    themeLoopActive = false;
-    if (themeGapTimer) { clearTimeout(themeGapTimer); themeGapTimer = null; }
-    if (!ctx) return;
-    const now = ctx.currentTime;
-    const fade = fadeOut ? 0.25 : 0;
-    if (themeSrc) {
-      try { themeSrc.stop(now + fade + 0.02); } catch {}
-      themeSrc = null;
-    }
-    if (bedGain && currentBed === 'menu' && themeBuf) {
-      const from = bedGain.gain.value;
-      bedGain.gain.cancelScheduledValues(now);
-      bedGain.gain.setValueAtTime(from, now);
-      if (fade > 0) bedGain.gain.linearRampToValueAtTime(0, now + fade);
-    }
-  }
   function fadeStopLoopBed() {
     if (!ctx || !musicSrc || !bedGain) return;
     const now = ctx.currentTime, fade = 0.25;
@@ -130,40 +110,8 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     musicSrc = null;
     bedGain = null;
   }
-  function playThemeOnce() {
-    if (!themeLoopActive || currentBed !== 'menu' || !ctx || ctx.state !== 'running' || !themeBuf || !bedGain) return;
-    const src = ctx.createBufferSource();
-    src.buffer = themeBuf;
-    src.loop = false;
-    src.connect(bedGain);
-    src.onended = () => {
-      if (themeSrc === src) themeSrc = null;
-      if (themeLoopActive && currentBed === 'menu') {
-        themeGapTimer = setTimeout(playThemeOnce, 500);
-      }
-    };
-    src.start();
-    themeSrc = src;
-  }
   function playBed(kind) {
     if (!ctx || ctx.state !== 'running') return;
-    if (kind === 'menu' && themeBuf) {
-      if (currentBed === 'menu' && themeLoopActive) return;
-      fadeStopLoopBed();
-      stopThemeBed(false);
-      const now = ctx.currentTime, fade = 0.25;
-      currentBed = 'menu';
-      themeLoopActive = true;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, now);
-      g.gain.linearRampToValueAtTime(1, now + fade);
-      g.connect(musicGain);
-      bedGain = g;
-      musicSrc = null;
-      playThemeOnce();
-      return;
-    }
-    stopThemeBed();
     const buf = kind === 'menu' ? menuBuf : musicBuf;
     if (!buf || (currentBed === kind && musicSrc)) return;
     const now = ctx.currentTime, fade = 0.25;
@@ -249,7 +197,6 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   function stop() {
     stopUfoSting(0.02);
     stopLaserBeam();
-    stopThemeBed(false);
     fadeStopLoopBed();
     currentBed = null;
     bedGain = null;
