@@ -6,11 +6,11 @@ next race reset. Watchers follow the map in the host's match snapshots.
 
 | Id | Arena | Spawns | Notes |
 |---|---|---|---|
-| `dish` | 12.5 cm radius circular plate | 3 at 10.5 cm | The original purple plate |
+| `dish` | 12.5 cm radius circular plate | 3 at 10.5 cm | Warm sand, wooden fence rim, swaying grass (render-only) |
 | `desert` | 50 × 50 cm walled square, night | 3 at 19 cm (lanes at 90° / 210° / 330°) | Flat sand, pools, palms, ruins, lamps |
 
 **Code:** `src/sim/world.js` (`RACE_MAPS`, `raceMap`, square branch of `buildWorldXML`),
-`src/sim/maps/desert.js` (desert layout), `src/race-map-desert.js` (desert rendering),
+`src/sim/maps/desert.js` (desert layout), `src/race-map-desert.js` (desert rendering), `src/race-map-dish.js` + `src/sim/maps/dish.js` (dish rendering),
 `src/race-map-assets.js` (prop GLB loader), `src/race-wind.js` (visual wind + hawk),
 `src/race-audio.js` (`startAmbience` / `setAmbience` / `stopAmbience`),
 `src/race-map.js` + `netlify/functions/map.js` (site-wide choice), `src/arena.js`

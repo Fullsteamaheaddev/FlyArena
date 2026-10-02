@@ -1,0 +1,232 @@
+// Sugar Run dish map: warm sand plate, wooden fence rim, swaying grass (render-only).
+import * as THREE from 'three';
+import { groundAt } from './sim/senses.js';
+import { mapPropMeshes } from './race-map-assets.js';
+import { propScale } from './desert-prop-scale.js';
+import { applySwayWind, SWAY_KINDS, swayMaterials } from './race-map-sway.js';
+
+function rng(seed) {
+  let s = seed >>> 0 || 1;
+  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+}
+
+export function paintDishSandBase(fx, fs, logo, ticker) {
+  const mid = fs / 2;
+  const r = rng(41);
+  const rg = fx.createRadialGradient(mid, mid, 0, mid, mid, mid);
+  rg.addColorStop(0, '#f5ead8');
+  rg.addColorStop(0.45, '#eddcc4');
+  rg.addColorStop(0.78, '#e2d0b4');
+  rg.addColorStop(1, '#d4c4a4');
+  fx.fillStyle = rg;
+  fx.fillRect(0, 0, fs, fs);
+  for (let k = 0; k < 900; k++) {
+    fx.fillStyle = r() < 0.5
+      ? `rgba(180,150,110,${0.03 + r() * 0.05})`
+      : `rgba(255,248,235,${0.04 + r() * 0.06})`;
+    fx.beginPath();
+    fx.ellipse(r() * fs, r() * fs, (0.3 + r() * 2.8), (0.2 + r() * 1.4), r() * Math.PI, 0, 6.283);
+    fx.fill();
+  }
+  fx.strokeStyle = 'rgba(160,130,90,0.12)';
+  fx.lineWidth = Math.max(1, fs / 120);
+  for (const ring of [0.18, 0.38, 0.58, 0.78, 0.94]) {
+    fx.beginPath();
+    fx.arc(mid, mid, ring * mid, 0, Math.PI * 2);
+    fx.stroke();
+  }
+  if (logo) {
+    const dw = fs * 0.53, dh = dw * (logo.height / logo.width);
+    fx.save();
+    fx.globalAlpha = 0.42;
+    fx.translate(mid, mid);
+    fx.rotate(-Math.PI / 2);
+    fx.drawImage(logo, -dw / 2, -dh / 2, dw, dh);
+    fx.restore();
+  }
+  if (!ticker) return;
+  const angles = [0, 2 * Math.PI / 3, 4 * Math.PI / 3];
+  const dw = fs * 0.18, dh = dw * (ticker.height / ticker.width), rr = 0.82 * mid;
+  fx.imageSmoothingEnabled = true;
+  fx.imageSmoothingQuality = 'high';
+  fx.globalAlpha = 0.45;
+  for (const a of angles) {
+    fx.save();
+    fx.translate(mid + rr * Math.cos(a), mid - rr * Math.sin(a));
+    fx.rotate(-a + Math.PI / 2);
+    fx.drawImage(ticker, -dw / 2, -dh / 2, dw, dh);
+    fx.restore();
+  }
+  fx.globalAlpha = 1;
+}
+
+function paintDishFence(wx, ww, wh) {
+  wx.imageSmoothingEnabled = true;
+  wx.imageSmoothingQuality = 'high';
+  const r = rng(17);
+  const plankW = ww / 48;
+  for (let k = 0; k < 48; k++) {
+    const tone = 0.88 + r() * 0.18;
+    wx.fillStyle = `rgb(${Math.round(0xb8 * tone)},${Math.round(0x82 * tone)},${Math.round(0x48 * tone)})`;
+    wx.fillRect(k * plankW, 0, plankW + 1, wh);
+    wx.fillStyle = 'rgba(255,230,190,0.15)';
+    wx.fillRect(k * plankW + 2, 2, Math.max(2, plankW * 0.35), wh * 0.12);
+    wx.fillStyle = 'rgba(50,30,12,0.12)';
+    wx.fillRect(k * plankW + 2, wh * 0.75, plankW - 2, wh * 0.2);
+    for (let q = 0; q < 3; q++) {
+      wx.fillStyle = `rgba(60,35,15,${0.05 + r() * 0.08})`;
+      wx.fillRect(k * plankW + r() * plankW, wh * (0.2 + r() * 0.5), 1 + r() * 3, 8 + r() * 20);
+    }
+  }
+  wx.fillStyle = '#6b4420';
+  wx.fillRect(0, 0, ww, wh * 0.14);
+  wx.fillStyle = '#8a5a2e';
+  wx.fillRect(0, wh * 0.86, ww, wh * 0.14);
+  for (let k = 0; k < 12; k++) {
+    const px = k * ww / 12;
+    wx.fillStyle = '#5a3818';
+    wx.fillRect(px, 0, ww / 48, wh);
+  }
+}
+
+function propZ(p, env) {
+  if (p.kind === 'lilypad') return 0.05;
+  const g = groundAt([p.x, p.y], env);
+  const sink = p.kind === 'reed' ? 0 : 0.02;
+  return g - sink;
+}
+
+/**
+ * @param {THREE.Group} envGroup
+ * @param {object} env dish env
+ * @param {{ renderer, scene, sun, hemi, rim, getLogos: () => { logo, ticker } }} ctx
+ */
+export function buildDishScene(envGroup, env, ctx) {
+  const { renderer, scene, sun, hemi, rim, getLogos } = ctx;
+  const R = env.arena.radius;
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const own = [];
+  const keep = o => { o.userData.keep = true; return o; };
+  const root = new THREE.Group();
+  root.name = 'dish';
+  envGroup.add(root);
+
+  const fs = 1024;
+  const fc = document.createElement('canvas');
+  fc.width = fc.height = fs;
+  const fx = fc.getContext('2d');
+  const { logo, ticker } = getLogos?.() || {};
+  paintDishSandBase(fx, fs, logo, ticker);
+  const ft = new THREE.CanvasTexture(fc);
+  ft.colorSpace = THREE.SRGBColorSpace;
+  ft.generateMipmaps = false;
+  ft.minFilter = THREE.LinearFilter;
+  ft.magFilter = THREE.LinearFilter;
+  ft.anisotropy = aniso;
+  own.push(ft);
+  const sandMat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.88 });
+  own.push(sandMat);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(R + 0.1, 96), sandMat);
+  floor.receiveShadow = true;
+  floor.userData.laserSurface = 'floor';
+  root.add(floor);
+
+  const floorPaint = {
+    fx, fs, ft,
+    paintBase: () => {
+      const { logo: lg, ticker: tk } = getLogos?.() || {};
+      paintDishSandBase(fx, fs, lg, tk);
+    },
+  };
+
+  const maxTex = renderer.capabilities.maxTextureSize;
+  const ww = Math.min(maxTex, 16384), wh = Math.min(maxTex, 1024);
+  const wc = document.createElement('canvas');
+  wc.width = ww;
+  wc.height = wh;
+  const wx = wc.getContext('2d');
+  paintDishFence(wx, ww, wh);
+  const wt = new THREE.CanvasTexture(wc);
+  wt.colorSpace = THREE.SRGBColorSpace;
+  wt.generateMipmaps = false;
+  wt.minFilter = THREE.LinearFilter;
+  wt.magFilter = THREE.LinearFilter;
+  wt.anisotropy = aniso;
+  own.push(wt);
+  const wallMat = new THREE.MeshStandardMaterial({ map: wt, side: THREE.BackSide, roughness: 0.78 });
+  own.push(wallMat);
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true),
+    wallMat,
+  );
+  wall.rotation.x = Math.PI / 2;
+  wall.position.z = env.arena.wallHeight / 2;
+  wall.castShadow = wall.receiveShadow = true;
+  root.add(wall);
+
+  const byKind = new Map();
+  for (const p of env.props || []) {
+    if (!byKind.has(p.kind)) byKind.set(p.kind, []);
+    byKind.get(p.kind).push(p);
+  }
+  const mtx = new THREE.Matrix4(), qq = new THREE.Quaternion(), zAxis = new THREE.Vector3(0, 0, 1);
+  const sc = new THREE.Vector3(), ps = new THREE.Vector3();
+  for (const [kind, list] of byKind) {
+    for (const tm of mapPropMeshes(kind)) {
+      const im = keep(new THREE.InstancedMesh(tm.geometry, tm.material, list.length));
+      im.name = `${kind}:${tm.name}`;
+      list.forEach((p, i) => {
+        qq.setFromAxisAngle(zAxis, p.yaw || 0);
+        sc.set(...propScale(p));
+        ps.set(p.x, p.y, propZ(p, env));
+        im.setMatrixAt(i, mtx.compose(ps, qq, sc));
+      });
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      im.castShadow = true;
+      im.receiveShadow = true;
+      if (SWAY_KINDS.has(kind)) im.customDepthMaterial = swayMaterials(tm);
+      root.add(im);
+    }
+  }
+
+  const saved = {
+    bg: scene.background?.clone?.() ?? scene.background,
+    fog: scene.fog,
+    envI: scene.environmentIntensity,
+    hemi: hemi && { sky: hemi.color.clone(), ground: hemi.groundColor.clone(), i: hemi.intensity },
+    sun: sun && { c: sun.color.clone(), i: sun.intensity },
+    rim: rim && { c: rim.color.clone(), i: rim.intensity },
+  };
+  scene.background = new THREE.Color('#c5dce8');
+  scene.fog = new THREE.Fog('#c5dce8', R * 4, R * 14);
+  scene.environmentIntensity = 0.32;
+  if (hemi) { hemi.color.set('#e8f4ff'); hemi.groundColor.set('#c4a882'); hemi.intensity = 0.38; }
+  if (sun) { sun.color.set('#fff4e0'); sun.intensity = 2.4; }
+  if (rim) { rim.color.set('#ffe8c8'); rim.intensity = 0.55; }
+
+  function update(_nowMs, wind, tSec) {
+    applySwayWind(wind, tSec ?? _nowMs / 1000);
+  }
+
+  function dispose() {
+    envGroup.remove(root);
+    root.traverse(o => {
+      if (o.isInstancedMesh) o.dispose();
+      if ((o.isMesh) && !o.userData.keep) {
+        o.geometry.dispose();
+        if (!o.userData.shareMat) { o.material.map?.dispose(); o.material.dispose(); }
+      }
+    });
+    for (const r of own) r.dispose();
+    ft.dispose();
+    scene.background = saved.bg;
+    scene.fog = saved.fog;
+    scene.environmentIntensity = saved.envI;
+    if (hemi && saved.hemi) { hemi.color.copy(saved.hemi.sky); hemi.groundColor.copy(saved.hemi.ground); hemi.intensity = saved.hemi.i; }
+    if (sun && saved.sun) { sun.color.copy(saved.sun.c); sun.intensity = saved.sun.i; }
+    if (rim && saved.rim) { rim.color.copy(saved.rim.c); rim.intensity = saved.rim.i; }
+  }
+
+  return { root, floor, wall, floorPaint, update, dispose };
+}

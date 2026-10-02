@@ -13,6 +13,7 @@ import { loadConnectome, loadNeurons } from './data.js';
 import { PRESETS, raceMap } from './sim/world.js';
 import { groundAt } from './sim/senses.js';
 import { buildDesertScene } from './race-map-desert.js';
+import { buildDishScene } from './race-map-dish.js';
 import { preloadMapAssets } from './race-map-assets.js';
 import { windField, hawkAt } from './race-wind.js';
 import { fetchSiteMap, normalizeMapId } from './race-map.js';
@@ -85,7 +86,7 @@ const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25
 let lastRaceFliesKey = '';
 let watchTickerUrl = null;
 let siteTickerUrl = '';
-let raceMapId = env.map || 'dish', desertScene = null, mapSwap = null;
+let raceMapId = env.map || 'dish', desertScene = null, dishScene = null, mapSwap = null;
 
 /** Host: dev ?map= wins, else the site-wide admin choice. */
 async function wantedRaceMap() {
@@ -96,7 +97,7 @@ async function wantedRaceMap() {
 async function setRaceEnv(id) {
   id = normalizeMapId(id) || 'dish';
   if (!isRace || id === raceMapId) return false;
-  if (id !== 'dish') await preloadMapAssets(BASE, id);
+  await preloadMapAssets(BASE, id);
   const next = raceMap(id).env();
   for (const k of Object.keys(env)) delete env[k];
   Object.assign(env, next);
@@ -485,6 +486,7 @@ function rebuildEnv() {
   // Placement rebuilds own their resources; release old GPU buffers/textures before replacing them.
   if (chaosCakeGroup?.parent === envGroup) envGroup.remove(chaosCakeGroup);
   desertScene?.dispose(); desertScene = null;
+  dishScene?.dispose(); dishScene = null;
   envGroup.traverse(o => { if (o.isMesh && !o.userData.keep) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
   envGroup.clear(); shadowDirty = true;
   const R = env.arena.radius, aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
@@ -494,27 +496,17 @@ function rebuildEnv() {
     desertScene = buildDesertScene(envGroup, env, { renderer, scene, sun, hemi: hemiLight, rim: rimLight });
     floorMesh = desertScene.floor; wallMesh = null;
     raceFloorPaintCtx = desertScene.floorPaint;
-  } else if (isRace) {
-    const fs = 1024, fc = document.createElement('canvas'); fc.width = fc.height = fs; const fx = fc.getContext('2d');
-    const paintId = ++raceFloorPaint;
-    paintRaceFloorFull(fx, fs, raceFloorLogo, raceWallLogo);
-    const ft = new THREE.CanvasTexture(fc); ft.colorSpace = THREE.SRGBColorSpace; ft.generateMipmaps = false; ft.minFilter = THREE.LinearFilter; ft.magFilter = THREE.LinearFilter; ft.anisotropy = aniso;
-    floorMat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.82 });
-    raceFloorPaintCtx = { fx, fs, ft };
-    const refreshFloor = () => {
-      if (paintId !== raceFloorPaint || floorMesh?.material?.map !== ft) return;
-      paintRaceFloorFull(fx, fs, raceFloorLogo, raceWallLogo);
-      ft.needsUpdate = true;
-    };
-    if (!raceFloorLogo) raceFloorLogoImg().then(img => { if (img) refreshFloor(); });
-    if (!raceWallLogo) raceWallLogoImg().then(img => { if (img) refreshFloor(); });
-    const maxTex = renderer.capabilities.maxTextureSize;
-    const ww = Math.min(maxTex, 16384), wh = Math.min(maxTex, 1024);
-    const wc = document.createElement('canvas'); wc.width = ww; wc.height = wh; const wx = wc.getContext('2d');
-    paintRaceWall(wx, ww, wh);
-    const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
-    wt.generateMipmaps = false; wt.minFilter = THREE.LinearFilter; wt.magFilter = THREE.LinearFilter; wt.anisotropy = aniso;
-    wallMat = new THREE.MeshStandardMaterial({ map: wt, side: THREE.BackSide, roughness: 0.62 });
+  } else if (isRace && env.map === 'dish') {
+    ++raceFloorPaint;
+    dishScene = buildDishScene(envGroup, env, {
+      renderer, scene, sun, hemi: hemiLight, rim: rimLight,
+      getLogos: () => ({ logo: raceFloorLogo, ticker: raceWallLogo }),
+    });
+    floorMesh = dishScene.floor;
+    wallMesh = dishScene.wall;
+    raceFloorPaintCtx = dishScene.floorPaint;
+    if (!raceFloorLogo) raceFloorLogoImg().then(img => { if (img) repaintRaceFloor(); });
+    if (!raceWallLogo) raceWallLogoImg().then(img => { if (img) repaintRaceFloor(); });
   } else {
     // floor: same 0.4 cm checker the flies' eyes see
     const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d');
@@ -526,7 +518,7 @@ function rebuildEnv() {
     const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
     wallMat = new THREE.MeshStandardMaterial({ map: wt, side: THREE.BackSide, roughness: 0.9 });
   }
-  if (!desertScene) {
+  if (!desertScene && !dishScene) {
     floorMesh = new THREE.Mesh(new THREE.CircleGeometry(R + 0.1, 96), floorMat);
     floorMesh.receiveShadow = true; floorMesh.userData.laserSurface = 'floor'; envGroup.add(floorMesh);
     wallMesh = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true), wallMat);
@@ -2906,6 +2898,10 @@ function tickDesert(now) {
   const zoom = Math.min(1, 12 / Math.max(1, camera.position.distanceTo(p)));
   raceAudio.setAmbience({ wind, water: water * zoom, hawk: hawkAt(t), t });
 }
+function tickDish(now) {
+  const t = Date.now() / 1000, wind = windField(t);
+  dishScene.update(now, wind, t);
+}
 function animate() {
   requestAnimationFrame(animate);
   if (document.hidden) return;
@@ -2957,6 +2953,7 @@ function animate() {
   tickRaceCamera(dt);
   if (isRace) raceChaos?.tick(dt);
   if (desertScene) tickDesert(now);
+  if (dishScene) tickDish(now);
   if (isRace) {
     for (const f of flies) {
       const p = flyDrawPos(f);

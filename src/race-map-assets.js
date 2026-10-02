@@ -6,6 +6,7 @@ import { DESERT_MAP_PROP_NAMES } from './desert-prop-scale.js';
 
 const MAP_PROPS = {
   desert: DESERT_MAP_PROP_NAMES,
+  dish: ['reed'],
 };
 
 export { DESERT_MAP_PROP_NAMES };
@@ -21,7 +22,8 @@ export function preloadMapAssets(baseUrl = '/', map = 'desert') {
   const loader = new GLTFLoader();
   loading[map] = Promise.all(names.map(async name => {
     try {
-      const gltf = await loader.loadAsync(`${base}maps/${map}/${name}.glb`);
+      const folder = map === 'dish' ? 'desert' : map;
+      const gltf = await loader.loadAsync(`${base}maps/${folder}/${name}.glb`);
       gltf.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       templates[name] = gltf.scene;
     } catch (e) {
