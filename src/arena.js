@@ -70,6 +70,7 @@ const RACE_PLUME_TOP = 0.20, RACE_CHASE_BACK = 2.6, RACE_CHASE_Z = 1.15;
 const ARENA_FLOOR_DECAL_Z = 0.01;
 const FLOOR_DECAL_POLYGON_OFFSET = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
 const RACE_LABEL_Z = 1.05, RACE_LABEL_Z_CHASE = 0.28;
+const RACE_LABEL_Z_MAX = 2.4, RACE_LABEL_CLEAR_PX = 52;
 const DEAD_FLY_SCALE_START = 0.1, DEAD_FLY_SCALE_END = 0.3, DEAD_FLY_OVERVIEW_MUL = 1.875, DEAD_FLY_CHASE_SCREEN_MUL = 2, DEAD_FLY_BELOW_LABEL = 0.62, DEAD_FLY_BELOW_LABEL_CHASE = 0.11, DEAD_FLY_CENTER_Y = 0.08, DEAD_FLY_OVERVIEW_Z_LIFT = 0.07, DEAD_FLY_Z_LIFT_PER_SCALE = 0.22, DEAD_FLY_RISE_DUR = 550;
 const DEAD_FLY_BLINK_MS = 1250, DEAD_FLY_BLINK_OP_MIN = 0.35, DEAD_FLY_BLINK_SCALE_MIN = 0.92;
 const RACE_HISTORY_KEY = 'odorRaceResults';
@@ -847,7 +848,7 @@ function paintEnterGateCopy() {
   if (!el) return;
   const title = el.querySelector('#enterTitle');
   if (title) title.textContent = t('enter.title');
-  const p = el.querySelector('.enter-card > p');
+  const p = el.querySelector('.enter-fill p');
   if (p) p.textContent = t('enter.body');
   const btn = el.querySelector('#enterBtn');
   if (btn) btn.textContent = t('enter.press');
@@ -985,7 +986,7 @@ function setupRaceChrome() {
 }
 function shortToken(addr) {
   if (!addr) return '';
-  return addr.slice(0, 10) + '…' + addr.slice(-6);
+  return addr.slice(0, 6) + '…' + addr.slice(-4);
 }
 function paintEnterToken() {
   const btn = $('#enterToken');
@@ -1144,13 +1145,18 @@ function setupEnterGate() {
   const el = document.createElement('div');
   el.id = 'enterGate';
   el.innerHTML = `<div class="enter-card" role="dialog" aria-labelledby="enterTitle" aria-modal="true">
-    <img class="enter-logo" src="${BASE}FruitFlyText.png" alt="Sugar Run" />
-    <h1 id="enterTitle">${t('enter.title')}</h1>
-    <p>${t('enter.body')}</p>
-    <button type="button" class="enter-token" id="enterToken" hidden></button>
-    <button type="button" class="primary" id="enterBtn">${t('enter.press')}</button>
-    <div class="enter-socials">
-      <a class="enter-social enter-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
+    <div class="enter-fill">
+      <div class="enter-copy">
+        <h1 id="enterTitle">${t('enter.title')}</h1>
+        <p>${t('enter.body')}</p>
+      </div>
+      <div class="enter-token-slot">
+        <button type="button" class="enter-token" id="enterToken" hidden></button>
+      </div>
+      <div class="enter-actions">
+        <button type="button" class="enter-go" id="enterBtn">${t('enter.press')}</button>
+        <a class="enter-social enter-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
+      </div>
     </div>
   </div>`;
   document.body.appendChild(el);
@@ -1624,6 +1630,8 @@ function applyWatchState(st) {
   const received = performance.now();
   const hasHost = noteHostClock(st.sentAt, received);
   const wasLive = watchOverlayPhase === 'live';
+  const wasLobby = watchOverlayPhase === 'lobby';
+  const matchChanged = st.matchId != null && st.matchId !== matchId;
   matchPhase = st.phase || matchPhase;
   if (st.bodyNames) watchBodyNames = st.bodyNames;
   if (st.wingPoses) watchWingPoses = st.wingPoses;
@@ -1697,6 +1705,7 @@ function applyWatchState(st) {
     pendingCues = [];
     lastWatchCueId = -1;
     for (const f of flies) syncFlyDeathVisual(f);
+    if (!wasLobby || matchChanged) snapRaceOverview();
   }
   if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && st.matchId !== watchYipeeMatch) {
     watchYipeeMatch = st.matchId;
@@ -2311,6 +2320,7 @@ async function settleHostRace(winnerId) {
   }
 }
 async function showRaceStart() {
+  snapRaceOverview();
   matchPhase = 'lobby';
   matchResetIn = null;
   raceWinner = null;
@@ -2611,6 +2621,20 @@ function flyLabelZ(f) {
   const z0 = env.map === 'desert' ? RACE_LABEL_Z * 1.15 : RACE_LABEL_Z;
   let z = z0 + (RACE_LABEL_Z_CHASE - z0) * k;
   if (raceMobile() && raceFollow == null) z *= 1.1;
+  // CSS2D chips stay a fixed pixel size, so a constant world offset covers the fly when zoomed out.
+  // Lift with distance, then cap so overview tags don't float up to the top of the frame.
+  if (camera && k < 0.999) {
+    const p = flyDrawPos(f) || f.last?.pos;
+    if (p) {
+      deadFlyScalePos.set(p[0], p[1], p[2]);
+      const dist = camera.position.distanceTo(deadFlyScalePos);
+      const worldPerPx = dist * 2 * Math.tan((camera.fov * Math.PI) / 360) / Math.max(1, innerHeight);
+      const lift = RACE_LABEL_CLEAR_PX * worldPerPx;
+      const zMax = env.map === 'desert' ? RACE_LABEL_Z_MAX * 1.15 : RACE_LABEL_Z_MAX;
+      const zoomZ = Math.min(zMax, Math.max(z, lift));
+      z += (zoomZ - z) * (1 - k);
+    }
+  }
   return z;
 }
 function chaseCam(f, outPos, outTarget) {
@@ -2649,10 +2673,13 @@ function stopRaceFollow() {
 function snapRaceOverview() {
   raceFollow = null;
   raceCamTween = null;
+  chaosCamHold = false;
   applyRaceZoomLimit();
-  if (!raceCamHome) return;
+  if (!controls || !raceCamHome) return;
   camera.position.copy(raceCamHome.pos);
   controls.target.copy(raceCamHome.target);
+  controls.maxPolarAngle = Math.PI / 2 - 0.02;
+  controls.enabled = true;
 }
 function tickRaceCamera(dt) {
   if (!isRace || chaosCamHold) return;

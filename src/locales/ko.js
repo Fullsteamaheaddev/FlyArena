@@ -204,8 +204,8 @@ export default {
   'wallet.body': '이 사이트를 열 수 있는 앱에서 계속하세요.',
 
   'enter.title': 'Sugar Run에 오신 것을 환영합니다',
-  'enter.body': '우리 셋, 뇌 셋 — 각 165,122개 뉴런 — 가운데 설탕을 향해 달립니다. 파리를 고르세요. 응원하세요. 베팅하세요. 과일 그릇에 잡아먹히지 마세요.',
-  'enter.press': '눌러서 입장',
+  'enter.body': '뉴런 165,122개짜리 초파리 뇌 셋이 가운데 설탕을 향해 달립니다. 먼저 도착하거나 마지막까지 살아남은 쪽이 이깁니다. 파리를 고르고 베팅하세요.',
+  'enter.press': '입장',
   'enter.copyToken': '토큰 주소 복사',
 
   'host.title': 'Sugar Run 호스트',
@@ -272,8 +272,8 @@ export default {
   'chaos.puff.title': '돌풍',
   'chaos.puff.line': '돌풍이 경기장을 휩쓸고 지나갑니다.',
   'chaos.laser.title': '레이저 눈',
-  'chaos.laser.line': '{name}이(가) 레이저 눈을 얻습니다.',
-  'chaos.laser.lineAnon': '파리가 레이저 눈을 얻습니다.',
+  'chaos.laser.line': '모든 파리가 레이저 눈을 얻습니다.',
+  'chaos.laser.lineAnon': '모든 파리가 레이저 눈을 얻습니다.',
   'chaos.meteor.title': '유성우',
   'chaos.meteor.line': '무언가가 하늘에서 떨어집니다.',
   'chaos.sugarrain.title': '설탕 부스러기',

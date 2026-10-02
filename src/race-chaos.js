@@ -430,8 +430,7 @@ export function createRaceChaos(api) {
     const pool = ensureLaserPool();
     if (!laserBurnLast) laserBurnLast = new Map();
     const allLive = liveFlies(flies());
-    const shooterId = laserSession.shooterId;
-    const beamFlies = shooterId == null ? [] : allLive.filter(f => f.id === shooterId);
+    const beamFlies = allLive;
     tickLaserBeams(pool, beamFlies, arena, t, laserBurnLast, {
       physics: laserSession.physics ?? physics,
       solids: collectLaserSolids(env),
@@ -1519,8 +1518,7 @@ export function createRaceChaos(api) {
       }
     } else if (kind === 'laser') {
       const dur = laserSessionDuration();
-      const shooterId = payload.flyId ?? pick(liveFlies(flies()))?.id ?? null;
-      laserSession = { until: now() + dur, killed: new Set(), physics, shooterId };
+      laserSession = { until: now() + dur, killed: new Set(), physics };
       laserBurnLast = new Map();
       ensureLaserPool();
       api.audio()?.startLaserBeam?.();
@@ -1696,7 +1694,7 @@ export function createRaceChaos(api) {
     return {
       thumb: 1800, spin: 1600, quake: 5200, flip: 2200, tilt: 4000, lightning: 1600, double: 2800,
       crumb: CAKE_STAGGER_MS * (CAKE_SLICE_COUNT - 1) + 2800,
-      firefly: 7200, boop: 1300, puff: 5200, laser: 5200,
+      firefly: 7200, boop: 1300, puff: 5200, laser: 3500,
       meteor: 5600, sugarrain: 5400, ufo: 7000, spikes: 3600,
     }[kind] || 1200;
   }

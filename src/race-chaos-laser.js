@@ -471,5 +471,5 @@ export function disposeLaserPool(pool) {
 }
 
 export function laserSessionDuration() {
-  return 4000 + Math.random() * 1000;
+  return 3500;
 }

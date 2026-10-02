@@ -133,7 +133,10 @@ export function chaosCopy(kind, name) {
   if (kind === 'double') {
     return { title, line: name ? t('chaos.double.line', { name }) : t('chaos.double.lineAnon') };
   }
-  if (kind === 'laser' || kind === 'ufo') {
+  if (kind === 'laser') {
+    return { title, line: t('chaos.laser.line') };
+  }
+  if (kind === 'ufo') {
     return { title, line: name ? t(`chaos.${kind}.line`, { name }) : t(`chaos.${kind}.lineAnon`) };
   }
   return { title, line: t(`chaos.${kind}.line`, { name: name || t('chaos.aFly') }) };

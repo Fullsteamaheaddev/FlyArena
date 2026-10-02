@@ -204,8 +204,8 @@ export default {
   'wallet.body': '请在能浏览本站的应用中继续。',
 
   'enter.title': '欢迎来到 Sugar Run',
-  'enter.body': '我们三个，三个大脑——每个 165,122 个神经元——冲向中央的糖。选一只。加油。下注。别被果盘吃掉。',
-  'enter.press': '按键进入',
+  'enter.body': '三个 165,122 神经元的果蝇大脑冲向中央的糖。先到者胜，或最后存活者胜。选一只果蝇并下注。',
+  'enter.press': '进入',
   'enter.copyToken': '复制代币地址',
 
   'host.title': '主持 Sugar Run',
@@ -272,8 +272,8 @@ export default {
   'chaos.puff.title': '狂风',
   'chaos.puff.line': '一阵风扫过竞技场',
   'chaos.laser.title': '激光眼',
-  'chaos.laser.line': '{name} 长出激光眼。',
-  'chaos.laser.lineAnon': '一只果蝇长出激光眼。',
+  'chaos.laser.line': '每只果蝇都长出激光眼。',
+  'chaos.laser.lineAnon': '每只果蝇都长出激光眼。',
   'chaos.meteor.title': '流星雨',
   'chaos.meteor.line': '有东西从天上掉下来。',
   'chaos.sugarrain.title': '糖屑',

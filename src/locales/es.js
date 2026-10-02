@@ -204,8 +204,8 @@ export default {
   'wallet.body': 'Continúa en una app que pueda abrir este sitio.',
 
   'enter.title': 'Bienvenido a Sugar Run',
-  'enter.body': 'Tres de nosotras, tres cerebros — 165.122 neuronas cada uno — corriendo hacia el azúcar del centro. Elige una mosca. Anima. Apuesta. Que no te coma un frutero.',
-  'enter.press': 'Pulsa para entrar',
+  'enter.body': 'Tres cerebros de mosca de 165.122 neuronas corren hacia el azúcar del centro. Gana la primera — o la última en pie. Elige una mosca y apuesta.',
+  'enter.press': 'Entrar',
   'enter.copyToken': 'Copiar dirección del token',
 
   'host.title': 'Anfitrión de Sugar Run',
@@ -272,8 +272,8 @@ export default {
   'chaos.puff.title': 'RÁFAGA',
   'chaos.puff.line': 'Una ráfaga recorre la arena',
   'chaos.laser.title': 'Ojos láser',
-  'chaos.laser.line': '{name} tiene ojos láser.',
-  'chaos.laser.lineAnon': 'Una mosca tiene ojos láser.',
+  'chaos.laser.line': 'Todas las moscas tienen ojos láser.',
+  'chaos.laser.lineAnon': 'Todas las moscas tienen ojos láser.',
   'chaos.meteor.title': 'Lluvia de meteoros',
   'chaos.meteor.line': 'Algo cae del cielo.',
   'chaos.sugarrain.title': 'Migas de azúcar',

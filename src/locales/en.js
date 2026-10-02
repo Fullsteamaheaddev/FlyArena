@@ -204,8 +204,8 @@ export default {
   'wallet.body': 'Continue in an app that can browse this site.',
 
   'enter.title': 'Welcome to Sugar Run',
-  'enter.body': "Three of us, three brains — 165,122 neurons each — racing for sugar at the centre. Pick a fly. Cheer. Bet. Don't get eaten by a fruit bowl.",
-  'enter.press': 'Press to enter',
+  'enter.body': 'Three 165,122-neuron fruit-fly brains race to the sugar at the centre. First there — or last alive — wins. Pick a fly and bet.',
+  'enter.press': 'Enter',
   'enter.copyToken': 'Copy token address',
 
   'host.title': 'Host Sugar Run',
@@ -272,8 +272,8 @@ export default {
   'chaos.puff.title': 'GUST',
   'chaos.puff.line': 'A gust of wind rolls through the arena',
   'chaos.laser.title': 'Laser eyes',
-  'chaos.laser.line': '{name} gets laser eyes.',
-  'chaos.laser.lineAnon': 'A fly gets laser eyes.',
+  'chaos.laser.line': 'Every fly gets laser eyes.',
+  'chaos.laser.lineAnon': 'Every fly gets laser eyes.',
   'chaos.meteor.title': 'Meteor shower',
   'chaos.meteor.line': 'Something falls from the sky.',
   'chaos.sugarrain.title': 'Sugar crumbs',
