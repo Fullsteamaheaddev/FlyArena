@@ -203,6 +203,10 @@ export function buildDishScene(envGroup, env, ctx) {
   const fx = fc.getContext('2d');
   const { logo, ticker } = getLogos?.() || {};
   paintDishSandBase(fx, fs, logo, ticker);
+  const base = document.createElement('canvas');
+  base.width = base.height = fs;
+  base.getContext('2d').drawImage(fc, 0, 0);
+  let baseLogo = logo, baseTicker = ticker;
   const ft = new THREE.CanvasTexture(fc);
   ft.colorSpace = THREE.SRGBColorSpace;
   ft.generateMipmaps = false;
@@ -221,7 +225,12 @@ export function buildDishScene(envGroup, env, ctx) {
     fx, fs, ft,
     paintBase: () => {
       const { logo: lg, ticker: tk } = getLogos?.() || {};
-      paintDishSandBase(fx, fs, lg, tk);
+      if (lg !== baseLogo || tk !== baseTicker) {
+        baseLogo = lg;
+        baseTicker = tk;
+        paintDishSandBase(base.getContext('2d'), fs, lg, tk);
+      }
+      fx.drawImage(base, 0, 0);
     },
   };
 

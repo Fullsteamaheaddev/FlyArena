@@ -73,6 +73,8 @@ function mulberry32(seed) {
   };
 }
 
+const boltMatCache = new Map();
+
 function createBoltMaterial(T, layer, baseOpacity) {
   const layerIdx = layer === 'core' ? LAYER_CORE : layer === 'sheath' ? LAYER_SHEATH : LAYER_BLOOM;
   const hot = layer === 'core' ? new T.Color('#ffffff') : layer === 'sheath' ? new T.Color('#a8e8ff') : new T.Color('#e8d4ff');
@@ -94,6 +96,24 @@ function createBoltMaterial(T, layer, baseOpacity) {
     toneMapped: false,
     side: T.DoubleSide,
   });
+}
+
+function boltMaterial(T, layer, baseOpacity) {
+  let proto = boltMatCache.get(layer);
+  if (!proto) {
+    proto = createBoltMaterial(T, layer, 1);
+    boltMatCache.set(layer, proto);
+  }
+  const mat = proto.clone();
+  mat.uniforms.uBaseOpacity.value = baseOpacity;
+  return mat;
+}
+
+/** Compile the three bolt programs once so the first live strike is not a shader hitch. */
+export function warmBoltMaterials(T) {
+  for (const layer of ['core', 'sheath', 'bloom']) {
+    if (!boltMatCache.has(layer)) boltMatCache.set(layer, createBoltMaterial(T, layer, 1));
+  }
 }
 
 function jagged(a, b, gens = 5, spread = 1.4, rng = Math.random) {
@@ -119,8 +139,8 @@ function boltMesh(T, pts, radius, layer, baseOpacity, radialSegments) {
   const v = pts.map(p => new T.Vector3(p.x, p.y, p.z));
   try {
     const curve = new T.CatmullRomCurve3(v, false, 'catmullrom', 0.35);
-    const geo = new T.TubeGeometry(curve, Math.max(12, pts.length * 2), radius, radialSegments, false);
-    const mat = createBoltMaterial(T, layer, baseOpacity);
+    const geo = new T.TubeGeometry(curve, Math.max(8, pts.length), radius, radialSegments, false);
+    const mat = boltMaterial(T, layer, baseOpacity);
     const mesh = new T.Mesh(geo, mat);
     mesh.renderOrder = 6;
     mesh.userData.boltLayer = layer;
@@ -131,9 +151,9 @@ function boltMesh(T, pts, radius, layer, baseOpacity, radialSegments) {
   }
 }
 
-function addBoltForks(T, pts, floorZ, rCore, rSheath, add, depth, maxDepth, rng) {
+function addBoltForks(T, pts, floorZ, rCore, rSheath, add, depth, maxDepth, rng, thin) {
   const scale = Math.pow(0.58, depth);
-  const n = depth === 0 ? 3 + Math.floor(rng() * 3) : 1 + Math.floor(rng() * 2);
+  const n = depth === 0 ? (thin ? 2 : 3) + Math.floor(rng() * 2) : 1 + Math.floor(rng() * 2);
   const randRange = (a, b) => a + rng() * (b - a);
   for (let i = 0; i < n; i++) {
     const src = pts[Math.floor(pts.length * randRange(0.12 + depth * 0.1, 0.7))];
@@ -148,10 +168,10 @@ function addBoltForks(T, pts, floorZ, rCore, rSheath, add, depth, maxDepth, rng)
     };
     const br = jagged(src, end, 4, Math.max(0.35, out * 0.45), rng);
     const k = 0.52 * scale;
-    add(boltMesh(T, br, rCore * k, 'core', 0.9, 8), 'core');
-    add(boltMesh(T, br, rSheath * k, 'sheath', 0.36, 10), 'sheath');
+    add(boltMesh(T, br, rCore * k, 'core', 0.9, thin ? 5 : 6), 'core');
+    add(boltMesh(T, br, rSheath * k, 'sheath', 0.36, thin ? 6 : 8), 'sheath');
     if (depth + 1 < maxDepth && rng() < 0.7) {
-      addBoltForks(T, br, floorZ, rCore, rSheath, add, depth + 1, maxDepth, rng);
+      addBoltForks(T, br, floorZ, rCore, rSheath, add, depth + 1, maxDepth, rng, thin);
     }
   }
 }
@@ -170,15 +190,15 @@ export function makeBolt(T, x, y, { fork = true, height = 8, thin = false, hit =
   const wander = Math.min(3.4, height * 0.09);
   const top = { x: randRange(-wander, wander), y: randRange(-wander, wander), z: 0 };
   const bot = { x: 0, y: 0, z: floorZ };
-  const main = jagged(top, bot, 6, thin ? wander * 0.5 : wander, rng);
+  const main = jagged(top, bot, thin ? 4 : 5, thin ? wander * 0.5 : wander, rng);
   const rCore = thin ? 0.04 : 0.05;
   const rSheath = thin ? 0.16 : 0.22;
   const rBloom = thin ? 0.32 : (hit ? 0.64 : 0.48);
   const add = (mesh, kind) => { if (mesh) g.add(mesh); };
-  add(boltMesh(T, main, rCore, 'core', 1, 8), 'core');
-  add(boltMesh(T, main, rSheath, 'sheath', thin ? 0.42 : 0.52, 10), 'sheath');
-  if (!thin) add(boltMesh(T, main, rBloom, 'bloom', hit ? 0.28 : 0.16, 10), 'bloom');
-  if (fork) addBoltForks(T, main, floorZ, rCore, rSheath, add, 0, thin ? 1 : 2, rng);
+  add(boltMesh(T, main, rCore, 'core', 1, thin ? 5 : 6), 'core');
+  add(boltMesh(T, main, rSheath, 'sheath', thin ? 0.42 : 0.52, thin ? 6 : 8), 'sheath');
+  if (!thin) add(boltMesh(T, main, rBloom, 'bloom', hit ? 0.28 : 0.16, 8), 'bloom');
+  if (fork) addBoltForks(T, main, floorZ, rCore, rSheath, add, 0, thin ? 1 : 2, rng, thin);
   return g;
 }
 

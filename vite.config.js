@@ -45,12 +45,8 @@ function serveLocalOverlay(req, res, next) {
 
 const watchRoute = {
   name: 'watch-route',
-  configureServer(server) {
-    server.middlewares.use(serveLocalOverlay);
-  },
-  configurePreviewServer(server) {
-    server.middlewares.use(serveLocalOverlay);
-  },
+  configureServer(server) { server.middlewares.use(serveLocalOverlay); },
+  configurePreviewServer(server) { server.middlewares.use(serveLocalOverlay); },
 };
 export default defineConfig({
   base: process.env.BASE_PATH || '/', // CI sets /fly-brain/ for GitHub Pages

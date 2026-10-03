@@ -10,7 +10,7 @@ import {
   initMeteorSmoke, allocMeteorSmokeBatch, emitMeteorSmokeAlongSegment, sealMeteorSmokeBatch,
   disposeMeteorSmoke, burstMeteorSmoke, orientMeteorAlong, tickMeteorSmoke, METEOR_SCALE,
 } from './race-chaos-meteor.js';
-import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial } from './race-chaos-bolt.js';
+import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial, warmBoltMaterials } from './race-chaos-bolt.js';
 import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laserSessionDuration, collectLaserSolids } from './race-chaos-laser.js';
 
 export const CHAOS_KINDS = [
@@ -75,6 +75,7 @@ const CHAOS_ROULETTE_GAP_MS = [5000, 15000];
 
 export function createRaceChaos(api) {
   const T = api.THREE;
+  warmBoltMaterials(T);
   let lastKind = null, nextAt = 0, busyUntil = 0, startedAt = 0;
   let cue = null, cueId = 0, lastWatchId = -1;
   let scorches = [];
@@ -86,7 +87,7 @@ export function createRaceChaos(api) {
   let previewMesh = null;
   let toastEl = null, toastTimer = 0, lastToast = null;
   let savedWind = null, savedRadial = null;
-  let lastScorchPaint = 0;
+  let lastScorchPaint = 0, scorchDirty = false;
   let dishAnim = null, dishPhysics = false, lastDishKey = '';
   const DISH_FLAT = { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 };
   const DISH_HISTORY = 240, DISH_MAX_LAG = 180;   // floor follows the slowest fly, but never off the end of the history
@@ -218,7 +219,7 @@ export function createRaceChaos(api) {
 
   function later(ms, fn) {
     const t0 = now();
-    tweens.push({ until: t0 + ms, tick: () => { if (now() >= t0 + ms) { fn(); return false; } return true; } });
+    tweens.push({ later: true, until: t0 + ms, tick: () => { if (now() >= t0 + ms) { fn(); return false; } return true; } });
   }
   function tween(dur, fn, done) {
     const t0 = now();
@@ -617,7 +618,7 @@ export function createRaceChaos(api) {
     }
     if (killed) hideToast();
     scorches.push({ x: sx, y: sy, r: (opts.r || (opts.hit ? 0.7 : 0.55)) * scorchScale(), until: now() + 16000 });
-    api.repaintFloor?.();
+    scorchDirty = true;
     flashBolt(sx, sy, opts);
     camShake(200, opts.thin ? 0.12 : opts.hit ? 0.28 : 0.2);
     return killed;
@@ -1725,6 +1726,7 @@ export function createRaceChaos(api) {
       laserPool = null;
     }
     scorches = [];
+    scorchDirty = false;
     busyUntil = 0;
     dishAnim = null;
     hideToast();
@@ -1772,7 +1774,14 @@ export function createRaceChaos(api) {
     const t = now();
     const cur = tweens;
     tweens = [];
-    for (const tw of cur) if (tw.tick()) tweens.push(tw);
+    let laterBudget = 1;
+    for (const tw of cur) {
+      if (tw.later && t >= tw.until) {
+        if (laterBudget <= 0) { tweens.push(tw); continue; }
+        laterBudget -= 1;
+      }
+      if (tw.tick()) tweens.push(tw);
+    }
     tickCakeDespawns(t);
     if (dishAnim) {
       if (t >= dishAnim.t0 + dishAnim.dur) {
@@ -1825,9 +1834,10 @@ export function createRaceChaos(api) {
     }
     tickUfoAbductFly();
     tickSugarRain(t);
-    if (scorches.length && t - lastScorchPaint > 500) {
+    if (scorches.length && (scorchDirty || t - lastScorchPaint > 500)) {
       scorches = scorches.filter(s => t < s.until + 4000);
       lastScorchPaint = t;
+      scorchDirty = false;
       api.repaintFloor?.();
     }
     if (!api.isHostLive?.()) return;
