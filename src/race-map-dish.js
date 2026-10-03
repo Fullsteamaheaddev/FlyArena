@@ -1,4 +1,4 @@
-// Sugar Run dish map: warm sand plate, wooden fence rim, swaying grass (render-only).
+// Sugar Run dish map: garden dirt plate, wooden fence rim, swaying grass (render-only).
 import * as THREE from 'three';
 import { groundAt } from './sim/senses.js';
 import { mapPropMeshes } from './race-map-assets.js';
@@ -7,9 +7,7 @@ import { applySwayWind, SWAY_KINDS, swayForMaterial, swayMaterials } from './rac
 import { applyCelShading, celOutlineMat } from './cel-shade.js';
 import { dishDoghouseProps, dishGrassProps } from './sim/maps/dish.js';
 
-const GRASS_INK = '#182012';
 const HOUSE_INK = '#1c120c';
-const GRASS_OUTLINE_XY = 1.18;
 const HOUSE_OUTLINE = 1.04;
 
 function rng(seed) {
@@ -31,7 +29,7 @@ function valueNoise(x, y) {
   return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
 }
 
-function paintBrightSand(fx, fs, mid) {
+function paintDirtPatches(fx, fs, mid) {
   const img = fx.getImageData(0, 0, fs, fs);
   const d = img.data;
   const vals = new Float32Array(fs * fs);
@@ -56,17 +54,17 @@ function paintBrightSand(fx, fs, mid) {
     const v = vals[i];
     const o = i * 4;
     if (v < tSoft) {
-      const m = 0.16;
-      d[o]     = d[o]     * (1 - m) + 168 * m;
-      d[o + 1] = d[o + 1] * (1 - m) + 136 * m;
-      d[o + 2] = d[o + 2] * (1 - m) + 96 * m;
+      const m = 0.28;
+      d[o]     = d[o]     * (1 - m) + 62 * m;
+      d[o + 1] = d[o + 1] * (1 - m) + 40 * m;
+      d[o + 2] = d[o + 2] * (1 - m) + 24 * m;
       continue;
     }
     const a = v >= t ? 1 : (v - tSoft) / span;
-    const mix = 0.92 * a;
-    d[o]     = d[o]     + (255 - d[o]) * mix;
-    d[o + 1] = d[o + 1] + (249 - d[o + 1]) * mix;
-    d[o + 2] = d[o + 2] + (228 - d[o + 2]) * mix;
+    const mix = 0.72 * a;
+    d[o]     = d[o]     + (186 - d[o]) * mix;
+    d[o + 1] = d[o + 1] + (142 - d[o + 1]) * mix;
+    d[o + 2] = d[o + 2] + (92 - d[o + 2]) * mix;
   }
   fx.putImageData(img, 0, 0);
 }
@@ -75,22 +73,22 @@ export function paintDishSandBase(fx, fs, logo, ticker) {
   const mid = fs / 2;
   const r = rng(41);
   const rg = fx.createRadialGradient(mid, mid, 0, mid, mid, mid);
-  rg.addColorStop(0, '#ddc8a8');
-  rg.addColorStop(0.45, '#d2bb9a');
-  rg.addColorStop(0.78, '#c4ab88');
-  rg.addColorStop(1, '#b89872');
+  rg.addColorStop(0, '#8a6240');
+  rg.addColorStop(0.45, '#6e4c32');
+  rg.addColorStop(0.78, '#5a3c26');
+  rg.addColorStop(1, '#46301c');
   fx.fillStyle = rg;
   fx.fillRect(0, 0, fs, fs);
-  for (let k = 0; k < 900; k++) {
-    fx.fillStyle = r() < 0.5
-      ? `rgba(180,150,110,${0.03 + r() * 0.05})`
-      : `rgba(255,248,235,${0.04 + r() * 0.06})`;
+  for (let k = 0; k < 1100; k++) {
+    fx.fillStyle = r() < 0.55
+      ? `rgba(42,26,14,${0.04 + r() * 0.08})`
+      : `rgba(150,110,70,${0.04 + r() * 0.07})`;
     fx.beginPath();
     fx.ellipse(r() * fs, r() * fs, (0.3 + r() * 2.8), (0.2 + r() * 1.4), r() * Math.PI, 0, 6.283);
     fx.fill();
   }
-  paintBrightSand(fx, fs, mid);
-  fx.strokeStyle = 'rgba(160,130,90,0.12)';
+  paintDirtPatches(fx, fs, mid);
+  fx.strokeStyle = 'rgba(40,24,12,0.14)';
   fx.lineWidth = Math.max(1, fs / 120);
   for (const ring of [0.18, 0.38, 0.58, 0.78, 0.94]) {
     fx.beginPath();
@@ -100,7 +98,7 @@ export function paintDishSandBase(fx, fs, logo, ticker) {
   if (logo) {
     const dw = fs * 0.53, dh = dw * (logo.height / logo.width);
     fx.save();
-    fx.globalAlpha = 0.42;
+    fx.globalAlpha = 0.5;
     fx.translate(mid, mid);
     fx.rotate(-Math.PI / 2);
     fx.drawImage(logo, -dw / 2, -dh / 2, dw, dh);
@@ -212,7 +210,7 @@ export function buildDishScene(envGroup, env, ctx) {
   ft.magFilter = THREE.LinearFilter;
   ft.anisotropy = aniso;
   own.push(ft);
-  const sandMat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.7 });
+  const sandMat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.92 });
   own.push(sandMat);
   const floor = new THREE.Mesh(new THREE.CircleGeometry(R + 0.1, 96), sandMat);
   floor.receiveShadow = true;
@@ -259,12 +257,9 @@ export function buildDishScene(envGroup, env, ctx) {
   }
   const mtx = new THREE.Matrix4(), qq = new THREE.Quaternion(), zAxis = new THREE.Vector3(0, 0, 1);
   const sc = new THREE.Vector3(), ps = new THREE.Vector3();
-  const grassInk = celOutlineMat(THREE, GRASS_INK);
-  grassInk.side = THREE.BackSide;
-  swayForMaterial(grassInk);
   const houseInk = celOutlineMat(THREE, HOUSE_INK);
   houseInk.side = THREE.BackSide;
-  own.push(grassInk, houseInk);
+  own.push(houseInk);
   for (const [kind, list] of byKind) {
     for (const tm of mapPropMeshes(kind)) {
       const isGrass = kind === 'grass';
@@ -280,7 +275,7 @@ export function buildDishScene(envGroup, env, ctx) {
         }
       }
       const grassMat = isGrass ? keep(new THREE.MeshBasicMaterial({
-        color: new THREE.Color(3.8, 3.2, 4.5),
+        color: new THREE.Color(1.15, 1.7, 1.2),
         vertexColors: true,
       })) : null;
       if (grassMat) {
@@ -294,19 +289,15 @@ export function buildDishScene(envGroup, env, ctx) {
           qq.setFromAxisAngle(zAxis, p.yaw || 0);
           sc.set(...propScale(p));
           if (isGrass) { sc.x *= 2.55; sc.y *= 2.55; sc.z *= 1.68; }
-          if (outline) {
-            if (isGrass) { sc.x *= GRASS_OUTLINE_XY; sc.y *= GRASS_OUTLINE_XY; }
-            else sc.multiplyScalar(HOUSE_OUTLINE);
-          }
+          if (outline) sc.multiplyScalar(HOUSE_OUTLINE);
           ps.set(p.x, p.y, propZ(p, env));
           im.setMatrixAt(i, mtx.compose(ps, qq, sc));
         });
         im.instanceMatrix.needsUpdate = true;
         im.computeBoundingSphere();
       };
-      if (isGrass || isHouse) {
-        const ink = isGrass ? grassInk : houseInk;
-        const imOl = keep(new THREE.InstancedMesh(tm.geometry, ink, list.length));
+      if (isHouse) {
+        const imOl = keep(new THREE.InstancedMesh(tm.geometry, houseInk, list.length));
         imOl.name = `${kind}:${tm.name}:ink`;
         place(imOl, true);
         imOl.castShadow = imOl.receiveShadow = false;
@@ -339,7 +330,7 @@ export function buildDishScene(envGroup, env, ctx) {
   const fill = new THREE.AmbientLight('#fff6ea', 0.32);
   scene.add(fill);
   scene.environmentIntensity = 0.39;
-  if (hemi) { hemi.color.set('#f4f8ff'); hemi.groundColor.set('#d2bc96'); hemi.intensity = 0.58; }
+  if (hemi) { hemi.color.set('#f4f8ff'); hemi.groundColor.set('#6b4a32'); hemi.intensity = 0.58; }
   if (sun) { sun.color.set('#fff6e8'); sun.intensity = 2.55; }
   if (rim) { rim.color.set('#ffe8c8'); rim.intensity = 0.71; }
 

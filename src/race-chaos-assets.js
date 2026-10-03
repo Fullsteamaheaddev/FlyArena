@@ -62,8 +62,8 @@ export function cloneChaosProp(name) {
     if (!o.isMesh) return;
     const isOutline = o.name === 'CelOutline' || o.name === 'UfoCelOutline';
     if (!isOutline) {
-      o.castShadow = true;
-      o.receiveShadow = true;
+      o.castShadow = false;
+      o.receiveShadow = false;
     }
     if (name !== 'meteor_chunk') return;
     const mats = Array.isArray(o.material) ? o.material : [o.material];

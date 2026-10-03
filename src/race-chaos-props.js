@@ -177,7 +177,7 @@ function patchGeo(T, S, u0, u1, w0, lift, dome = 0, nu = 36, na = 16) {
 function digit(T, S, M, { outline = 0.03, lift = 0.015, nail, creases = [] } = {}) {
   const g = new T.Group();
   const body = new T.Mesh(tubeGeo(T, S), M.skin);
-  body.castShadow = true;
+  body.castShadow = false;
   g.add(body);
   if (outline) g.add(new T.Mesh(tubeGeo(T, S, outline, { rings: 56, cap: 8, segs: 32 }), M.ol));
   if (nail) {
@@ -373,8 +373,8 @@ export function makeCakeSlice(T) {
     const mesh = new T.Mesh(geo, cakeToonMat(T, color, glow));
     mesh.position.z = z;
     mesh.renderOrder = order;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
     g.add(mesh);
     layerMeshes.push(mesh);
     return mesh;
@@ -407,7 +407,7 @@ export function makeCakeSlice(T) {
     drip.position.set(Math.cos(a) * rim, Math.sin(a) * rim, icingZ + hIcing * 0.22 - drop * 0.45);
     drip.scale.set(0.82, 0.82, 0.55 + drop * 9);
     drip.renderOrder = 4;
-    drip.castShadow = true;
+    drip.castShadow = false;
     g.add(drip);
   }
 
@@ -430,7 +430,7 @@ export function makeCakeSlice(T) {
     s.position.set(x, y, icingTop + 0.022);
     s.rotation.set(0, 0, i * 1.1);
     s.renderOrder = 5;
-    s.castShadow = true;
+    s.castShadow = false;
     g.add(s);
     placed++;
   }
@@ -439,7 +439,7 @@ export function makeCakeSlice(T) {
   cherry.position.set(cherryX, 0, cherryZ);
   cherry.scale.set(1, 1, 0.88);
   cherry.renderOrder = 6;
-  cherry.castShadow = true;
+  cherry.castShadow = false;
   g.add(cherry);
   const stemLen = 0.15;
   const stem = new T.Mesh(new T.CylinderGeometry(0.012, 0.018, stemLen, 6), cakeToonMat(T, '#4e8f2a', 0.03));
@@ -468,7 +468,7 @@ export function makeLeaf(T, color = '#8fd14f') {
     depth: 0.05, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 1, curveSegments: 16,
   });
   const mesh = new T.Mesh(geo, toonMat(T, color, 0.08));
-  mesh.castShadow = true;
+  mesh.castShadow = false;
   g.add(mesh);
   // the blade is nearly flat, so the outline needs a much bigger z factor to read edge-on
   celOutline(mesh, { scale: [1.06, 1.05, 1.6], T });

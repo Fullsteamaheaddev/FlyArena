@@ -2947,6 +2947,17 @@ function updateThreat() {
 let lastFrame = performance.now(), fpsN = 0, fpsT = 0, lastSim = 0, lastSimReal = performance.now();
 const q = new THREE.Quaternion(), previousQ = new THREE.Quaternion(), followDelta = new THREE.Vector3(), brainBase = new THREE.Color();
 function updateShadows(now) {
+  if (isRace && matchPhase === 'lobby') {
+    if (sun.castShadow) {
+      sun.castShadow = false;
+      renderer.shadowMap.needsUpdate = true;
+    }
+    return;
+  }
+  if (sun && !sun.castShadow) {
+    sun.castShadow = true;
+    shadowDirty = true;
+  }
   const extent = Math.min(env.arena.radius + 0.5, Math.max(0.35, camera.position.distanceTo(controls.target) * 0.75));
   const center = controls.target;
   // Quantise camera following to avoid constantly shifting the shadow texels.
@@ -3063,7 +3074,7 @@ function animate() {
     batches.update(f, f.poseUpdated, changed);
   }
   batches.finish();
-  resolution.update(now, largest > 290);
+  resolution.update(now, largest > 290 || (isRace && matchPhase === 'lobby'));
   if (threatAnim) shadowDirty = true;
   updateShadows(now);
   renderer.info.reset(); const renderStart = performance.now(); composer.render();
