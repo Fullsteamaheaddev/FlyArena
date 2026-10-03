@@ -80,7 +80,7 @@ export function dishGrassProps() {
   const props = [];
   const r = rng(90210);
   const baseScale = DISH_GRASS_HEIGHT_CM * GRASS_SCALE_PER_CM;
-  const ringIn = 15.1, ringOut = 16.5, perRow = 180, rows = 3;
+  const ringIn = 15.1, ringOut = 16.5, perRow = 90, rows = 3;
   const rim = DISH_RADIUS - 0.55;
   for (let row = 0; row < rows; row++) {
     const rad0 = ringIn + (row + 0.5) / rows * (ringOut - ringIn);
