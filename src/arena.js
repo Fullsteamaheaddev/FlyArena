@@ -1037,7 +1037,7 @@ function setupRaceChrome() {
       restoreWallet().then(a => {
         if (!a) return;
         refreshProfile();
-        if (matchPhase === 'lobby') paintLobbyOverlay(true);
+        if (matchPhase === 'lobby' && watchOverlayPhase === 'lobby') paintLobbyOverlay(true);
       });
     }
     showWatchWaiting(t('race.wait'));
@@ -1057,7 +1057,7 @@ function setupRaceChrome() {
   setupEnterGate();
   resolveChip().then(() => {
     paintEnterToken();
-    if (matchPhase === 'lobby') paintLobbyOverlay(true);
+    if (matchPhase === 'lobby' && (!isWatch || watchOverlayPhase === 'lobby')) paintLobbyOverlay(true);
     refreshProfile();
   }).catch(() => {});
 }
@@ -1781,11 +1781,13 @@ function applyWatchState(st) {
   }
   if (wasLive && st.phase !== 'live') raceChaos?.stopLive();
   if (isWatch && isRace && st.phase === 'lobby') {
-    raceChaos?.reset();
     pendingCues = [];
     lastWatchCueId = -1;
     for (const f of flies) syncFlyDeathVisual(f);
-    if (!wasLobby || matchChanged) snapRaceOverview();
+    if (!wasLobby || matchChanged) {
+      raceChaos?.reset();
+      snapRaceOverview();
+    }
   }
   if (st.phase === 'results' && st.winner && watchOverlayPhase === 'results' && st.matchId !== watchYipeeMatch) {
     watchYipeeMatch = st.matchId;
@@ -3023,7 +3025,12 @@ function tickDish(now) {
 function animate() {
   requestAnimationFrame(animate);
   if (document.hidden) return;
-  const now = performance.now(); const dt = Math.min(0.1, (now - lastFrame) / 1000); fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
+  const now = performance.now(); const dt = Math.min(0.1, (now - lastFrame) / 1000); fpsT += now - lastFrame; lastFrame = now;
+  if (++fpsN === 30) {
+    const fps = 30000 / fpsT;
+    $('#fps').textContent = fps.toFixed(0);
+    fpsN = 0; fpsT = 0;
+  }
   if (isWatch) drainWatchCues(now);
   for (const f of flies) {
     const s = f.last; if (!s || !f.bodyGroups) continue;

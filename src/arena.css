@@ -210,15 +210,13 @@ body.race .race-card {
   border-image-width: var(--lobby-border);
   border-image-repeat: stretch;
 }
-/* Don't drape a translucent sheet over the WebGL canvas — Chrome composites that every frame and the lobby stutters. */
+/* Shrink-wrap the lobby overlay to the card and center with margin:auto. */
 body.race #raceOverlay:not(.results-panel) {
   background: none;
-  inset: auto;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   width: max-content;
+  height: max-content;
   max-width: calc(100vw - 24px);
+  margin: auto;
 }
 body.race #raceOverlay.results-panel { background: none; }
 body.race #enterGate {
