@@ -1,4 +1,4 @@
-// Sugar Run dish map: spawn-ring grass tufts + three cel-shaded doghouses.
+// Sugar Run dish map: spawn-ring grass hedge + three cel-shaded doghouses.
 
 export const DISH_RADIUS = 18.75;          // 12.5 × 1.5
 export const DISH_SPAWN_R = 15.75;         // 10.5 × 1.5
@@ -10,20 +10,6 @@ const round = v => Math.round(v * 1e4) / 1e4;
 function rng(seed) {
   let s = seed >>> 0 || 1;
   return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
-}
-
-/** Keep a pad around each fly so tufts don't hide the start spots. */
-const SPAWN_CLEAR_R = 2.4;
-
-function nearSpawnXY(x, y, extra = 0) {
-  const c = SPAWN_CLEAR_R + extra;
-  const c2 = c * c;
-  for (const a of SPAWN_ANGLES) {
-    const dx = x - DISH_SPAWN_R * Math.cos(a);
-    const dy = y - DISH_SPAWN_R * Math.sin(a);
-    if (dx * dx + dy * dy < c2) return true;
-  }
-  return false;
 }
 
 // grass.glb height is 1 cm after propScale's 1.2×; target ~2× standing fly, read tall from race cam.
@@ -73,6 +59,14 @@ function dishDoghouseObstacles() {
   });
 }
 
+function nearSpawnPad(x, y, clearR = 1.8) {
+  for (const s of dishSpots()) {
+    const dx = x - s.pos[0], dy = y - s.pos[1];
+    if (dx * dx + dy * dy < clearR * clearR) return true;
+  }
+  return false;
+}
+
 export function dishSpots() {
   return SPAWN_ANGLES.map(a => ({
     pos: [round(DISH_SPAWN_R * Math.cos(a)), round(DISH_SPAWN_R * Math.sin(a))],
@@ -81,25 +75,21 @@ export function dishSpots() {
   }));
 }
 
-/** Render-only grass tufts on the spawn ring; no colliders. */
+/** Render-only hedge along the spawn ring; gaps at the three pads. One GLB per tuft. */
 export function dishGrassProps() {
   const props = [];
   const r = rng(90210);
   const baseScale = DISH_GRASS_HEIGHT_CM * GRASS_SCALE_PER_CM;
-  const rows = 5;
-  const perRow = 240;
-  const rowSpan = 0.62;
+  const ringIn = 15.1, ringOut = 16.5, perRow = 90, rows = 3;
+  const rim = DISH_RADIUS - 0.55;
   for (let row = 0; row < rows; row++) {
-    const t = rows === 1 ? 0.5 : row / (rows - 1);
-    const rad0 = DISH_SPAWN_R + (t - 0.5) * rowSpan;
-    const stagger = row % 2 ? Math.PI / perRow : 0;
+    const rad0 = ringIn + (row + 0.5) / rows * (ringOut - ringIn);
+    const stagger = row * Math.PI / perRow;
     for (let i = 0; i < perRow; i++) {
-      const a = stagger + ((i + (r() - 0.5) * 0.55) / perRow) * Math.PI * 2;
-      const rad = rad0 + (r() - 0.5) * 0.14;
-      const x = rad * Math.cos(a);
-      const y = rad * Math.sin(a);
-      if (nearSpawnXY(x, y)) continue;
-      if (nearDoghouse(x, y, 0.12)) continue;
+      const a = i * 2 * Math.PI / perRow + stagger + (r() - 0.5) * 0.01;
+      const rad = Math.min(rim, rad0 + (r() - 0.5) * 0.22);
+      const x = rad * Math.cos(a), y = rad * Math.sin(a);
+      if (nearSpawnPad(x, y, 1.8) || nearDoghouse(x, y, 0.12)) continue;
       props.push({
         kind: 'grass',
         x: round(x),

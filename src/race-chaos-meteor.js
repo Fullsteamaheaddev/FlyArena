@@ -2,8 +2,8 @@
 export const METEOR_SCALE = 3;
 export const METEOR_TRAIL_WIDTH = 1.42 * METEOR_SCALE;
 
-const MAX_PUFFS = 2400;
-const SOFT_OVERFLOW = 3200;
+const MAX_PUFFS = 180;
+const SOFT_OVERFLOW = 220;
 const TRAIL_STEP = 0.12 * METEOR_SCALE;
 const MAX_STEPS_PER_SEGMENT = 9;
 const LINGER_AFTER_LAND_MS = 5200;
@@ -12,6 +12,7 @@ const FADE_TAIL_MS = 4200;
 
 let smokeGroup = null;
 let smokeTex = null;
+let puffMat = null;
 let puffs = [];
 let T = null;
 let nextBatchId = 1;
@@ -56,12 +57,11 @@ export function disposeMeteorSmoke() {
 
 function disposePuff(p) {
   p.mesh?.parent?.remove(p.mesh);
-  p.mesh?.geometry?.dispose();
-  p.mesh?.material?.dispose();
 }
 
 function makePuffMaterial() {
-  return new T.SpriteMaterial({
+  if (puffMat) return puffMat;
+  puffMat = new T.SpriteMaterial({
     map: smokeTex,
     transparent: true,
     opacity: 0.85,
@@ -71,6 +71,7 @@ function makePuffMaterial() {
     color: 0xe8e8f0,
     toneMapped: false,
   });
+  return puffMat;
 }
 
 function pruneExpired() {
@@ -148,6 +149,7 @@ function spawnMeteorSmokePuff(x, y, z, scale, batchId, driftVec) {
   const bornAt = performance.now();
   const end = batchDieAt.get(batchId);
   const mesh = new T.Sprite(makePuffMaterial());
+  if (puffMat.opacity < 0.5) puffMat.opacity = 0.78;
   mesh.position.set(x, y, z);
   mesh.scale.setScalar(scale);
   mesh.renderOrder = 8;
@@ -241,7 +243,6 @@ export function tickMeteorSmoke(t) {
       continue;
     }
     const age = (t - p.bornAt) / 1000;
-    p.mesh.material.opacity = p.baseOpacity * fadeOf.get(p.batchId);
     if (!p.frozen) {
       p.mesh.position.x += p.vx;
       p.mesh.position.y += p.vy;
@@ -251,6 +252,11 @@ export function tickMeteorSmoke(t) {
     next.push(p);
   }
   puffs = next;
+  if (puffMat) {
+    let fade = 0;
+    for (const v of fadeOf.values()) if (v > fade) fade = v;
+    puffMat.opacity = 0.78 * fade;
+  }
   syncBatchSets();
 }
 

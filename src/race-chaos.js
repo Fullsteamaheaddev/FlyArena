@@ -93,8 +93,6 @@ export function createRaceChaos(api) {
   let dishSeq = 0, dishHistory = [{ seq: 0, pose: DISH_FLAT }], dishLatest = DISH_FLAT, dishDrawn = null;
   let camShot = null;
   let shakes = [];
-  let sceneFlashes = [];
-  let sceneFlashEl = null;
   let laserSession = null;
   let laserPool = null;
   let laserBurnLast = null;
@@ -135,7 +133,7 @@ export function createRaceChaos(api) {
       lightFree = [];
       for (let i = 0; i < LIGHT_POOL_N; i++) {
         const l = new T.PointLight('#ffffff', 0, 8, 2);
-        l.visible = true;
+        l.visible = false;
         lightPool.add(l);
         lightFree.push(l);
       }
@@ -157,6 +155,7 @@ export function createRaceChaos(api) {
   function releaseLight(l) {
     if (!l) return;
     l.intensity = 0;
+    l.visible = false;
     if (!lightFree.includes(l)) lightFree.push(l);
   }
   function releaseAllLights() {
@@ -164,6 +163,7 @@ export function createRaceChaos(api) {
     lightFree = [];
     for (const l of lightPool.children) {
       l.intensity = 0;
+      l.visible = false;
       lightFree.push(l);
     }
   }
@@ -205,53 +205,6 @@ export function createRaceChaos(api) {
     const copy = chaosCopy(lastToast.kind, lastToast.name);
     toastEl.querySelector('h2').textContent = copy.title;
     toastEl.querySelector('p').textContent = copy.line;
-  }
-  function sceneFlashBox() {
-    if (sceneFlashEl) return sceneFlashEl;
-    const el = document.createElement('div');
-    el.id = 'lightningSceneFlash';
-    el.hidden = true;
-    el.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(el);
-    sceneFlashEl = el;
-    return el;
-  }
-  function clearSceneFlash() {
-    sceneFlashes = [];
-    if (sceneFlashEl) {
-      sceneFlashEl.hidden = true;
-      sceneFlashEl.style.opacity = '0';
-    }
-  }
-  function pokeSceneFlash(opts = {}) {
-    const peak = opts.hit ? 0.55 : opts.thin ? 0.28 : 0.42;
-    const dur = opts.hit ? 240 : opts.thin ? 160 : 200;
-    sceneFlashes.push({ t0: now(), peak, dur });
-    updateSceneFlashEl(now());
-  }
-  function updateSceneFlashEl(t) {
-    let op = 0;
-    const next = [];
-    for (const s of sceneFlashes) {
-      const u = (t - s.t0) / s.dur;
-      if (u >= 1) continue;
-      let v = 0;
-      if (u >= 0) {
-        if (u < 0.05) v = s.peak * (u / 0.05);
-        else v = s.peak * (1 - ((u - 0.05) / 0.95) ** 1.8);
-      }
-      op = Math.max(op, v);
-      next.push(s);
-    }
-    sceneFlashes = next;
-    const el = sceneFlashBox();
-    if (op <= 0.001) {
-      el.hidden = true;
-      el.style.opacity = '0';
-    } else {
-      el.hidden = false;
-      el.style.opacity = String(op);
-    }
   }
   function post(f, msg) { if (f?.worker) f.worker.postMessage({ type: 'chaos', ...msg }); }
   function postAll(msg) { for (const f of liveFlies(flies())) post(f, msg); }
@@ -671,7 +624,6 @@ export function createRaceChaos(api) {
   }
 
   function flashBolt(x, y, opts = {}) {
-    pokeSceneFlash(opts);
     const root = fxGroup();
     const height = opts.height ?? boltHeight();
     const bolt = makeBolt(T, x, y, { ...opts, height });
@@ -990,7 +942,7 @@ export function createRaceChaos(api) {
     const root = fxGroup();
     for (let i = 0; i < 16; i++) {
       const [x, y] = randomInDish(2);
-      const mat = celMat('#c4b8a0', 0);
+      const mat = new T.MeshBasicMaterial({ color: '#c4b8a0', transparent: true, opacity: 0.45, toneMapped: false });
       mat.opacity = 0.45;
       const s = new T.Mesh(new T.SphereGeometry(randRange(0.05, 0.12), 8, 8), mat);
       s.position.set(x, y, randRange(0.08, 0.35));
@@ -1118,7 +1070,6 @@ export function createRaceChaos(api) {
       burstMeteorSmoke(x, y, zGround, smokeBatch);
       sealMeteorSmokeBatch(smokeBatch, landT);
       camShake(200, 0.22);
-      pokeSceneFlash({ thin: true });
       scorches.push({ x, y, r: 0.5 * scorchScale(), until: now() + 15000 });
       api.repaintFloor?.();
       if (physics) {
@@ -1766,7 +1717,6 @@ export function createRaceChaos(api) {
   function disposeAllFx() {
     tweens = [];
     shakes = [];
-    clearSceneFlash();
     endLaserSession();
     endWildcardSessions();
     clearLaserDecals();
@@ -1853,7 +1803,6 @@ export function createRaceChaos(api) {
         return true;
       });
     }
-    updateSceneFlashEl(t);
     tickLaserSession(t, api.isHostLive?.());
     tickLaserDecals(t);
     tickMeteorSmoke(t);
@@ -1937,6 +1886,11 @@ export function createRaceChaos(api) {
     for (const name of chaosPropKeys()) {
       const m = cloneChaosProp(name);
       if (!m) continue;
+      m.position.set(0, 0, -80);
+      root.add(m);
+    }
+    for (const make of [makeThumb, makeHand, makeFinger]) {
+      const m = make(T);
       m.position.set(0, 0, -80);
       root.add(m);
     }
