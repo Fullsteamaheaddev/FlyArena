@@ -229,6 +229,7 @@ export default {
   'lobby.pickError': 'Выберите муху',
   'lobby.confirm': 'Подтвердите в кошельке…',
   'lobby.done': 'Готово.',
+  'tx.pending': 'Ожидание…',
   'hist.last': 'Прошлая гонка',
 
   'race.wait': 'Ждём следующую гонку',

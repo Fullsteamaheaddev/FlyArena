@@ -229,6 +229,7 @@ export default {
   'lobby.pickError': '请选一只果蝇',
   'lobby.confirm': '请在钱包中确认…',
   'lobby.done': '完成。',
+  'tx.pending': '处理中…',
   'hist.last': '上场比赛',
 
   'race.wait': '等待下一场比赛',

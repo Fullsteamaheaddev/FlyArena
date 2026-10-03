@@ -949,7 +949,10 @@ body.race .race-card .bet-stake-row span {
 body.race .race-card .bet-stake button,
 body.race .race-card .bet-wallet button,
 body.race .race-card .bet-actions button { min-width: 0; padding: 8px 14px; font-size: 16px; }
-body.race .race-card #betPlace { min-width: 96px; }
+body.race .race-card #betPlace.connect-btn {
+  font: 400 16px/1.1 var(--race-title);
+  min-width: 96px;
+}
 body.race .connect-btn,
 body.race .race-card button.connect-btn,
 body.race #walletPick .connect-btn {
@@ -975,7 +978,12 @@ body.race .race-card #betDisconnect {
 }
 body.race .race-card #betConnect { font: 400 13px/1.2 ui-sans-serif, system-ui, sans-serif; }
 body.race .race-card #betDisconnect { font: 400 16px/1.1 var(--race-title); }
-body.race .race-card button[disabled] { opacity: 0.45; cursor: not-allowed; }
+body.race .race-card button[disabled]:not([aria-busy="true"]) { opacity: 0.45; cursor: not-allowed; }
+body.race .race-card button[aria-busy="true"],
+body.admin button[aria-busy="true"] {
+  opacity: .7;
+  cursor: wait;
+}
 body.race .race-card button.danger,
 body.race #profileDisconnect {
   background: #b42318;

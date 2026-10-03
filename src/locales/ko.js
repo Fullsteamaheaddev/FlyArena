@@ -229,6 +229,7 @@ export default {
   'lobby.pickError': '파리를 고르세요',
   'lobby.confirm': '지갑에서 확인하세요…',
   'lobby.done': '완료.',
+  'tx.pending': '대기 중…',
   'hist.last': '지난 경기',
 
   'race.wait': '다음 경기를 기다리는 중',

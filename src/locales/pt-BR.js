@@ -229,6 +229,7 @@ export default {
   'lobby.pickError': 'Escolha uma mosca',
   'lobby.confirm': 'Confirme na carteira…',
   'lobby.done': 'Pronto.',
+  'tx.pending': 'Pendente…',
   'hist.last': 'Última corrida',
 
   'race.wait': 'Esperando a próxima corrida',

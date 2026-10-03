@@ -1027,7 +1027,7 @@ function setupRaceChrome() {
       profile.classList.toggle('guest', !getAccount());
       $('#profileConnect').onclick = e => {
         if (getAccount()) copyProfileAddress(e);
-        else connectFromUi(connectWallet);
+        else connectFromUi(connectWallet, e.currentTarget);
       };
       $('#profileDisconnect').onclick = () => clearWalletUi();
       profileFoldChrome(profile.classList.contains('folded'));
@@ -2098,22 +2098,44 @@ function flyTag(flyId, id = matchId) {
   const color = saved?.[2] || f?.color || FLY_COLORS[flyId] || 'currentColor';
   return `<span class="tk-fly" style="--fly:${color}">${name}</span>`;
 }
-async function connectFromUi(fn = connectWallet) {
+async function withBusy(btn, fn) {
+  if (!btn) return fn();
+  if (btn.dataset.busy === '1') return;
+  const label = btn.textContent;
+  const wasDisabled = btn.disabled;
+  btn.dataset.busy = '1';
+  btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  btn.textContent = t('tx.pending');
+  try {
+    return await fn();
+  } finally {
+    if (btn.isConnected) {
+      delete btn.dataset.busy;
+      btn.disabled = wasDisabled;
+      btn.removeAttribute('aria-busy');
+      if (btn.textContent === t('tx.pending')) btn.textContent = label;
+    }
+  }
+}
+async function connectFromUi(fn = connectWallet, btn) {
   if (!window.ethereum && needsMobileWalletPick()) {
     showWalletPick();
     return;
   }
-  const note = $('#betNote') || $('#profileNote');
-  try {
-    if (note) note.textContent = t('profile.checkWallet');
-    await fn();
-    if (note) note.textContent = '';
-    if (matchPhase === 'lobby') paintLobbyOverlay(true);
-    if (matchPhase === 'results') paintResultActions(matchId);
-    await refreshProfile();
-  } catch (e) {
-    if (note) note.textContent = e.shortMessage || e.message || String(e);
-  }
+  return withBusy(btn, async () => {
+    const note = $('#betNote') || $('#profileNote');
+    try {
+      if (note) note.textContent = t('profile.checkWallet');
+      await fn();
+      if (note) note.textContent = '';
+      if (matchPhase === 'lobby') paintLobbyOverlay(true);
+      if (matchPhase === 'results') paintResultActions(matchId);
+      await refreshProfile();
+    } catch (e) {
+      if (note) note.textContent = e.shortMessage || e.message || String(e);
+    }
+  });
 }
 function needsMobileWalletPick() {
   return raceMobile() || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -2164,9 +2186,9 @@ function injectResultActions(id) {
   host.innerHTML = (resultActions.claim ? `<button id="betClaim" class="primary" type="button">${t('ticket.claim')}</button>` : '')
     + (resultActions.refund ? `<button id="betRefund" type="button">${t('ticket.refund')}</button>` : '');
   const claim = host.querySelector('#betClaim');
-  if (claim) claim.onclick = () => runBetTx(() => claimRace(id));
+  if (claim) claim.onclick = () => runBetTx(() => claimRace(id), claim);
   const refund = host.querySelector('#betRefund');
-  if (refund) refund.onclick = () => runBetTx(() => refundRace(id));
+  if (refund) refund.onclick = () => runBetTx(() => refundRace(id), refund);
   const note = $('#raceCard #betNote');
   if (note && resultActions.note != null) note.textContent = resultActions.note;
 }
@@ -2209,32 +2231,34 @@ function wireLobbyCard(card) {
     b.onclick = () => hostPickRaceMap(b.dataset.map);
   });
   const connect = card.querySelector('#betConnect');
-  if (connect) {
-    connect.classList.toggle('connect-btn', !getAccount());
-    connect.onclick = () => connectFromUi(getAccount() ? switchAccount : connectWallet);
-  }
+  if (connect) connect.onclick = () => connectFromUi(switchAccount, connect);
   const disc = card.querySelector('#betDisconnect');
   if (disc) disc.onclick = () => clearWalletUi();
   const bet = card.querySelector('#betPlace');
-  if (bet) bet.onclick = () => runBetTx(async () => {
-    const amt = +card.querySelector('#betAmt')?.value || 10;
-    const fly = betFlyId ?? flies[0]?.id;
-    if (fly == null) throw new Error(t('lobby.pickError'));
-    await placeBet(matchId, fly, amt);
-    lastPoolRead = 0; await refreshPoolSnap(); paintLobbyOverlay(); await refreshProfile();
-  });
-}
-async function runBetTx(fn) {
-  const note = $('#betNote') || $('#profileNote');
-  try {
-    await ensureWallet();
-    if (note) note.textContent = t('lobby.confirm');
-    await fn();
-    if (note) note.textContent = t('lobby.done');
-    await refreshProfile();
-  } catch (e) {
-    if (note) note.textContent = e.shortMessage || e.message || String(e);
+  if (bet) {
+    if (!getAccount()) bet.onclick = () => connectFromUi(connectWallet, bet);
+    else bet.onclick = () => runBetTx(async () => {
+      const amt = +card.querySelector('#betAmt')?.value || 10;
+      const fly = betFlyId ?? flies[0]?.id;
+      if (fly == null) throw new Error(t('lobby.pickError'));
+      await placeBet(matchId, fly, amt);
+      lastPoolRead = 0; await refreshPoolSnap(); paintLobbyOverlay(); await refreshProfile();
+    }, bet);
   }
+}
+async function runBetTx(fn, btn) {
+  return withBusy(btn, async () => {
+    const note = $('#betNote') || $('#profileNote');
+    try {
+      await ensureWallet();
+      if (note) note.textContent = t('lobby.confirm');
+      await fn();
+      if (note) note.textContent = t('lobby.done');
+      await refreshProfile();
+    } catch (e) {
+      if (note) note.textContent = e.shortMessage || e.message || String(e);
+    }
+  });
 }
 function ticketStatus(r) {
   if (r.outcome === 'unclaimed') return { label: t('ticket.won'), kind: 'won' };
@@ -2254,7 +2278,7 @@ async function refreshProfile() {
   const acct = getAccount();
   el.classList.toggle('guest', !acct);
   if (acct) hideWalletPick();
-  if (connect) {
+  if (connect && !(connect.getAttribute('aria-busy') === 'true' && !acct)) {
     connect.textContent = connect.dataset.copied === '1' ? t('profile.copied') : shortAddr(acct);
     connect.title = acct ? t('profile.copyAddr') : t('profile.connectWallet');
     connect.classList.toggle('connect-btn', !acct);
@@ -2294,8 +2318,8 @@ async function refreshProfile() {
         const win = r.payout != null && Number(r.payout) > 0 && r.outcome !== 'lost' ? ` +${Number(r.payout).toFixed(1)}` : '';
         return `<li><b>${matchWhen(r.matchId)}</b>${flyTag(r.flyId, r.matchId)}<span class="tk-amt">${Number(r.amount).toFixed(1)}</span><i class="tk-status tk-${st.kind}">${st.label}${win}</i><span class="tk-act">${act}</span></li>`;
       }).join('') || `<li>${t('profile.noTickets')}</li>`;
-      list.querySelectorAll('[data-claim]').forEach(b => { b.onclick = () => runBetTx(() => claimRace(+b.dataset.claim)); });
-      list.querySelectorAll('[data-refund]').forEach(b => { b.onclick = () => runBetTx(() => refundRace(+b.dataset.refund)); });
+      list.querySelectorAll('[data-claim]').forEach(b => { b.onclick = () => runBetTx(() => claimRace(+b.dataset.claim), b); });
+      list.querySelectorAll('[data-refund]').forEach(b => { b.onclick = () => runBetTx(() => refundRace(+b.dataset.refund), b); });
     }
   } catch (e) {
     if (seq !== profileSeq) return;
@@ -2340,12 +2364,12 @@ function paintLobbyOverlay(force = false) {
       ${poolRowsHtml()}
       <div class="bet-stake">
         <div class="bet-stake-row"><input id="betAmt" type="number" min="1" value="10"><span>${chipSymbol()}</span>
-          <button id="betPlace" class="primary" type="button"${open ? '' : ' disabled'}>${t('lobby.bet')}</button></div>
+          <button id="betPlace" class="${acct ? 'primary' : 'connect-btn'}" type="button"${acct && !open ? ' disabled' : ''}>${acct ? t('lobby.bet') : t('profile.connect')}</button></div>
       </div>
-      <div class="bet-wallet">
+      ${acct ? `<div class="bet-wallet">
         <button id="betConnect" type="button">${shortAddr(acct)}</button>
-        ${acct ? `<button id="betDisconnect" class="danger" type="button">${t('profile.disconnect')}</button>` : ''}
-      </div>
+        <button id="betDisconnect" class="danger" type="button">${t('profile.disconnect')}</button>
+      </div>` : ''}
       <p id="betNote" class="flyt">${note}</p>`;
   } else {
     card.innerHTML = `${lobbyBrandHtml()}<p>${t('lobby.blurb')}</p>

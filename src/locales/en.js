@@ -229,6 +229,7 @@ export default {
   'lobby.pickError': 'Pick a fly',
   'lobby.confirm': 'Confirm in wallet…',
   'lobby.done': 'Done.',
+  'tx.pending': 'Pending…',
   'hist.last': 'Last race',
 
   'race.wait': 'Waiting for the next race',
