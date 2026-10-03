@@ -79,7 +79,7 @@ a { color: var(--acc); }
 #scoreboard section:last-child { border-bottom: 0; }
 #scoreboard h2 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; }
 
-#raceOverlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 5; pointer-events: none; }
+#raceOverlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 5; pointer-events: none; padding: 56px 12px 28px; box-sizing: border-box; }
 #raceOverlay[hidden] { display: none; }
 body.race #raceOverlay.results-panel {
   display: grid;
@@ -142,18 +142,32 @@ body.race {
   --wood-border: 30px;
   /* Extra clearance so scroll content stays on the cream board, not the bottom wood rail */
   --wood-board-pad-bottom: 16px;
+  /* LobbyContainer.png 1889×2115 — corners keep leaves/grass, edges are wood. */
+  --lobby-slice: 17% 21% 24% 21%;
+  --lobby-border: 70px;
+  --race-sky: #c5dce8;
+}
+html.race,
+html.race body,
+html.race #loading,
+body.race,
+body.race #loading {
+  background: var(--race-sky, #c5dce8);
 }
 body.race #loading {
   z-index: 30;
+  background: var(--race-sky);
+  color: var(--wood-ink);
 }
 body.race #loading .title {
   font-family: var(--race-title);
   font-weight: 400;
-  color: #fff;
+  color: var(--wood-ink);
 }
 body.race #loading #status {
-  font-weight: 700;
-  color: #fff;
+  font-family: var(--race-body);
+  font-weight: 400;
+  color: var(--wood-ink-dim);
 }
 body.race #enterGate p,
 body.race .race-card p,
@@ -172,11 +186,6 @@ body.race #scoreboard,
 body.race #brainpanel,
 body.race .race-card,
 body.race #profile {
-  border: var(--wood-border) solid transparent;
-  border-image-source: url("/container-headless.png");
-  border-image-slice: var(--wood-slice) fill;
-  border-image-width: var(--wood-border);
-  border-image-repeat: stretch;
   background: transparent;
   background-color: transparent;
   backdrop-filter: none;
@@ -184,6 +193,22 @@ body.race #profile {
   border-radius: 0;
   color: var(--wood-ink);
   overflow: visible;
+}
+body.race #scoreboard,
+body.race #brainpanel,
+body.race #profile {
+  border: var(--wood-border) solid transparent;
+  border-image-source: url("/container-headless.png");
+  border-image-slice: var(--wood-slice) fill;
+  border-image-width: var(--wood-border);
+  border-image-repeat: stretch;
+}
+body.race .race-card {
+  border: var(--lobby-border) solid transparent;
+  border-image-source: url("/LobbyContainer.png");
+  border-image-slice: var(--lobby-slice) fill;
+  border-image-width: var(--lobby-border);
+  border-image-repeat: stretch;
 }
 body.race #raceOverlay { background: rgba(8, 6, 14, .42); }
 body.race #enterGate {
@@ -450,6 +475,9 @@ body.race #enterGate .enter-token.copied {
 body.race .race-card-breathe {
   transform-origin: center center;
 }
+body.race .race-card-breathe:has(.lobby-logo) {
+  padding-top: 78px;
+}
 body.race #raceOverlay.show .race-card-breathe {
   animation: raceCardEnter .45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
@@ -646,15 +674,44 @@ body.race .race-card h2.hist {
   letter-spacing: 0;
 }
 body.race .race-card {
-  width: min(462px, calc(100vw - 24px));
-  max-width: 462px;
-  padding: 14px 18px 18px;
+  width: min(520px, calc(100vw - 24px));
+  max-width: 520px;
+  padding: 8px 18px 22px;
   box-sizing: border-box;
 }
+body.race .race-card:has(.lobby-logo) {
+  position: relative;
+  padding-top: 72px;
+}
+body.race .race-card h1.lobby-brand {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--lobby-border) * -0.28);
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: min(52%, 210px);
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  font-size: 0;
+}
+body.race .race-card .lobby-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  filter: drop-shadow(0 3px 0 rgba(42, 24, 16, .28));
+  pointer-events: none;
+  user-select: none;
+}
+body.race .race-card:has(.lobby-logo) > p:first-of-type {
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
 body.race #raceCard[data-kind="results"] {
-  width: min(340px, calc(100vw - 32px));
-  max-width: 340px;
-  padding: 20px 22px 18px;
+  width: min(400px, calc(100vw - 32px));
+  max-width: 400px;
+  padding: 8px 16px 20px;
 }
 body.race #raceCard[data-kind="results"] h1 {
   font-size: 28px;
@@ -761,7 +818,39 @@ body.race .race-card .bet-wallet {
   display: flex; flex-direction: column; gap: 8px; align-items: center;
   margin: 14px 0 12px;
 }
-body.race .race-card .bet-stake input { width: 72px; }
+body.race #raceCard[data-kind="lobby"]:has(.bet-stake) {
+  padding-bottom: 8px;
+}
+body.race #raceCard[data-kind="lobby"]:has(.bet-stake) .bet-wallet {
+  margin: 10px 0 4px;
+}
+body.race #raceCard[data-kind="lobby"]:has(.bet-stake) #betNote {
+  margin-bottom: 2px;
+}
+body.race .race-card .bet-stake input {
+  width: 76px;
+  box-sizing: border-box;
+  color: var(--wood-ink);
+  -webkit-text-fill-color: var(--wood-ink);
+  caret-color: var(--wood-ink);
+  color-scheme: light;
+  background: var(--wood-cream);
+  border: 3px solid var(--wood-line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  opacity: 1;
+}
+body.race .race-card .bet-stake input:focus {
+  outline: 2px solid var(--wood-line);
+  outline-offset: 1px;
+}
+body.race .race-card .bet-stake-row span {
+  color: var(--wood-ink);
+}
 body.race .race-card .bet-stake button,
 body.race .race-card .bet-wallet button,
 body.race .race-card .bet-actions button { min-width: 0; padding: 8px 14px; font-size: 16px; }
@@ -810,7 +899,8 @@ body.race #walletPick[hidden] { display: none; }
 body.race:has(#walletPick:not([hidden])) #raceOverlay { visibility: hidden; }
 body.race #walletPick .wallet-pick-card {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
-  min-width: 240px; max-width: 360px;
+  min-width: 280px; max-width: 400px;
+  padding: 8px 16px 20px;
 }
 body.race #walletPick .wallet-pick-card .connect-btn {
   min-width: 160px; padding: 10px 22px;
@@ -1045,7 +1135,7 @@ body.race #groups .q:hover { color: var(--wood-ink); }
 body.race #groups .v { color: var(--wood-ink); }
 
 @media (max-width: 700px), (max-height: 500px) {
-  body.race { --wood-border: 22px; }
+  body.race { --wood-border: 22px; --lobby-border: 52px; }
   body.race #raceHud:not([hidden]) {
     top: max(8px, env(safe-area-inset-top));
     left: max(8px, env(safe-area-inset-left));
@@ -1135,8 +1225,8 @@ body.race #groups .v { color: var(--wood-ink); }
 
   body.race .race-card {
     min-width: 0;
-    width: min(374px, calc(100% - 24px));
-    max-width: 374px;
+    width: min(400px, calc(100% - 24px));
+    max-width: 400px;
     min-height: 0;
     max-height: min(88dvh, 640px);
     overflow: visible;
@@ -1147,6 +1237,9 @@ body.race #groups .v { color: var(--wood-ink); }
     margin: 0;
   }
   body.race .race-card h1 { font-size: 24px; }
+  body.race .race-card h1.lobby-brand {
+    width: min(56%, 180px);
+  }
   body.race .race-card p { margin-bottom: 14px; }
   body.race .race-card button {
     min-width: 160px;

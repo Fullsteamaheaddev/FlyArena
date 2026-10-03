@@ -4,12 +4,10 @@ import { groundAt } from './sim/senses.js';
 import { mapPropMeshes } from './race-map-assets.js';
 import { propScale } from './desert-prop-scale.js';
 import { applySwayWind, SWAY_KINDS, swayForMaterial, swayMaterials } from './race-map-sway.js';
-import { applyCelShading, celMatVertexColors, celOutlineMat } from './cel-shade.js';
+import { applyCelShading, celOutlineMat } from './cel-shade.js';
 import { dishDoghouseProps, dishGrassProps } from './sim/maps/dish.js';
 
-const GRASS_INK = '#182012';
 const HOUSE_INK = '#1c120c';
-const GRASS_OUTLINE_XY = 1.18;
 const HOUSE_OUTLINE = 1.04;
 
 function rng(seed) {
@@ -179,11 +177,9 @@ export function buildDishScene(envGroup, env, ctx) {
   }
   const mtx = new THREE.Matrix4(), qq = new THREE.Quaternion(), zAxis = new THREE.Vector3(0, 0, 1);
   const sc = new THREE.Vector3(), ps = new THREE.Vector3();
-  const grassInk = celOutlineMat(THREE, GRASS_INK);
-  grassInk.side = THREE.BackSide;
   const houseInk = celOutlineMat(THREE, HOUSE_INK);
   houseInk.side = THREE.BackSide;
-  own.push(grassInk, houseInk);
+  own.push(houseInk);
   for (const [kind, list] of byKind) {
     for (const tm of mapPropMeshes(kind)) {
       const isGrass = kind === 'grass';
@@ -198,41 +194,40 @@ export function buildDishScene(envGroup, env, ctx) {
           m.polygonOffsetUnits = 1;
         }
       }
-      const grassMat = isGrass ? keep(celMatVertexColors()) : null;
+      const grassMat = isGrass ? keep(new THREE.MeshBasicMaterial({
+        color: new THREE.Color(1.15, 1.7, 1.2),
+        vertexColors: true,
+      })) : null;
       if (grassMat) {
         grassMat.polygonOffset = true;
         grassMat.polygonOffsetFactor = 1;
         grassMat.polygonOffsetUnits = 1;
+        swayForMaterial(grassMat);
       }
       const place = (im, outline) => {
         list.forEach((p, i) => {
           qq.setFromAxisAngle(zAxis, p.yaw || 0);
           sc.set(...propScale(p));
-          if (outline) {
-            if (isGrass) { sc.x *= GRASS_OUTLINE_XY; sc.y *= GRASS_OUTLINE_XY; }
-            else sc.multiplyScalar(HOUSE_OUTLINE);
-          }
+          if (outline) sc.multiplyScalar(HOUSE_OUTLINE);
           ps.set(p.x, p.y, propZ(p, env));
           im.setMatrixAt(i, mtx.compose(ps, qq, sc));
         });
         im.instanceMatrix.needsUpdate = true;
         im.computeBoundingSphere();
       };
-      if (isGrass || isHouse) {
-        const ink = isGrass ? grassInk : houseInk;
-        const imOl = keep(new THREE.InstancedMesh(tm.geometry, ink, list.length));
+      if (isHouse) {
+        const imOl = keep(new THREE.InstancedMesh(tm.geometry, houseInk, list.length));
         imOl.name = `${kind}:${tm.name}:ink`;
         place(imOl, true);
         imOl.castShadow = imOl.receiveShadow = false;
         imOl.renderOrder = 0;
-        if (isGrass) imOl.customDepthMaterial = swayForMaterial(ink);
         root.add(imOl);
       }
       const im = keep(new THREE.InstancedMesh(tm.geometry, isGrass ? grassMat : tm.material, list.length));
       im.name = `${kind}:${tm.name}`;
       place(im, false);
-      im.castShadow = true;
-      im.receiveShadow = true;
+      im.castShadow = !isGrass;
+      im.receiveShadow = !isGrass;
       im.renderOrder = 1;
       if (SWAY_KINDS.has(kind)) {
         im.customDepthMaterial = isGrass ? swayForMaterial(grassMat, tm.name) : swayMaterials(tm);

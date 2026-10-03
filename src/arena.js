@@ -51,6 +51,10 @@ const isRace = presetKey === 'race' && PRESET === PRESETS.race;
 const raceRole = isRace ? (matchRole() || 'host') : null;
 const isWatch = raceRole === 'watch';
 const isHost = raceRole === 'host';
+if (isRace) {
+  document.documentElement.classList.add('race');
+  document.body.classList.add('race');
+}
 const chaosTestMode = import.meta.env.DEV && new URLSearchParams(location.search).has('chaosTest');
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
@@ -1494,12 +1498,15 @@ function armWatchAudio() {
   addEventListener('touchstart', unlock, { passive: true });
   addEventListener('keydown', unlock);
 }
+function lobbyBrandHtml() {
+  return `<h1 class="lobby-brand"><img class="lobby-logo" src="${BASE}Flieslogo.png" alt="Flies Armageddon" width="954" height="725" decoding="async"></h1>`;
+}
 function showWatchWaiting(msg) {
   const card = $('#raceCard');
   lastLobbyKind = '';
   lastPoolKey = '';
   if (card) card.dataset.kind = '';
-  card.innerHTML = `<h1>Sugar Run</h1><p>${msg}</p>`;
+  card.innerHTML = `${lobbyBrandHtml()}<p>${msg}</p>`;
   if (watchOverlayPhase !== 'wait') showRaceOverlayCard(card);
   else { const overlay = $('#raceOverlay'); overlay.hidden = false; }
   watchOverlayPhase = 'wait';
@@ -2328,7 +2335,7 @@ function paintLobbyOverlay(force = false) {
     const note = !chainConfigured() ? t('lobby.poolMissing')
       : poolOpError && poolStatus !== 1 ? t('lobby.opOffline')
       : (open ? t('lobby.pickFly') : t('lobby.opening'));
-    card.innerHTML = `<h1>Sugar Run</h1><p>${t('lobby.blurb')}</p>
+    card.innerHTML = `${lobbyBrandHtml()}<p>${t('lobby.blurb')}</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       ${poolRowsHtml()}
       <div class="bet-stake">
@@ -2341,7 +2348,7 @@ function paintLobbyOverlay(force = false) {
       </div>
       <p id="betNote" class="flyt">${note}</p>`;
   } else {
-    card.innerHTML = `<h1>Sugar Run</h1><p>${t('lobby.blurb')}</p>
+    card.innerHTML = `${lobbyBrandHtml()}<p>${t('lobby.blurb')}</p>
       <p class="sub" id="lobbyClock">${clock}</p>
       <p class="flyt">${t('lobby.autoStart')}</p>
       ${lobbyMapHtml()}
