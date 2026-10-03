@@ -51,6 +51,14 @@ export class Motor {
     this.phase = 0; this.cmd = { v: 0, turn: 0, drive: 0, back: 0, escape: 0 }; this.jumpT = -1;
     this.feedingIdx = bodymap.feeding;
   }
+  reset() {
+    this.rate.fill(0); this.lastCount.fill(0);
+    this.phase = 0; this.cmd = { v: 0, turn: 0, drive: 0, back: 0, escape: 0 };
+    this.jumpT = -1; this.jumping = false; this.righting = false; this.recoverUntil = 0;
+    this.invertedMs = 0; this.gfTimes = []; this.toSlow = READOUT.takeoffInit;
+    this.turnF = 0; this.turnBase = 0; this.ampF = 0; this.stepAmp = 0; this.pivot = false;
+    this.groomPhase = 0; this.flying = false; this.launchT = -1;
+  }
   /** update filtered rates from brain spike counts; dtMs since last call */
   readBrain(spikeCount, dtMs, tau = 40) {
     const k = dtMs / tau, inv = 1000 / dtMs;

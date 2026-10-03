@@ -339,20 +339,25 @@ async function mainWatch() {
 }
 
 // ---------------- scene ----------------
+function raceSpotPlan() {
+  const spots = (raceMap(raceMapId).flySpots || []).slice();
+  const n = spots.length;
+  if (!n) return [];
+  const rot = raceSpotRot % n;
+  raceSpotRot++;
+  const ids = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+  return Array.from({ length: n }, (_, i) => {
+    const s = spots[(i + rot) % n], k = ids[i];
+    return { pos: s.pos, yaw: s.yaw, sex: s.sex, name: RACE_NAMES[k], color: FLY_COLORS[k] };
+  });
+}
 async function spawnPresetFlies() {
   const st0 = PRESET.start || [0, 0, 0];
   const flySpots = isRace ? raceMap(raceMapId).flySpots : PRESET.flySpots;
   if (flySpots) {
-    const spots = flySpots.slice();
     if (isRace) {
-      const n = spots.length, rot = raceSpotRot % n;
-      raceSpotRot++;
-      const ids = [...Array(n).keys()];
-      for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
-      for (let i = 0; i < n; i++) {
-        const s = spots[(i + rot) % n], k = ids[i];
-        await addFly(s.pos, s.yaw, s.sex, { name: RACE_NAMES[k], color: FLY_COLORS[k] });
-      }
+      for (const s of raceSpotPlan()) await addFly(s.pos, s.yaw, s.sex, { name: s.name, color: s.color });
     } else for (const s of flySpots) await addFly(s.pos, s.yaw, s.sex);
   } else { await addFly([st0[0], st0[1]], st0[2]);
     for (let k = 1; k < (PRESET.flies || 1); k++) { const ang = k * 2.4; await addFly([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)], ang + Math.PI); } }
@@ -2703,6 +2708,29 @@ function checkRaceFinish(f) {
     announceRaceWinner(last, 'died');
   }
 }
+function restoreRaceFood() {
+  if (env.food[0]) env.food[0].amount = 8;
+  if (env.food.length > 1) env.food.length = 1;
+  if (env.odors) env.odors = env.odors.filter(o => !o.chaosCake);
+  env.threat = null;
+  envGroup?.children.forEach(m => { if (m.userData.food) m.material.opacity = 0.35 + 0.65 * Math.min(1, m.userData.food.amount / 5); });
+}
+function recycleRaceFlies() {
+  const plan = raceSpotPlan();
+  const ordered = flies.slice().sort((a, b) => a.id - b.id);
+  if (plan.length !== ordered.length || ordered.some(f => !f.worker)) return false;
+  for (let i = 0; i < ordered.length; i++) {
+    const f = ordered[i], s = plan[i];
+    applyWatchFlyIdent(f, s);
+    clearDeadFlyFx(f);
+    delete f.diedAt;
+    f.last = null; f.prev = null;
+    syncFlySceneLabel(f);
+    f.worker.postMessage({ type: 'pause' });
+    f.worker.postMessage({ type: 'respawn', pos: s.pos, yaw: s.yaw });
+  }
+  return true;
+}
 async function resetRace() {
   if (raceResetting) return;
   raceResetting = true;
@@ -2713,16 +2741,23 @@ async function resetRace() {
   const clock = $('#raceClock'); if (clock) clock.hidden = true;
   if (raceAnnounce) { raceAnnounce.element.querySelector('.race-announce-text')?.classList.remove('pop'); }
   if (!raceBrainTouched) setRaceBrainFolded(true, { instant: true });
-  for (const f of flies) { f.worker?.postMessage({ type: 'pause' }); removeFly(f); }
-  flies.length = 0; nextId = 0; selected = 0;
-  if (isHost && await setRaceEnv(await wantedRaceMap())) fitRaceView();
   snapRaceOverview();
-  if (env.food[0]) env.food[0].amount = 8;
-  if (env.food.length > 1) env.food.length = 1;
-  if (env.odors) env.odors = env.odors.filter(o => !o.chaosCake);
-  env.threat = null;
-  rebuildEnv();
-  await spawnPresetFlies();
+  restoreRaceFood();
+  const mapChanged = isHost && await setRaceEnv(await wantedRaceMap());
+  const spots = isRace ? raceMap(raceMapId).flySpots : null;
+  const canRecycle = !mapChanged && spots && flies.length === spots.length && flies.every(f => f.worker);
+  if (!canRecycle) {
+    for (const f of flies) { f.worker?.postMessage({ type: 'pause' }); removeFly(f); }
+    flies.length = 0; nextId = 0; selected = 0;
+    if (mapChanged) fitRaceView();
+    rebuildEnv();
+    await spawnPresetFlies();
+  } else {
+    selected = 0;
+    syncEnv();
+    recycleRaceFlies();
+    renderFlyList();
+  }
   await waitRacePoses();
   if (!skipChaosLobby()) await showRaceStart();
   raceResetting = false;

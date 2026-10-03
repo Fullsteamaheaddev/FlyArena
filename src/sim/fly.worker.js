@@ -37,7 +37,14 @@ onmessage = async (e) => {
     loopActive = false;
     if (fly) loop(loopEpoch);
   }
-  else if (m.type === 'pause') { running = false; clearTimeout(timer); }
+  else if (m.type === 'pause') { running = false; loopEpoch++; clearTimeout(timer); }
+  else if (m.type === 'respawn') {
+    running = false;
+    loopEpoch++;
+    clearTimeout(timer);
+    simAhead = 0;
+    if (fly) { fly.respawn(m.pos, m.yaw); postPose(); }
+  }
   else if (m.type === 'speed') speed = m.speed;
   else if (m.type === 'env') { Object.assign(env, m.env); fly.env = env; if (fly.foodEaten.length !== env.food.length) fly.foodEaten = env.food.map(() => 0); }
   else if (m.type === 'others') { others = m.others; fly.others = others; setProxies(); }

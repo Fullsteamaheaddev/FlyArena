@@ -115,6 +115,53 @@ export class FlyAgent {
     this.dishMocap = -1;
     this.dishPose = { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 };
     try { this.dishMocap = M.body_mocapid[M.body('arena').id]; } catch { this.dishMocap = -1; }
+    this.qposHome = this.mjd.qpos.slice();
+  }
+  /** Put the same MjModel back at a start pose. Does not rebuild XML. */
+  respawn(pos, yaw) {
+    const mj = this.mj, M = this.model, d = this.mjd;
+    this.energy = this.env.hungryForage ? 0.25 : 0.6;
+    this.health = 1; this.alive = true; this.eaten = 0; this.t = 0;
+    this.foodEaten = this.env.food.map(() => 0); this.dist = 0; this.jumps = 0; this.flights = 0;
+    this._lastPos = null; this._wasJumping = false; this._eyeRates = null; this._propBump = null;
+    this.takeoffPending = false; this.ragdollMs = 0;
+    this.tDrop = -1e9; this.tTopNudge = -1e9; this.tPropBump = -1e9;
+    this.lastTouch = undefined; this.lastPivot = undefined;
+    this.chaosPin = false; this.chaosSpin = false; this.chaosSpinWz = 0; this.chaosSpinLeft = 0;
+    this.chaosLoose = false; this.chaosSlip = false; this.chaosBias = [0, 0];
+    this.chaosPull = false; this.pullTarget = null; this.pullK = 0.5;
+    this.dishPose = { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 }; this.dishSeq = 0;
+    this.setSlipFriction(false);
+    if (this.flight.active) this.flight.end();
+    this.flight.tLand = 0; this.flight.tRimBounce = -1e9; this.flight.wingPhase = 0; this.flight.liftUnit = null;
+    this.brain.reset();
+    this.neuromod?.reset();
+    this.motor.reset();
+    this.intrinsic?.reset();
+    this.driven = new Int32Array(0);
+    this.cmd = { v: 0, turn: 0, drive: 0, back: 0, escape: 0 };
+    if (this.fv) {
+      for (const e of this.fv.eyes) e.reset();
+      this.fv.adapt.fill(NaN);
+      this.fv.settled = false;
+    }
+    if (this.qposHome) d.qpos.set(this.qposHome);
+    d.qpos[0] = pos[0];
+    d.qpos[1] = pos[1];
+    d.qpos[2] = 0.132 + groundAt([pos[0], pos[1]], this.env);
+    const hw = Math.cos(yaw / 2), hz = Math.sin(yaw / 2);
+    d.qpos[3] = hw; d.qpos[4] = 0; d.qpos[5] = 0; d.qpos[6] = hz;
+    d.qvel.fill(0);
+    d.ctrl.fill(0);
+    d.qacc?.fill?.(0);
+    d.act?.fill?.(0);
+    d.xfrc_applied?.fill?.(0);
+    const id = this.dishMocap;
+    if (id >= 0) {
+      d.mocap_pos[id * 3] = 0; d.mocap_pos[id * 3 + 1] = 0; d.mocap_pos[id * 3 + 2] = 0;
+      d.mocap_quat[id * 4] = 1; d.mocap_quat[id * 4 + 1] = 0; d.mocap_quat[id * 4 + 2] = 0; d.mocap_quat[id * 4 + 3] = 0;
+    }
+    mj.mj_forward(M, d);
   }
   releaseClaws() {
     const act = this.motor.act, d = this.mjd;

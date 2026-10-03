@@ -46,6 +46,17 @@ export class Intrinsic {
     this.bias = { fwd: 0, turnL: 0, turnR: 0, groom: 0, back: 0, takeoff: 0, feed: 0 }; this.takeoffUntil = -1;
     this.odorC = 0; this.lastOdorCast = -1e9; this.surge = false;
   }
+  reset() {
+    this.state = this.forage ? 'walk' : 'stop';
+    this.left = this.forage ? 1200 + 1800 * this.rand() : 300 + 700 * this.rand();
+    this.fwdNoise = 0; this.sacc = null; this.sinceSacc = 0; this.avoid = null; this.t = 0;
+    this.touchL = this.touchR = this.lastGraze = this.lastHeat = this.leftFood = this.lastAvoid = this.lastSugar = -1e9;
+    this.avoidDir = 1; this.searchUntil = 0; this.hot = 0; this.approach = false;
+    this.lastDir = this.rand() < 0.5 ? 1 : -1;
+    this.bias = { fwd: 0, turnL: 0, turnR: 0, groom: 0, back: 0, takeoff: 0, feed: 0 };
+    this.takeoffUntil = -1; this.odorC = 0; this.lastOdorCast = -1e9; this.surge = false;
+    this.courting = null; this.courtSing = false; this.courtSide = undefined;
+  }
   gauss() { let u = 0; while (!u) u = this.rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * this.rand()); }
   lognormal([median, sd]) { return 1000 * median * Math.exp(sd * this.gauss()); }
   /** one ms. ctx: { energy 0..1, touch/heat: {left, right} per antenna, rearing: body pitched up against something } */
