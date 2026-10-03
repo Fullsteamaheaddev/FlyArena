@@ -222,6 +222,7 @@ export default {
   'lobby.poolMissing': 'Пул не настроен (задайте VITE_POOL).',
   'lobby.opOffline': 'Оператор пула офлайн — ставки в этой гонке закрыты.',
   'lobby.pickFly': 'Выберите муху и ставьте.',
+  'lobby.connectWallet': 'Подключите кошелёк, чтобы сделать ставку.',
   'lobby.opening': 'Открываем гонку в сети…',
   'lobby.bet': 'Ставка',
   'lobby.autoStart': 'Гонка стартует сама — без GO',

@@ -222,6 +222,7 @@ export default {
   'lobby.poolMissing': 'Pool not configured (set VITE_POOL).',
   'lobby.opOffline': 'Pool operator offline — betting is closed this race.',
   'lobby.pickFly': 'Pick a fly, then Bet.',
+  'lobby.connectWallet': 'Connect a wallet to Bet.',
   'lobby.opening': 'Opening the race on-chain…',
   'lobby.bet': 'Bet',
   'lobby.autoStart': 'Race starts itself — no GO',

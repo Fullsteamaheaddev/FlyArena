@@ -222,6 +222,7 @@ export default {
   'lobby.poolMissing': 'Pozo no configurado (pon VITE_POOL).',
   'lobby.opOffline': 'Operador del pozo fuera de línea — apuestas cerradas esta carrera.',
   'lobby.pickFly': 'Elige una mosca y apuesta.',
+  'lobby.connectWallet': 'Conecta una cartera para apostar.',
   'lobby.opening': 'Abriendo la carrera en cadena…',
   'lobby.bet': 'Apostar',
   'lobby.autoStart': 'La carrera arranca sola — sin GO',

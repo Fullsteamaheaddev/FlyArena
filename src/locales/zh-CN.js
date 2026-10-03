@@ -222,6 +222,7 @@ export default {
   'lobby.poolMissing': '奖池未配置（设置 VITE_POOL）。',
   'lobby.opOffline': '奖池操作员离线 — 本场无法投注。',
   'lobby.pickFly': '选一只果蝇，然后下注。',
+  'lobby.connectWallet': '连接钱包后再下注。',
   'lobby.opening': '正在链上开启比赛…',
   'lobby.bet': '下注',
   'lobby.autoStart': '比赛自动开始 — 无需 GO',

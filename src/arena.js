@@ -2358,6 +2358,7 @@ function paintLobbyOverlay(force = false) {
     const open = !chainConfigured() || poolStatus === 1 || (poolStatus == null && betClosesAt != null && !poolOpError);
     const note = !chainConfigured() ? t('lobby.poolMissing')
       : poolOpError && poolStatus !== 1 ? t('lobby.opOffline')
+      : !acct ? t('lobby.connectWallet')
       : (open ? t('lobby.pickFly') : t('lobby.opening'));
     card.innerHTML = `${lobbyBrandHtml()}<p>${t('lobby.blurb')}</p>
       <p class="sub" id="lobbyClock">${clock}</p>

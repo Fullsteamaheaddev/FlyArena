@@ -222,6 +222,7 @@ export default {
   'lobby.poolMissing': '풀이 설정되지 않음 (VITE_POOL을 설정하세요).',
   'lobby.opOffline': '풀 운영자가 오프라인 — 이번 경기는 베팅이 닫혀 있습니다.',
   'lobby.pickFly': '파리를 고른 뒤 베팅하세요.',
+  'lobby.connectWallet': '베팅하려면 지갑을 연결하세요.',
   'lobby.opening': '체인에서 경기를 여는 중…',
   'lobby.bet': '베팅',
   'lobby.autoStart': '경기는 알아서 시작됩니다 — GO 없음',
