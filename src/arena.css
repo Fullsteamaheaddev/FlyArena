@@ -34,8 +34,8 @@ a { color: var(--acc); }
 .eyes canvas { width: 100%; height: auto; display: block; background: #05070c; border-radius: 6px; }
 .eyes figcaption { color: var(--dim); font-size: 11px; text-align: center; margin-top: 2px; }
 #bpBody .note { margin: 4px 0 8px; }
-#groups .g { display: grid; grid-template-columns: 1fr 118px 64px; gap: 2px 8px; align-items: center; padding: 4px 6px; border-radius: 6px; cursor: default; }
-#groups .g:hover { background: rgba(255,255,255,.06); }
+#groups .g { display: grid; grid-template-columns: 1fr 118px 64px; gap: 2px 8px; align-items: center; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+#groups .g.sel { background: rgba(255,255,255,.1); }
 #groups .name { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
 #groups .name i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 #groups .name small { color: var(--dim); }
@@ -784,7 +784,7 @@ body.race .race-card {
 body.race .race-card:has(.lobby-logo),
 body.race #raceCard:has(.lobby-logo) {
   position: relative;
-  padding-top: 44px;
+  padding-top: 72px;
 }
 body.race .race-card h1.lobby-brand,
 body.race #raceCard h1.lobby-brand {
@@ -1366,7 +1366,7 @@ body.race #brainpanel .note,
 body.race #brainpanel figcaption,
 body.race #groups .name small,
 body.race #groups .info { color: var(--wood-ink-dim); }
-body.race #groups .g:hover { background: rgba(90, 58, 34, .08); }
+body.race #groups .g.sel { background: rgba(90, 58, 34, .12); }
 body.race #groups .q { color: var(--wood-ink-dim); }
 body.race #groups .q:hover { color: var(--wood-ink); }
 body.race #groups .v { color: var(--wood-ink); }
@@ -1444,7 +1444,7 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #brainpanel:not(.folded) {
     display: flex;
     flex-direction: column;
-    max-height: 21dvh;
+    max-height: 27dvh;
     overflow: hidden;
   }
   body.race #brainpanel:not(.folded) header {
@@ -1674,7 +1674,7 @@ body.race #groups .v { color: var(--wood-ink); }
 }
 
 @media (max-height: 500px) {
-  body.race #brainpanel:not(.folded) { max-height: min(35vh, calc((100dvh - 24px) / 2)); }
+  body.race #brainpanel:not(.folded) { max-height: min(46vh, calc((100dvh - 24px) / 2)); }
   body.race #brain { height: min(128px, 32vh); }
   body.race #enterGate .enter-card {
     width: min(92vw, calc((72dvh - 12px) * 1198 / 766));

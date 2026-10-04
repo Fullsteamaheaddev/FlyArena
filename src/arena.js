@@ -3040,7 +3040,7 @@ function renderFlyList() {
 // ---------------- brain panel: what the selected fly sees, and its named neuron groups ----------------
 const HIST = 150;                    // samples kept per trace (~18 s at the 120 ms poll)
 let groups = [], hist = [], histFly = -1, hover = -1, hlShown = -1, hlPts = null, eyeDots = null;
-// hovered group's neurons as large points over the inset (small groups vanish among 165k somas otherwise)
+// selected group's neurons as large points over the inset (small groups vanish among 165k somas otherwise)
 function showGroupInInset(j) {
   hlShown = j; hlPts.visible = j >= 0; if (j < 0) return;
   const g = groups[j], src = brainPts.geometry.attributes.position.array, pos = [];
@@ -3052,14 +3052,18 @@ function paintGroupRows() {
   const host = $('#groups');
   if (!host || !groups.length) return;
   const open = [...host.querySelectorAll('.info')].map(i => !i.hidden);
-  host.innerHTML = groups.map((g, j) => `<div class="g" data-j="${j}">
+  host.innerHTML = groups.map((g, j) => `<div class="g${hover === j ? ' sel' : ''}" data-j="${j}">
       <span class="name"><i style="background:${g.color}"></i>${groupLabel(g)} <small>${g.L.length + g.R.length}</small><button class="q" title="${t('brain.what')}">?</button></span>
       <canvas width="236" height="48"></canvas><span class="v"><b class="l">–</b><b class="r">–</b></span>
       <div class="info" hidden>${groupInfo(g)}</div></div>`).join('');
   host.querySelectorAll('.g').forEach(el => {
     const j = +el.dataset.j;
-    el.onmouseenter = () => { hover = j; }; el.onmouseleave = () => { hover = -1; };
-    el.querySelector('.q').onclick = () => { const i = el.querySelector('.info'); i.hidden = !i.hidden; };
+    el.onclick = (e) => {
+      if (e.target.closest('.q')) return;
+      hover = hover === j ? -1 : j;
+      host.querySelectorAll('.g').forEach(row => row.classList.toggle('sel', +row.dataset.j === hover));
+    };
+    el.querySelector('.q').onclick = (e) => { e.stopPropagation(); const i = el.querySelector('.info'); i.hidden = !i.hidden; };
     if (open[j]) el.querySelector('.info').hidden = false;
   });
 }
