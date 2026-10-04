@@ -216,7 +216,7 @@ export default {
   'host.badSecret': 'Senha errada.',
   'host.taken': 'Outro host já está no ar.',
 
-  'lobby.blurb': 'Poço do vencedor — primeiro ao centro açucarado, ou o último vivo',
+  'lobby.blurb': 'Uma batalha até o centro, ou até a morte.',
   'lobby.waitingBets': 'Esperando as apostas abrirem…',
   'lobby.betsClose': 'Apostas fecham em {m}:{s}',
   'lobby.poolMissing': 'Poço não configurado (defina VITE_POOL).',

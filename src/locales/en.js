@@ -225,7 +225,7 @@ export default {
   'host.badSecret': 'Wrong password.',
   'host.taken': 'Another host is already running.',
 
-  'lobby.blurb': 'Winner pool — first to the sugary center, or last alive',
+  'lobby.blurb': 'A battle to the center, or to the death.',
   'lobby.waitingBets': 'Waiting for betting to open…',
   'lobby.betsClose': 'Bets close in {m}:{s}',
   'lobby.poolMissing': 'Pool not configured (set VITE_POOL).',

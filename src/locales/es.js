@@ -216,7 +216,7 @@ export default {
   'host.badSecret': 'Contraseña incorrecta.',
   'host.taken': 'Ya hay un anfitrión en marcha.',
 
-  'lobby.blurb': 'Pozo al ganador — primero al centro azucarado, o el último vivo',
+  'lobby.blurb': 'Una batalla hacia el centro, o a muerte.',
   'lobby.waitingBets': 'Esperando a que abran las apuestas…',
   'lobby.betsClose': 'Apuestas cierran en {m}:{s}',
   'lobby.poolMissing': 'Pozo no configurado (pon VITE_POOL).',

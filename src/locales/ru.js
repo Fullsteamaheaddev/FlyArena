@@ -216,7 +216,7 @@ export default {
   'host.badSecret': 'Неверный пароль.',
   'host.taken': 'Другой хост уже запущен.',
 
-  'lobby.blurb': 'Пул победителя — первая к сладкому центру или последняя живая',
+  'lobby.blurb': 'Битва к центру — или до смерти.',
   'lobby.waitingBets': 'Ждём открытия ставок…',
   'lobby.betsClose': 'Ставки закроются через {m}:{s}',
   'lobby.poolMissing': 'Пул не настроен (задайте VITE_POOL).',

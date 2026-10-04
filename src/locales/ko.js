@@ -216,7 +216,7 @@ export default {
   'host.badSecret': '비밀번호가 틀렸습니다.',
   'host.taken': '다른 호스트가 이미 실행 중입니다.',
 
-  'lobby.blurb': '승자 풀 — 달콤한 중심에 먼저 닿거나, 마지막까지 살아남기',
+  'lobby.blurb': '중심으로의 전투, 아니면 죽음까지.',
   'lobby.waitingBets': '베팅 개방을 기다리는 중…',
   'lobby.betsClose': '베팅 마감 {m}:{s}',
   'lobby.poolMissing': '풀이 설정되지 않음 (VITE_POOL을 설정하세요).',

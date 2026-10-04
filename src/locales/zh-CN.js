@@ -216,7 +216,7 @@ export default {
   'host.badSecret': '密码错误。',
   'host.taken': '已有主持在运行。',
 
-  'lobby.blurb': '赢家奖池 — 先到糖心，或最后活着',
+  'lobby.blurb': '杀向中心，或战至死亡。',
   'lobby.waitingBets': '等待投注开放…',
   'lobby.betsClose': '投注将在 {m}:{s} 后关闭',
   'lobby.poolMissing': '奖池未配置（设置 VITE_POOL）。',

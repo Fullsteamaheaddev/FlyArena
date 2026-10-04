@@ -371,7 +371,7 @@ async function mainWatch() {
   const profile = $('#profile');
   if (profile) {
     profile.hidden = false;
-    if (raceMobile()) setProfileFolded(true, { instant: true });
+    setProfileFolded(true, { instant: true });
     syncProfileScrim();
     refreshProfile();
     syncBpHint();
@@ -1084,7 +1084,7 @@ function setupRaceChrome() {
         else connectFromUi(connectWallet, e.currentTarget);
       };
       $('#profileDisconnect').onclick = () => clearWalletUi();
-      profileFoldChrome(profile.classList.contains('folded'));
+      setProfileFolded(true, { instant: true });
       $('#profileFold')?.addEventListener('click', () => setProfileFolded(!profile.classList.contains('folded')));
       $('#profileScrim')?.addEventListener('click', () => setProfileFolded(true));
       mountLangSelect($('#langSelect'));
@@ -1107,6 +1107,7 @@ function setupRaceChrome() {
   setupRaceAnnounce();
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
   addEventListener('resize', () => { positionBpHint(null, { instant: true }); syncProfileScrim(); });
+  setProfileFolded(true, { instant: true });
   setupWalletPick();
   setupEnterGate();
   resolveChip().then(() => {
@@ -1569,7 +1570,9 @@ function showWatchWaiting(msg) {
   playWatchBed();
 }
 function applyWatchOverlay(st) {
+  setRaceHudLive(st.phase === 'live');
   if (st.phase === 'live') {
+    if (watchOverlayPhase !== 'live') setProfileFolded(true, { instant: true });
     const overlay = $('#raceOverlay');
     overlay.classList.remove('show');
     overlay.hidden = true;
@@ -1989,6 +1992,7 @@ function syncBpHint() {
   const hint = $('#bpHint');
   if (!hint) return;
   const show = isWatch && isRace && !getAccount() && !$('#loading') && !$('#enterGate')
+    && document.body.classList.contains('hud-live')
     && $('#profile') && !$('#profile').hidden;
   if (!show) {
     hint.hidden = true;
@@ -2008,11 +2012,16 @@ function followBpHint(rect, { instant = false } = {}) {
 }
 function setProfileFolded(folded, { instant = false } = {}) {
   const profile = $('#profile');
-  if (!profile || profile.classList.contains('folded') === folded) return;
+  if (!profile) return;
   profileFoldChrome(folded);
+  if (profile.classList.contains('folded') === folded) {
+    syncProfileScrim();
+    return;
+  }
   const dest = peekProfileRect(folded);
   const snap = instant || matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (snap || raceMobile()) {
+    profile.classList.remove('profile-anim');
     profile.style.width = '';
     profile.style.minWidth = '';
     profile.style.transition = '';
@@ -2021,6 +2030,7 @@ function setProfileFolded(folded, { instant = false } = {}) {
     followBpHint(dest, { instant: snap });
     return;
   }
+  profile.classList.add('profile-anim');
   const fromW = profile.getBoundingClientRect().width;
   const ease = 'cubic-bezier(0.34, 1.2, 0.64, 1)';
   profile.style.transition = `width .35s ${ease}`;
@@ -2032,6 +2042,7 @@ function setProfileFolded(folded, { instant = false } = {}) {
   requestAnimationFrame(() => { profile.style.width = `${dest.width}px`; });
   profile.addEventListener('transitionend', (e) => {
     if (e.propertyName !== 'width') return;
+    profile.classList.remove('profile-anim');
     profile.style.width = '';
     profile.style.minWidth = '';
     profile.style.transition = '';
@@ -2075,6 +2086,10 @@ function scheduleRaceBrainFold() {
 }
 function setLobbyBlur(on) {
   document.body.classList.toggle('lobby-blur', !!(isRace && on && !$('#enterGate') && !$('#loading')));
+}
+function setRaceHudLive(on) {
+  document.body.classList.toggle('hud-live', !!(isRace && on));
+  syncBpHint();
 }
 function showRaceOverlayCard(card, { flyColor, enter = true } = {}) {
   const overlay = $('#raceOverlay');
@@ -2515,6 +2530,7 @@ async function showRaceStart() {
   betWindowArmed = false;
   lastPoolRead = 0;
   poolSnap = flies.map(f => ({ id: f.id, amount: '0', display: '0' }));
+  setRaceHudLive(false);
   paintLobbyOverlay(true);
   publishMatchState(true);
   let windowSec = DEFAULT_WINDOW;
@@ -2555,6 +2571,8 @@ function startRace() {
   overlay.classList.remove('show');
   overlay.hidden = true;
   setLobbyBlur(false);
+  setProfileFolded(true, { instant: true });
+  setRaceHudLive(true);
   raceStartWall = performance.now();
   paintRaceClock(t('clock.s', { n: 0 }));
   running = true;
@@ -2573,6 +2591,7 @@ function announceRaceWinner(f, why) {
   raceWinner = f;
   raceWinnerWhy = why || null;
   matchPhase = 'results';
+  setRaceHudLive(false);
   matchResetIn = null;
   resultsAt = Date.now();
   settledAt = 0;

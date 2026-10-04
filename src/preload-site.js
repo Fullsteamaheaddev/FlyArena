@@ -5,6 +5,7 @@ const IMAGES = [
   { path: 'container.png', high: true },
   { path: 'container-headless.png', high: true },
   { path: 'LobbyContainer.png', high: true },
+  { path: 'FliesImageLogo.png', high: true },
   { path: 'Flieslogo.png', high: true },
   { path: 'button.png', high: true },
   { path: 'FruitFlyText.png' },

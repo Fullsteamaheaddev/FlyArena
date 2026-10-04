@@ -22,6 +22,7 @@
 <link rel="preload" href="/container-headless.png" as="image" type="image/png" fetchpriority="high" />
 <link rel="preload" href="/LobbyContainer.png" as="image" type="image/png" fetchpriority="high" />
 <link rel="preload" href="/Flieslogo.png" as="image" type="image/png" fetchpriority="high" />
+<link rel="preload" href="/FliesImageLogo.png" as="image" type="image/png" />
 <link rel="preload" href="/button.png" as="image" type="image/png" fetchpriority="high" />
 <link rel="preload" href="/FruitFlyText.png" as="image" type="image/png" />
 <link rel="preload" href="/fonts/luckiest-guy.woff2" as="font" type="font/woff2" crossorigin />
@@ -41,7 +42,7 @@
   </div>
 </aside>
 <button id="bpHint" hidden type="button" data-i18n-title="brain.showHint" title="Show brain panel">!</button>
-<div id="loading"><img class="load-logo" src="/Flieslogo.png" alt="" width="954" height="725" decoding="async"><div class="load-bar" aria-hidden="true"><i id="loadBar"></i></div><div id="status" data-i18n="load.joining">joining…</div></div>
+<div id="loading"><img class="load-backdrop" src="/FliesImageLogo.png" alt="" width="1245" height="844" decoding="async"><img class="load-logo" src="/Flieslogo.png" alt="" width="954" height="725" decoding="async"><div class="load-bar" aria-hidden="true"><i id="loadBar"></i></div><div id="status" data-i18n="load.joining">joining…</div></div>
 <aside id="panel">
   <header>
     <div class="hrow"><h1 data-i18n="panel.title">Fly arena</h1><button id="panelFold" class="fold" data-i18n-title="panel.hideControls" title="Hide controls ([)" aria-expanded="true">‹</button></div>
@@ -94,12 +95,14 @@
 <div id="raceVitals"></div>
 </div>
 <div id="profileScrim" hidden></div>
-<aside id="profile" hidden>
-  <header><h2 data-i18n="profile.title">You</h2><div class="profile-actions"><div id="langSelect"></div><button type="button" id="profileConnect" data-i18n="profile.connect">Connect</button><button type="button" id="profileDisconnect" class="danger" hidden data-i18n="profile.disconnect">Disconnect</button><button id="profileFold" class="fold" type="button" data-i18n-title="profile.hide" title="Hide profile" aria-expanded="true">›</button></div></header>
-  <div id="profileBody">
-    <p id="profileBal" data-i18n="profile.connectHint">Connect a wallet</p>
-    <p id="profileNote"></p>
-    <ul id="profileTickets"></ul>
+<aside id="profile" class="folded" hidden>
+  <div class="profile-inner">
+    <header><h2 data-i18n="profile.title">You</h2><div class="profile-actions"><div id="langSelect"></div><button type="button" id="profileConnect" data-i18n="profile.connect">Connect</button><button type="button" id="profileDisconnect" class="danger" hidden data-i18n="profile.disconnect">Disconnect</button><button id="profileFold" class="fold" type="button" data-i18n-title="profile.show" title="Show profile" aria-expanded="false">&lt;</button></div></header>
+    <div id="profileBody">
+      <p id="profileBal" data-i18n="profile.connectHint">Connect a wallet</p>
+      <p id="profileNote"></p>
+      <ul id="profileTickets"></ul>
+    </div>
   </div>
 </aside>
 <div id="lobbyBlur" aria-hidden="true"></div>
