@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { applyCelShading } from '../cel-shade.js';
+import { applyCelShading, celOutlineExtruded } from '../cel-shade.js';
 import { attachCakeSilhouette } from '../race-chaos-props.js';
 import { applyUfoRimGlow, ensureUfoHullOpaque } from '../ufo-rim-glow.js';
 import { DESERT_MAP_PROP_NAMES, DESERT_PREVIEW_PROPS, propScale } from '../desert-prop-scale.js';
@@ -9,7 +9,7 @@ import { DESERT_MAP_PROP_NAMES, DESERT_PREVIEW_PROPS, propScale } from '../deser
 const params = new URLSearchParams(location.search);
 const setName = params.get('set') === 'desert' ? 'desert' : 'chaos';
 
-const CHAOS_PROPS = ['ufo', 'meteor_chunk', 'spike_trap', 'sugar_crumb', 'cake_slice', 'sugar_pile'];
+const CHAOS_PROPS = ['ufo', 'meteor_chunk', 'spike_trap', 'sugar_crumb', 'cake_slice', 'sugar_pile', 'grenade'];
 
 const mount = document.getElementById('view');
 const partSelect = document.getElementById('part');
@@ -180,6 +180,8 @@ function frameProp(root) {
   const box = new THREE.Box3().setFromObject(root);
   if (box.isEmpty()) return;
   box.getCenter(fitCenter);
+  // A floor slicing through the prop also hides the far half of its outline hull.
+  floor.position.z = Math.min(-0.12, box.min.z - 0.002);
   const size = box.getSize(new THREE.Vector3());
   fitRadius = Math.max(size.x, size.y, size.z, 0.08) * 0.5;
   updateStats(root);
@@ -232,6 +234,13 @@ async function loadProp(name) {
     } else if (name === 'cake_slice') {
       applyCelShading(propRoot, { outline: false });
       attachCakeSilhouette(propRoot, THREE);
+    } else if (name === 'grenade') {
+      applyCelShading(propRoot, { outline: false });
+      celOutlineExtruded(propRoot, {
+        thickness: 0.009,
+        radialWithin: 0.33,
+        skip: o => o.name === 'WrapEdge',
+      });
     } else {
       applyCelShading(propRoot);
     }

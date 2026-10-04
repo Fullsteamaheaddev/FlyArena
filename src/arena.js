@@ -1102,11 +1102,26 @@ function setupRaceChrome() {
     const row = e.target.closest('.fly');
     if (!row) return;
     e.stopPropagation();
+    const vitals = $('#raceVitals');
+    const beh = e.target.closest('.fly-behavior');
+    const dead = row.classList.contains('dead');
+    for (const open of vitals.querySelectorAll('.fly-behavior.tip-on, .fly.tip-on')) {
+      if (open !== (dead ? row : beh)) open.classList.remove('tip-on');
+    }
+    if (dead) row.classList.toggle('tip-on');
+    else if (beh) beh.classList.toggle('tip-on');
     startRaceFollow(+row.dataset.id);
+  });
+  $('#raceVitals').addEventListener('pointerleave', () => {
+    $('#raceVitals').querySelectorAll('.fly-behavior.tip-on, .fly.tip-on').forEach(n => n.classList.remove('tip-on'));
   });
   setupRaceAnnounce();
   $('#bpHint').onclick = () => setRaceBrainFolded(false, { user: true });
-  addEventListener('resize', () => { positionBpHint(null, { instant: true }); syncProfileScrim(); });
+  addEventListener('resize', () => {
+    positionBpHint(null, { instant: true });
+    syncProfileScrim();
+    syncVitalBarWidth($('#raceVitals'));
+  });
   setProfileFolded(true, { instant: true });
   setupWalletPick();
   setupEnterGate();
@@ -2021,7 +2036,7 @@ function setProfileFolded(folded, { instant = false } = {}) {
   const dest = peekProfileRect(folded);
   const snap = instant || matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (snap || raceMobile()) {
-    profile.classList.remove('profile-anim');
+    profile.classList.remove('profile-anim', 'profile-anim-expand', 'profile-anim-fold');
     profile.style.width = '';
     profile.style.minWidth = '';
     profile.style.transition = '';
@@ -2030,7 +2045,8 @@ function setProfileFolded(folded, { instant = false } = {}) {
     followBpHint(dest, { instant: snap });
     return;
   }
-  profile.classList.add('profile-anim');
+  profile.classList.add('profile-anim', folded ? 'profile-anim-fold' : 'profile-anim-expand');
+  profile.classList.remove(folded ? 'profile-anim-expand' : 'profile-anim-fold');
   const fromW = profile.getBoundingClientRect().width;
   const ease = 'cubic-bezier(0.34, 1.2, 0.64, 1)';
   profile.style.transition = `width .35s ${ease}`;
@@ -2042,7 +2058,7 @@ function setProfileFolded(folded, { instant = false } = {}) {
   requestAnimationFrame(() => { profile.style.width = `${dest.width}px`; });
   profile.addEventListener('transitionend', (e) => {
     if (e.propertyName !== 'width') return;
-    profile.classList.remove('profile-anim');
+    profile.classList.remove('profile-anim', 'profile-anim-expand', 'profile-anim-fold');
     profile.style.width = '';
     profile.style.minWidth = '';
     profile.style.transition = '';
@@ -2948,9 +2964,6 @@ function onClick(e) {
   if (tool === 'obstacle') { alert(t('panel.obstacleAlert')); env.obstacles.push({ type: 'box', x: p.x, y: p.y, sx: 0.2, sy: 0.2, sz: 0.3 }); }
   rebuildEnv(); syncEnv();
 }
-function vitalsBehaviorLabel(behavior) {
-  return behaviorLabel(behavior, { short: true });
-}
 function deathCauseLabel(s) {
   const c = s?.deathCause;
   if (!c?.kind) return '';
@@ -2959,20 +2972,58 @@ function deathCauseLabel(s) {
   const label = t(key);
   return label === key ? '' : label;
 }
-function flyDeadHtml(s) {
-  const cause = deathCauseLabel(s);
-  return `<img class="fly-dead-icon" src="${BASE}deadfly.png" alt=""><span class="fly-dead-cause">${cause}</span>`;
+function flyDeadHtml() {
+  return `<img class="fly-dead-icon" src="${BASE}deadfly.png" alt="">`;
+}
+function flyBehaviorMarkup(s, dead = false) {
+  const full = dead ? '' : behaviorLabel(s.behavior);
+  const text = dead ? flyDeadHtml() : full;
+  return `<span class="fly-behavior-text">${text}</span><span class="fly-behavior-tip">${full}</span>`;
+}
+function paintFlyBehavior(beh, s, dead) {
+  if (!beh) return;
+  beh.classList.toggle('fly-dead', dead);
+  let text = beh.querySelector('.fly-behavior-text');
+  let tip = beh.querySelector('.fly-behavior-tip');
+  if (!text || !tip) {
+    beh.innerHTML = flyBehaviorMarkup(s, dead);
+    text = beh.querySelector('.fly-behavior-text');
+    tip = beh.querySelector('.fly-behavior-tip');
+  }
+  const row = beh.closest('.fly');
+  let cardTip = row?.querySelector(':scope > .fly-card-tip');
+  if (dead) {
+    if (text) text.innerHTML = flyDeadHtml();
+    if (tip) tip.textContent = '';
+    const cause = deathCauseLabel(s);
+    if (row) {
+      if (!cardTip) {
+        cardTip = document.createElement('span');
+        cardTip.className = 'fly-card-tip';
+        row.appendChild(cardTip);
+      }
+      cardTip.textContent = cause;
+    }
+  } else {
+    const full = behaviorLabel(s.behavior);
+    if (text) text.textContent = full;
+    if (tip) tip.textContent = full;
+    cardTip?.remove();
+  }
 }
 function flyRowHtml(f, selectedId = selected, raceVitals = false) {
   const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
   const gender = raceVitals ? '' : `${f.sex === 'f' ? '♀' : '♂'} `;
   const timer = raceVitals ? '' : `<span class="fly-t" style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span>`;
   const dead = raceVitals && s.alive === false;
-  const beh = dead ? flyDeadHtml(s) : (raceVitals ? (raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior)) : behaviorLabel(s.behavior));
-  const behAttr = raceVitals ? '' : ' style="color:var(--acc)"';
-  const behClass = dead ? ' class="fly-behavior fly-dead"' : (behAttr ? ` class="fly-behavior"${behAttr}` : ' class="fly-behavior"');
-  return `<div class="fly ${f.id === selectedId ? 'sel' : ''}${dead ? ' dead' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
-      <div>${gender}<span class="fly-name">${f.name}</span> <span${behClass}>${beh}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
+  if (raceVitals) {
+    const cause = dead ? deathCauseLabel(s) : '';
+    return `<div class="fly ${f.id === selectedId ? 'sel' : ''}${dead ? ' dead' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
+      <div class="fly-body"><div class="fly-head"><span class="fly-name">${f.name}</span> <span class="fly-behavior${dead ? ' fly-dead' : ''}">${flyBehaviorMarkup(s, dead)}</span></div><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>${cause ? `<span class="fly-card-tip">${cause}</span>` : ''}</div>`;
+  }
+  const beh = behaviorLabel(s.behavior);
+  return `<div class="fly ${f.id === selectedId ? 'sel' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
+      <div>${gender}<span class="fly-name">${f.name}</span> <span class="fly-behavior" style="color:var(--acc)">${beh}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
       ${timer}</div>`;
 }
 function flyKvHtml(f) {
@@ -3005,21 +3056,30 @@ function paintRaceVitals(force = false) {
     row.classList.toggle('sel', f.id === selected);
     const s = f.last || {};
     row.classList.toggle('dead', s.alive === false);
-    const beh = row.querySelector('.fly-behavior');
-    if (beh) {
-      if (s.alive === false) {
-        beh.classList.add('fly-dead');
-        beh.innerHTML = flyDeadHtml(s);
-      } else {
-        beh.classList.remove('fly-dead');
-        beh.textContent = raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior);
-      }
-    }
+    paintFlyBehavior(row.querySelector('.fly-behavior'), s, s.alive === false);
     const eBar = row.querySelector('.bar-energy > i');
     if (eBar) eBar.style.width = `${(s.energy ?? 0) * 100}%`;
     const hBar = row.querySelector('.bar-health > i');
     if (hBar) hBar.style.width = `${(s.health ?? 1) * 100}%`;
   }
+  syncVitalBarWidth(el);
+}
+function syncVitalBarWidth(el) {
+  if (!el) return;
+  if (raceMobile()) {
+    el.style.removeProperty('--vital-bar-w');
+    return;
+  }
+  let max = 0;
+  for (const head of el.querySelectorAll('.fly-head')) {
+    const name = head.querySelector('.fly-name');
+    const text = head.querySelector('.fly-behavior-text');
+    const gap = parseFloat(getComputedStyle(head).gap) || 0;
+    const w = (name?.offsetWidth || 0) + gap + (text?.offsetWidth || 0);
+    if (w) max = Math.max(max, w);
+  }
+  if (max) el.style.setProperty('--vital-bar-w', `${Math.ceil(max) + 2}px`);
+  else el.style.removeProperty('--vital-bar-w');
 }
 function renderFlyList() {
   $('#nfly').textContent = flies.length;

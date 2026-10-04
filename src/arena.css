@@ -600,6 +600,7 @@ body.race #raceHud:not([hidden]) {
   display: flex; flex-direction: column; gap: 10px;
   position: fixed; top: 12px; left: 12px; width: 340px; z-index: 3;
   max-height: calc(100% - 24px);
+  overflow: visible;
   pointer-events: none;
   transform: translateX(-120%);
   transition: transform var(--race-hud-duration) var(--race-fold-ease);
@@ -1130,7 +1131,20 @@ body.race #profile {
   transition: width var(--race-fold-duration) var(--race-fold-ease);
 }
 body.race #profile.profile-anim { overflow: hidden; }
-body.race #profile.profile-anim .profile-inner {
+body.race #profile.profile-anim-expand .profile-inner {
+  width: 100%;
+  margin-left: 0;
+}
+body.race #profile.profile-anim-expand header {
+  width: 100%;
+  justify-content: space-between;
+}
+body.race #profile.profile-anim-expand h2,
+body.race #profile.profile-anim-expand .profile-actions {
+  flex: none;
+}
+body.race #profile.profile-anim-expand .profile-actions { margin-left: 0; }
+body.race #profile.profile-anim-fold .profile-inner {
   width: max-content;
   margin-left: auto;
 }
@@ -1266,6 +1280,10 @@ body.race .fly-label:hover, body.race .fly-label:focus-visible { z-index: 2; }
 body.race #raceVitals {
   display: flex; flex-direction: column; gap: 10px; padding: 2px 4px 6px;
   background: transparent; border: 0; box-shadow: none; backdrop-filter: none;
+  overflow: visible;
+  align-self: flex-start;
+  width: max-content;
+  max-width: 100%;
 }
 body.race #raceVitals .fly {
   display: grid;
@@ -1278,9 +1296,18 @@ body.race #raceVitals .fly {
   background: color-mix(in srgb, var(--fly, var(--wood-line)) 16%, var(--wood-cream));
   border: 2px solid color-mix(in srgb, var(--fly, var(--wood-line)) 50%, var(--wood-line));
   cursor: pointer;
+  overflow: visible;
+  position: relative;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 100%;
   transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
 }
-body.race #raceVitals .fly:hover {
+body.race #raceVitals .fly:hover,
+body.race #raceVitals .fly:focus-within,
+body.race #raceVitals .fly:has(.fly-behavior.tip-on),
+body.race #raceVitals .fly.tip-on {
+  z-index: 4;
   background: color-mix(in srgb, var(--fly, var(--wood-line)) 22%, var(--wood-cream));
 }
 body.race #raceVitals .fly.sel {
@@ -1290,20 +1317,42 @@ body.race #raceVitals .fly.sel {
   box-shadow: 0 0 0 2px var(--wood-cream), 0 0 0 4px var(--wood-line);
 }
 body.race #raceVitals .fly.dead {
-  opacity: 0.62;
-  filter: grayscale(0.75);
   background: rgba(255, 248, 236, .5);
   border-color: rgba(90, 58, 34, .28);
   box-shadow: none;
+  cursor: help;
+}
+body.race #raceVitals .fly.dead .dot,
+body.race #raceVitals .fly.dead .fly-body {
+  opacity: 0.62;
+  filter: grayscale(0.75);
 }
 body.race #raceVitals .fly.dead.sel {
   transform: scale(1.02);
   box-shadow: 0 0 0 2px var(--wood-cream), 0 0 0 3px rgba(90, 58, 34, .35);
 }
 body.race #raceVitals .dot { width: 14px; height: 14px; flex: none; }
+body.race #raceVitals .fly-body {
+  min-width: 0;
+  width: var(--vital-bar-w, max-content);
+}
+body.race #raceVitals .fly-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  width: max-content;
+  max-width: 100%;
+  height: 18px;
+}
 body.race #raceVitals .fly-name {
   display: inline-flex;
   align-items: center;
+  flex: none;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   vertical-align: middle;
   line-height: 1;
   font-family: var(--race-title);
@@ -1312,17 +1361,63 @@ body.race #raceVitals .fly-name {
   color: var(--wood-ink);
 }
 body.race #raceVitals .fly-behavior {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
   color: color-mix(in srgb, var(--fly, var(--wood-ink)) 55%, var(--wood-ink-dim));
   font-family: var(--race-body);
   font-weight: 400;
+  cursor: help;
+}
+body.race #raceVitals .fly-behavior-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 body.race #raceVitals .fly-behavior.fly-dead {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-  line-height: 1;
-  gap: 4px;
+  flex: none;
   color: var(--wood-ink);
+  cursor: inherit;
+}
+body.race #raceVitals .fly-behavior.fly-dead .fly-behavior-text {
+  display: flex;
+  align-items: center;
+  overflow: visible;
+  line-height: 1;
+}
+body.race #raceVitals .fly-behavior-tip,
+body.race #raceVitals .fly-card-tip {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  z-index: 8;
+  margin-left: 8px;
+  transform: translateY(-50%);
+  padding: 5px 8px;
+  background: var(--wood-cream);
+  color: var(--wood-ink);
+  border: 2px solid var(--wood-line);
+  border-radius: 10px;
+  box-shadow: none;
+  font-family: var(--race-body);
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+body.race #raceVitals .fly-behavior-tip:empty,
+body.race #raceVitals .fly-card-tip:empty { display: none; }
+body.race #raceVitals .fly-behavior:hover .fly-behavior-tip,
+body.race #raceVitals .fly-behavior:focus-visible .fly-behavior-tip,
+body.race #raceVitals .fly-behavior.tip-on .fly-behavior-tip,
+body.race #raceVitals .fly.dead:hover .fly-card-tip,
+body.race #raceVitals .fly.dead.tip-on .fly-card-tip {
+  opacity: 1;
+  visibility: visible;
 }
 body.race #raceVitals .fly-dead-icon {
   width: 16px;
@@ -1330,12 +1425,9 @@ body.race #raceVitals .fly-dead-icon {
   object-fit: contain;
   flex: none;
 }
-body.race #raceVitals .fly-dead-cause {
-  font-family: var(--race-body);
-  font-weight: 400;
-  line-height: 1;
-}
 body.race #raceVitals .bar {
+  width: 100%;
+  max-width: 100%;
   background: rgba(90, 58, 34, .16);
   border-radius: 3px;
 }
@@ -1387,39 +1479,32 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #scoreboard .race-clock { margin-top: 2px; }
   body.race #scoreboard .race-clock b { font-size: 20px; }
   body.race #scoreboard .race-clock span { font-size: 10px; }
-  body.race #raceVitals { gap: 6px; }
+  body.race #raceVitals {
+    gap: 6px;
+    width: 144px;
+    align-self: flex-start;
+  }
   body.race #raceVitals .fly {
     box-sizing: border-box;
     width: 100%;
     min-height: 52px;
-    padding: 8px 12px 10px;
+    padding: 8px 10px 8px;
     transform-origin: left center;
   }
+  body.race #raceVitals .fly-body { width: auto; }
   body.race #raceVitals .fly.sel { transform: scale(1.03); }
   body.race #raceVitals .fly-name { font-size: 11px; }
+  body.race #raceVitals .fly-head { height: 14px; }
   body.race #raceVitals .fly-behavior {
     font-size: 10px;
-    max-width: 7.2em;
-    display: inline-block;
-    vertical-align: bottom;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     color: color-mix(in srgb, var(--fly, var(--wood-ink)) 50%, var(--wood-ink-dim));
   }
-  body.race #raceVitals .fly-behavior.fly-dead {
-    max-width: none;
-    display: inline-flex;
-    align-items: center;
-    vertical-align: middle;
-    overflow: visible;
-    text-overflow: unset;
-    white-space: nowrap;
-  }
+  body.race #raceVitals .fly-behavior-tip,
+  body.race #raceVitals .fly-card-tip { font-size: 11px; }
   body.race #raceVitals .fly-dead-icon { width: 16px; height: 16px; }
   body.race #raceVitals .dot { width: 12px; height: 12px; }
   body.race #raceVitals .fly-t { display: none; }
-  body.race #raceVitals .bar { height: 3px; margin-top: 1px; width: 85%; max-width: 144px; }
+  body.race #raceVitals .bar { height: 3px; margin-top: 1px; width: 72px; max-width: 100%; }
 
   body.race #brainpanel,
   body.race #brainpanel.folded,
