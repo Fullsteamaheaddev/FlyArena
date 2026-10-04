@@ -33,7 +33,7 @@ import {
   readBalance, loadHistory, userTotal, userStake, isClaimed, readRace, chipFmt,
   resolveChip, chipSymbol, getChipMeta,
 } from './chain.js';
-import { t, applyDom, onLocaleChange, formatLoadStatus, behaviorLabel, groupLabel, groupInfo } from './i18n.js';
+import { t, applyDom, onLocaleChange, getLocale, formatLoadStatus, behaviorLabel, groupLabel, groupInfo } from './i18n.js';
 import { mountLangSelect } from './i18n-ui.js';
 const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pages
 
@@ -3081,20 +3081,51 @@ function paintRaceVitals(force = false) {
   }
   syncVitalBarWidth(el);
 }
+const VITAL_BEHAVIOR_SAMPLES = [
+  'dead', 'righting', 'taking off', 'escape jump', 'singing (courtship)', 'courting',
+  'grooming', 'feeding', 'standing', 'proboscis extended', 'flying', 'landing',
+  'walking', 'turning left', 'turning right', 'walking backward',
+  'walking (proboscis out)', 'turning left (proboscis out)', 'turning right (proboscis out)',
+  'walking backward (proboscis out)',
+];
+let vitalStatusCache = { locale: '', w: 0 };
+
+function measureVitalStatusWidth(el) {
+  const loc = getLocale();
+  if (vitalStatusCache.locale === loc && vitalStatusCache.w) return vitalStatusCache.w;
+  const sample = el.querySelector('.fly-behavior-text');
+  const cs = getComputedStyle(sample || el);
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;pointer-events:none';
+  probe.style.fontFamily = cs.fontFamily;
+  probe.style.fontSize = cs.fontSize;
+  probe.style.fontWeight = cs.fontWeight;
+  probe.style.letterSpacing = cs.letterSpacing;
+  el.appendChild(probe);
+  let max = 0;
+  for (const raw of VITAL_BEHAVIOR_SAMPLES) {
+    probe.textContent = behaviorLabel(raw);
+    if (probe.offsetWidth > max) max = probe.offsetWidth;
+  }
+  probe.remove();
+  vitalStatusCache = { locale: loc, w: max };
+  return max;
+}
+
 function syncVitalBarWidth(el) {
   if (!el) return;
   if (raceMobile()) {
     el.style.removeProperty('--vital-bar-w');
     return;
   }
-  let max = 0;
+  const statusW = measureVitalStatusWidth(el) * 0.5;
+  let nameW = 0, gap = 0;
   for (const head of el.querySelectorAll('.fly-head')) {
+    if (!gap) gap = parseFloat(getComputedStyle(head).gap) || 0;
     const name = head.querySelector('.fly-name');
-    const text = head.querySelector('.fly-behavior-text');
-    const gap = parseFloat(getComputedStyle(head).gap) || 0;
-    const w = (name?.offsetWidth || 0) + gap + (text?.offsetWidth || 0);
-    if (w) max = Math.max(max, w);
+    if (name?.offsetWidth > nameW) nameW = name.offsetWidth;
   }
+  const max = nameW + gap + statusW;
   if (max) el.style.setProperty('--vital-bar-w', `${Math.ceil(max) + 2}px`);
   else el.style.removeProperty('--vital-bar-w');
 }

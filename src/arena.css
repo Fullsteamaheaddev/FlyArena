@@ -1365,8 +1365,7 @@ body.race #raceVitals .fly-head {
   align-items: center;
   gap: 4px;
   min-width: 0;
-  width: max-content;
-  max-width: 100%;
+  width: 100%;
   height: 18px;
 }
 body.race #raceVitals .fly-name {
@@ -1386,7 +1385,7 @@ body.race #raceVitals .fly-name {
 }
 body.race #raceVitals .fly-behavior {
   position: relative;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   color: color-mix(in srgb, var(--fly, var(--wood-ink)) 55%, var(--wood-ink-dim));
   font-family: var(--race-body);
@@ -1553,7 +1552,7 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #brainpanel:not(.folded) {
     display: flex;
     flex-direction: column;
-    max-height: 27dvh;
+    max-height: 81dvh;
     overflow: hidden;
   }
   body.race #brainpanel:not(.folded) header {
