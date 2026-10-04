@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="race">
 <head>
 <meta charset="utf-8" />
 <title>Sugar Run</title>
@@ -18,14 +18,14 @@
 <script src="coi-serviceworker.js"></script>
 <link rel="stylesheet" href="/src/style.css" />
 <link rel="stylesheet" href="/src/arena.css" />
-<link rel="preload" href="/container.png" as="image" type="image/png" fetchpriority="high" />
+<link rel="preload" href="/LandingContainer.png" as="image" type="image/png" fetchpriority="high" />
 <link rel="preload" href="/container-headless.png" as="image" type="image/png" fetchpriority="high" />
 <link rel="preload" href="/LobbyContainer.png" as="image" type="image/png" fetchpriority="high" />
 <link rel="preload" href="/Flieslogo.png" as="image" type="image/png" fetchpriority="high" />
 <link rel="preload" href="/button.png" as="image" type="image/png" fetchpriority="high" />
 <link rel="preload" href="/FruitFlyText.png" as="image" type="image/png" />
 <link rel="preload" href="/fonts/luckiest-guy.woff2" as="font" type="font/woff2" crossorigin />
-<style>body.race,body.race #loading{background:#c5dce8;color:#2a1810}</style>
+<style>html.race #loading,body.race #loading{background:#fff8ee;color:#2a1810}</style>
 </head>
 <body class="race">
 <canvas id="c"></canvas>
@@ -41,7 +41,7 @@
   </div>
 </aside>
 <button id="bpHint" hidden type="button" data-i18n-title="brain.showHint" title="Show brain panel">!</button>
-<div id="loading"><div class="title">Sugar Run</div><div id="status" data-i18n="load.joining">joining…</div></div>
+<div id="loading"><img class="load-logo" src="/Flieslogo.png" alt="" width="954" height="725" decoding="async"><div class="load-bar" aria-hidden="true"><i id="loadBar"></i></div><div id="status" data-i18n="load.joining">joining…</div></div>
 <aside id="panel">
   <header>
     <div class="hrow"><h1 data-i18n="panel.title">Fly arena</h1><button id="panelFold" class="fold" data-i18n-title="panel.hideControls" title="Hide controls ([)" aria-expanded="true">‹</button></div>

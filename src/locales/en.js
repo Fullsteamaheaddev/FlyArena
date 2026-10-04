@@ -178,6 +178,15 @@ export default {
   'behavior.short.dead': 'dead',
   'behavior.short.proboscis extended': 'proboscis',
 
+  'death.meteor': 'meteor',
+  'death.lightning': 'lightning',
+  'death.cake': 'cake',
+  'death.spikes': 'spikes',
+  'death.laser': 'lasered by {name}',
+  'death.laserAnon': 'lasered',
+  'death.starved': 'starved',
+  'death.killed': '',
+
   'profile.title': 'You',
   'profile.connect': 'Connect',
   'profile.disconnect': 'Disconnect',

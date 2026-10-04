@@ -189,6 +189,7 @@ export function buildMatchState({ matchId, phase, flies, clock, winner, bodyName
       takeoffPending: !!f.last.takeoffPending,
       cmd: f.last.cmd || null,
       behavior: f.last.behavior || '',
+      deathCause: f.last.alive === false ? (f.last.deathCause || null) : null,
     })),
   };
 }

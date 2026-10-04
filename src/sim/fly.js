@@ -95,6 +95,7 @@ export class FlyAgent {
     this.driven = new Int32Array(0);
     // physiology
     this.energy = env.hungryForage ? 0.25 : 0.6; this.health = 1; this.alive = true; this.eaten = 0; this.t = 0; this.foodEaten = env.food.map(() => 0); this.dist = 0; this.jumps = 0; this._lastPos = null; this._wasJumping = false;
+    this.deathCause = null;
     this.others = [];   // [{x,y,yaw}] of other flies (set by the host)
     this.log = [];
     this.takeoffPending = false;
@@ -124,7 +125,7 @@ export class FlyAgent {
     this.health = 1; this.alive = true; this.eaten = 0; this.t = 0;
     this.foodEaten = this.env.food.map(() => 0); this.dist = 0; this.jumps = 0; this.flights = 0;
     this._lastPos = null; this._wasJumping = false; this._eyeRates = null; this._propBump = null;
-    this.takeoffPending = false; this.ragdollMs = 0;
+    this.takeoffPending = false; this.ragdollMs = 0; this.deathCause = null;
     this.tDrop = -1e9; this.tTopNudge = -1e9; this.tPropBump = -1e9;
     this.lastTouch = undefined; this.lastPivot = undefined;
     this.chaosPin = false; this.chaosSpin = false; this.chaosSpinWz = 0; this.chaosSpinLeft = 0;
@@ -273,6 +274,7 @@ export class FlyAgent {
       return;
     }
     if (op === 'kill') {
+      this.deathCause = { kind: m.cause || 'killed', by: m.by || null };
       this.dieKnockover();
       return;
     }
@@ -656,7 +658,10 @@ export class FlyAgent {
     if (st.heat > 0.5) this.health -= dt * 0.5 * st.heat;
     if (this.energy <= 0) { this.energy = 0; this.health -= dt * 0.2; }
     this.energy = Math.min(1, this.energy);
-    if (this.health <= 0 && this.alive) this.dieKnockover();
+    if (this.health <= 0 && this.alive) {
+      if (!this.deathCause) this.deathCause = { kind: 'starved' };
+      this.dieKnockover();
+    }
   }
   behavior(st) {
     const c = this.cmd || {}; const m = this.motor;

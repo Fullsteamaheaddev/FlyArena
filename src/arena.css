@@ -149,25 +149,64 @@ body.race {
 }
 html.race,
 html.race body,
-html.race #loading,
-body.race,
-body.race #loading {
+body.race {
   background: var(--race-sky, #c5dce8);
 }
+#loading .load-logo,
+#loading .load-bar { display: none; }
+html.race #loading,
 body.race #loading {
   z-index: 30;
-  background: var(--race-sky);
+  background: var(--wood-cream, #fff8ee);
   color: var(--wood-ink);
+  gap: 22px;
 }
+html.race #loading .title,
 body.race #loading .title {
-  font-family: var(--race-title);
-  font-weight: 400;
-  color: var(--wood-ink);
+  display: none;
 }
+html.race #loading #status,
 body.race #loading #status {
+  display: none;
+  max-width: 28em;
+  padding: 0 16px;
   font-family: var(--race-body);
   font-weight: 400;
-  color: var(--wood-ink-dim);
+  color: #b42318;
+  text-align: center;
+}
+html.race #loading #status.is-error,
+body.race #loading #status.is-error {
+  display: block;
+}
+html.race #loading .load-logo,
+body.race #loading .load-logo {
+  display: block;
+  width: min(46vw, 280px);
+  height: auto;
+  filter: drop-shadow(0 3px 0 rgba(42, 24, 16, .28));
+  pointer-events: none;
+  user-select: none;
+}
+html.race #loading .load-bar,
+body.race #loading .load-bar {
+  display: block;
+  width: min(52vw, 300px);
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(90, 58, 34, .16);
+  border: 2px solid rgba(90, 58, 34, .35);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+html.race #loading .load-bar > i,
+body.race #loading .load-bar > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: #c9922a;
+  border-radius: inherit;
+  transition: width .28s ease;
 }
 body.race #enterGate p,
 body.race .race-card p,
@@ -222,38 +261,59 @@ body.race #raceOverlay.results-panel { background: none; }
 body.race #enterGate {
   position: fixed; inset: 0; z-index: 28;
   display: flex; align-items: center; justify-content: center;
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  padding: max(56px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   background: rgba(8, 6, 14, .72);
   box-sizing: border-box;
 }
 body.race:has(#enterGate) #profile,
 body.race:has(#enterGate) #walletPick { visibility: hidden; }
 body.race #enterGate .enter-card {
-  --enter-ar: 1800 / 1773;
+  --enter-ar: 1198 / 766;
   position: relative;
-  width: min(960px, 90vw, calc((96dvh - 24px) * 1800 / 1773));
+  width: min(920px, 90vw, calc((78dvh - 24px) * 1198 / 766));
   aspect-ratio: var(--enter-ar);
   height: auto;
-  max-height: min(96dvh, 100%);
+  max-height: min(78dvh, 100%);
   box-sizing: border-box;
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: url("/container.png") center / contain no-repeat;
+  background: url("/LandingContainer.png") center / contain no-repeat;
   background-color: transparent;
   box-shadow: none;
   backdrop-filter: none;
-  overflow: hidden;
+  overflow: visible;
   transform-origin: center center;
   animation: raceCardEnter .45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
     raceCardIdle 2.6s ease-in-out .45s infinite;
 }
+body.race #enterGate h1.lobby-brand {
+  position: absolute;
+  left: 50%;
+  top: 2%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: 36%;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  font-size: 0;
+}
+body.race #enterGate .lobby-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  filter: drop-shadow(0 3px 0 rgba(42, 24, 16, .28));
+  pointer-events: none;
+  user-select: none;
+}
 body.race #enterGate .enter-fill {
   position: absolute;
-  top: 56.3%;
-  left: 12%;
-  right: 12%;
-  bottom: 10.8%;
+  top: 34%;
+  left: 11%;
+  right: 11%;
+  bottom: 14%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -297,7 +357,7 @@ body.race #enterGate .enter-actions {
   width: 100%;
   margin-top: 0;
 }
-body.race #enterGate h1 {
+body.race #enterGate #enterTitle {
   margin: 0;
   flex: none;
   font-family: var(--race-title); font-weight: 400;
@@ -1189,6 +1249,10 @@ body.race #raceVitals .fly.dead.sel {
 }
 body.race #raceVitals .dot { width: 14px; height: 14px; flex: none; }
 body.race #raceVitals .fly-name {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  line-height: 1;
   font-family: var(--race-title);
   font-weight: 400;
   font-size: 16px;
@@ -1198,6 +1262,25 @@ body.race #raceVitals .fly-behavior {
   color: color-mix(in srgb, var(--fly, var(--wood-ink)) 55%, var(--wood-ink-dim));
   font-family: var(--race-body);
   font-weight: 400;
+}
+body.race #raceVitals .fly-behavior.fly-dead {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  line-height: 1;
+  gap: 4px;
+  color: var(--wood-ink);
+}
+body.race #raceVitals .fly-dead-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex: none;
+}
+body.race #raceVitals .fly-dead-cause {
+  font-family: var(--race-body);
+  font-weight: 400;
+  line-height: 1;
 }
 body.race #raceVitals .bar {
   background: rgba(90, 58, 34, .16);
@@ -1270,6 +1353,16 @@ body.race #groups .v { color: var(--wood-ink); }
     white-space: nowrap;
     color: color-mix(in srgb, var(--fly, var(--wood-ink)) 50%, var(--wood-ink-dim));
   }
+  body.race #raceVitals .fly-behavior.fly-dead {
+    max-width: none;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    overflow: visible;
+    text-overflow: unset;
+    white-space: nowrap;
+  }
+  body.race #raceVitals .fly-dead-icon { width: 16px; height: 16px; }
   body.race #raceVitals .dot { width: 12px; height: 12px; }
   body.race #raceVitals .fly-t { display: none; }
   body.race #raceVitals .bar { height: 3px; margin-top: 1px; width: 85%; max-width: 144px; }
@@ -1351,17 +1444,18 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race .race-card button.bet-fly { min-width: 0; align-self: stretch; }
   body.race .race-card button.lobby-map-pick { min-width: 0; align-self: stretch; min-height: 40px; padding: 8px 10px; }
   body.race #enterGate {
-    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    padding: max(36px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   }
   body.race #enterGate .enter-card {
-    width: min(100%, 560px, calc((94dvh - 16px) * 1800 / 1773));
-    max-height: min(92dvh, 100%);
+    width: min(100%, 560px, calc((70dvh - 16px) * 1198 / 766));
+    max-height: min(70dvh, 100%);
   }
+  body.race #enterGate h1.lobby-brand { width: 38%; top: 4%; }
   body.race #enterGate .enter-fill {
-    top: 55%;
-    left: 11.5%;
-    right: 11.5%;
-    bottom: 10.4%;
+    top: 36%;
+    left: 10%;
+    right: 10%;
+    bottom: 12%;
     gap: 0.1em;
     padding: 0;
     justify-content: flex-start;
@@ -1369,7 +1463,7 @@ body.race #groups .v { color: var(--wood-ink); }
   }
   body.race #enterGate .enter-copy { gap: 0.12em; }
   body.race #enterGate .enter-actions { gap: 0.06em; margin-top: 0; }
-  body.race #enterGate h1 { font-size: clamp(12px, 3.4vw, 16px); }
+  body.race #enterGate #enterTitle { font-size: clamp(12px, 3.4vw, 16px); }
   body.race #enterGate p { font-size: 9.5px; line-height: 1.12; }
   body.race #enterGate #enterBtn {
     width: min(100%, 10em);
@@ -1484,14 +1578,14 @@ body.race #groups .v { color: var(--wood-ink); }
 
 @media (max-height: 750px) and (min-width: 701px) {
   body.race #enterGate .enter-fill {
-    top: 55.8%;
-    bottom: 10.6%;
+    top: 36%;
+    bottom: 13%;
     gap: 0.35em;
     padding: 0.1em 0.2em 0.1em;
     justify-content: flex-start;
   }
   body.race #enterGate .enter-actions { margin-top: 0; }
-  body.race #enterGate h1 { font-size: clamp(16px, 2.6vh, 22px); }
+  body.race #enterGate #enterTitle { font-size: clamp(16px, 2.6vh, 22px); }
   body.race #enterGate p { font-size: clamp(12px, 1.9vh, 14px); line-height: 1.25; }
   body.race #enterGate #enterBtn {
     height: 44px;
@@ -1509,16 +1603,16 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #brainpanel:not(.folded) { max-height: min(35vh, calc((100dvh - 24px) / 2)); }
   body.race #brain { height: min(128px, 32vh); }
   body.race #enterGate .enter-card {
-    width: min(92vw, calc((94dvh - 12px) * 1800 / 1773));
+    width: min(92vw, calc((72dvh - 12px) * 1198 / 766));
   }
   body.race #enterGate .enter-fill {
-    top: 54.5%;
-    bottom: 9.8%;
+    top: 38%;
+    bottom: 12%;
     gap: 0.12em;
     justify-content: flex-start;
   }
   body.race #enterGate .enter-actions { margin-top: 0; }
-  body.race #enterGate h1 { font-size: clamp(13px, 3.4vh, 18px); }
+  body.race #enterGate #enterTitle { font-size: clamp(13px, 3.4vh, 18px); }
   body.race #enterGate p { font-size: clamp(10px, 2.6vh, 12px); line-height: 1.15; }
   body.race #enterGate #enterBtn {
     height: 36px;

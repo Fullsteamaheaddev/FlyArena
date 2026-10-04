@@ -38,7 +38,50 @@ import { mountLangSelect } from './i18n-ui.js';
 const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pages
 
 const $ = s => document.querySelector(s);
-const status = s => { const el = $('#status'); if (el) el.textContent = formatLoadStatus(s); };
+function raceLoadProgress(s) {
+  if (!isRace) return 0;
+  if (s == null) return 0;
+  const str = String(s);
+  if (str.startsWith('error:')) return 0;
+  const mb = str.match(/^(neurons|connectome|skeletons) ([\d.]+) \/ ([\d.]+) MB$/);
+  if (mb) {
+    const frac = Number(mb[3]) > 0 ? Number(mb[2]) / Number(mb[3]) : 0;
+    if (mb[1] === 'neurons') return 4 + 22 * frac;
+    if (mb[1] === 'connectome') return 28 + 32 * frac;
+    return 60 + 4 * frac;
+  }
+  if (str === 'decoding neurons') return 26;
+  if (str === 'decoding connectome') return 60;
+  if (str === 'decoding skeletons') return 64;
+  if (str === 'joining…' || str === 'loading…') return 2;
+  if (str === 'loading arena') return 18;
+  if (str.startsWith('loading Blender body ')) {
+    const pct = str.match(/([\d.]+)%/);
+    if (pct) return 64 + 16 * (Number(pct[1]) / 100);
+    return 72;
+  }
+  if (str === 'loading body model' || str === 'decoding Blender detail') return 64;
+  if (str === 'applying Cycles lighting' || str === 'preparing lighting') return 80;
+  if (str.includes('shared memory')) return 84;
+  if (str === 'starting shared GPU brain') return 90;
+  if (str === 'loading interface') return 96;
+  return 8;
+}
+const status = s => {
+  const el = $('#status');
+  if (el) {
+    el.textContent = formatLoadStatus(s);
+    const err = typeof s === 'string' && s.startsWith('error:');
+    el.classList.toggle('is-error', err);
+  }
+  if (!isRace) return;
+  const bar = $('#loadBar');
+  if (!bar) return;
+  const prev = Number(bar.dataset.p || 0);
+  const next = Math.max(prev, raceLoadProgress(s));
+  bar.dataset.p = String(next);
+  bar.style.width = `${next}%`;
+};
 applyDom();
 onLocaleChange(() => relocalizeUi());
 const FLY_COLORS = ['#ffb347', '#5ac8fa', '#a3e635', '#f472b6', '#c084fc', '#facc15', '#fb7185', '#2dd4bf'];
@@ -366,7 +409,7 @@ function waitRacePoses() {
   return Promise.all(flies.map(f => f.last ? Promise.resolve() : new Promise(res => { f.onPose = res; })));
 }
 
-let renderer, scene, camera, controls, envGroup, chaosCakeGroup, raycaster, floorMesh, wallMesh, sun, hemiLight, rimLight, composer, gtao, resolution;
+let renderer, scene, camera, controls, envGroup, chaosCakeGroup, meteorBakeGroup, raycaster, floorMesh, wallMesh, sun, hemiLight, rimLight, composer, gtao, resolution;
 let shadowDirty = true, lastShadow = -Infinity, shadowExtent = 0, lastBrainDraw = 0, brainDirty = true;
 let brainColorFly = -1, brainColorHover = -2;
 const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint = new THREE.Vector3();
@@ -382,7 +425,7 @@ function raceFloorLogoImg() {
       const img = new Image();
       img.onload = () => { raceFloorLogo = img; res(img); };
       img.onerror = () => res(null);
-      img.src = `${BASE}FruitFlyText.png`;
+      img.src = `${BASE}Flieslogo.png`;
     });
   }
   return raceFloorLogoWait;
@@ -514,7 +557,9 @@ function buildScene(data) {
   }
   envGroup = new THREE.Group(); envGroup.matrixAutoUpdate = true;
   chaosCakeGroup = new THREE.Group(); chaosCakeGroup.name = 'chaosCakes'; chaosCakeGroup.matrixAutoUpdate = true;
+  meteorBakeGroup = new THREE.Group(); meteorBakeGroup.name = 'meteorBake'; meteorBakeGroup.matrixAutoUpdate = true;
   envGroup.add(chaosCakeGroup);
+  envGroup.add(meteorBakeGroup);
   scene.add(envGroup); rebuildEnv();
   batches = new ArenaBatches(scene, visual, MAX_FLIES);
   raycaster = new THREE.Raycaster();
@@ -563,6 +608,7 @@ function discMesh(r, color, opacity = 1, z = ARENA_FLOOR_DECAL_Z) {
 function rebuildEnv() {
   // Placement rebuilds own their resources; release old GPU buffers/textures before replacing them.
   if (chaosCakeGroup?.parent === envGroup) envGroup.remove(chaosCakeGroup);
+  if (meteorBakeGroup?.parent === envGroup) envGroup.remove(meteorBakeGroup);
   desertScene?.dispose(); desertScene = null;
   dishScene?.dispose(); dishScene = null;
   envGroup.traverse(o => { if (o.isMesh && !o.userData.keep) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
@@ -625,6 +671,7 @@ function rebuildEnv() {
     if (isRace && z1 > z0) addPlane(z0);
   }
   if (chaosCakeGroup) envGroup.add(chaosCakeGroup);
+  if (meteorBakeGroup) envGroup.add(meteorBakeGroup);
 }
 function plumeTexture(spanX, spanY, capsule, rgb) {
   const s = 256, g = document.createElement('canvas'); g.width = g.height = s;
@@ -899,6 +946,7 @@ function relocalizeUi() {
     if (title) title.innerHTML = `${t('brain.inside', { name: sf.name })} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sf.color}"></i>`;
   }
   renderFlyList();
+  if (isRace) paintRaceVitals(true);
   setupFoldsTitles();
 }
 function relocalizeResultsCard() {
@@ -994,6 +1042,7 @@ function setupRaceChrome() {
     scene: () => scene,
     envGroup: () => envGroup,
     dishCakeGroup: () => chaosCakeGroup,
+    meteorBakeGroup: () => meteorBakeGroup,
     drawnDishSeq,
     camera: () => camera,
     controls: () => controls,
@@ -1227,6 +1276,7 @@ function setupEnterGate() {
   const el = document.createElement('div');
   el.id = 'enterGate';
   el.innerHTML = `<div class="enter-card" role="dialog" aria-labelledby="enterTitle" aria-modal="true">
+    ${lobbyBrandHtml()}
     <div class="enter-fill">
       <div class="enter-copy">
         <h1 id="enterTitle">${t('enter.title')}</h1>
@@ -2874,14 +2924,28 @@ function onClick(e) {
 function vitalsBehaviorLabel(behavior) {
   return behaviorLabel(behavior, { short: true });
 }
+function deathCauseLabel(s) {
+  const c = s?.deathCause;
+  if (!c?.kind) return '';
+  if (c.kind === 'laser') return c.by ? t('death.laser', { name: c.by }) : t('death.laserAnon');
+  const key = `death.${c.kind}`;
+  const label = t(key);
+  return label === key ? '' : label;
+}
+function flyDeadHtml(s) {
+  const cause = deathCauseLabel(s);
+  return `<img class="fly-dead-icon" src="${BASE}deadfly.webp" alt=""><span class="fly-dead-cause">${cause}</span>`;
+}
 function flyRowHtml(f, selectedId = selected, raceVitals = false) {
   const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;
   const gender = raceVitals ? '' : `${f.sex === 'f' ? '♀' : '♂'} `;
   const timer = raceVitals ? '' : `<span class="fly-t" style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span>`;
-  const beh = raceVitals ? (raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior)) : behaviorLabel(s.behavior);
+  const dead = raceVitals && s.alive === false;
+  const beh = dead ? flyDeadHtml(s) : (raceVitals ? (raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior)) : behaviorLabel(s.behavior));
   const behAttr = raceVitals ? '' : ' style="color:var(--acc)"';
-  return `<div class="fly ${f.id === selectedId ? 'sel' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
-      <div>${gender}<span class="fly-name">${f.name}</span> <span class="fly-behavior"${behAttr}>${beh}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
+  const behClass = dead ? ' class="fly-behavior fly-dead"' : (behAttr ? ` class="fly-behavior"${behAttr}` : ' class="fly-behavior"');
+  return `<div class="fly ${f.id === selectedId ? 'sel' : ''}${dead ? ' dead' : ''}" data-id="${f.id}" style="--fly:${f.color}"><i class="dot" style="background:${f.color}"></i>
+      <div>${gender}<span class="fly-name">${f.name}</span> <span${behClass}>${beh}</span><div class="bar bar-energy"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar bar-health"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
       ${timer}</div>`;
 }
 function flyKvHtml(f) {
@@ -2915,7 +2979,15 @@ function paintRaceVitals(force = false) {
     const s = f.last || {};
     row.classList.toggle('dead', s.alive === false);
     const beh = row.querySelector('.fly-behavior');
-    if (beh) beh.textContent = raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior);
+    if (beh) {
+      if (s.alive === false) {
+        beh.classList.add('fly-dead');
+        beh.innerHTML = flyDeadHtml(s);
+      } else {
+        beh.classList.remove('fly-dead');
+        beh.textContent = raceMobile() ? vitalsBehaviorLabel(s.behavior) : behaviorLabel(s.behavior);
+      }
+    }
     const eBar = row.querySelector('.bar-energy > i');
     if (eBar) eBar.style.width = `${(s.energy ?? 0) * 100}%`;
     const hBar = row.querySelector('.bar-health > i');

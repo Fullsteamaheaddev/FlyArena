@@ -1,6 +1,7 @@
 // Race chrome (wood PNGs, logos, font, flags, SFX) so the loader covers UI as well as the fly.
 
 const IMAGES = [
+  { path: 'LandingContainer.png', high: true },
   { path: 'container.png', high: true },
   { path: 'container-headless.png', high: true },
   { path: 'LobbyContainer.png', high: true },

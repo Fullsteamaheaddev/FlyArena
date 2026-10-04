@@ -448,7 +448,7 @@ export function tickLaserBeams(pool, beamFlies, arena, nowMs, lastBurn, callback
       aimBeam(pool, slot.mesh, len);
 
       if (hit.type === 'fly' && callbacks.physics && hit.victimId != null) {
-        callbacks.onFlyHit?.(hit.victimId);
+        callbacks.onFlyHit?.(hit.victimId, beam.flyId);
       }
       const burnable = hit.type === 'floor' || hit.type === 'wall' || hit.type === 'solid' || hit.type === 'fly';
       if (burnable) {

@@ -173,6 +173,26 @@ export function createRaceChaos(api) {
     if (g) return g;
     return api.envGroup?.() || fxGroup();
   }
+  function meteorBakeGroup() {
+    const g = api.meteorBakeGroup?.();
+    if (g) return g;
+    return api.envGroup?.() || fxGroup();
+  }
+  function bakeMeteorToFloor(mesh, x, y, z) {
+    if (!mesh) return;
+    const g = meteorBakeGroup();
+    g.updateWorldMatrix(true, false);
+    const local = g.worldToLocal(new T.Vector3(x, y, z));
+    g.add(mesh);
+    mesh.position.copy(local);
+    mesh.quaternion.identity();
+    mesh.rotation.z = 0;
+  }
+  function clearBakedMeteors() {
+    const g = meteorBakeGroup();
+    if (!g || g === fxRoot || g.name !== 'meteorBake') return;
+    while (g.children.length) disposeObj(g.children[0]);
+  }
   function toastBox() {
     if (toastEl) return toastEl;
     const el = document.createElement('div');
@@ -388,12 +408,13 @@ export function createRaceChaos(api) {
     tickLaserBeams(pool, beamFlies, arena, t, laserBurnLast, {
       physics: laserSession.physics ?? physics,
       solids: collectLaserSolids(env),
-      onFlyHit: victimId => {
+      onFlyHit: (victimId, shooterId) => {
         if (!laserSession?.physics || laserSession.killed.has(victimId)) return;
         const v = flies().find(x => x.id === victimId);
         if (!v?.worker || v.last?.alive === false) return;
         laserSession.killed.add(victimId);
-        post(v, { op: 'kill' });
+        const shooter = flies().find(x => x.id === shooterId);
+        post(v, { op: 'kill', cause: 'laser', by: shooter?.name || '' });
         api.audio()?.playLaserKill?.();
         hideToast();
       },
@@ -607,13 +628,13 @@ export function createRaceChaos(api) {
       const f = liveFlies(flies()).find(fl => fl.id === opts.killFlyId);
       if (f?.last) {
         sx = f.last.pos[0]; sy = f.last.pos[1];
-        post(f, { op: 'kill' });
+        post(f, { op: 'kill', cause: 'lightning' });
         killed = true;
       }
     } else if (physics && killR > 0) {
       for (const f of liveFlies(flies())) {
         const p = f.last.pos;
-        if (Math.hypot(p[0] - x, p[1] - y) < killR) { post(f, { op: 'kill' }); killed = true; }
+        if (Math.hypot(p[0] - x, p[1] - y) < killR) { post(f, { op: 'kill', cause: 'lightning' }); killed = true; }
       }
     }
     if (killed) hideToast();
@@ -897,7 +918,7 @@ export function createRaceChaos(api) {
         for (const f of liveFlies(flies())) {
           const p = f.last.pos;
           if (Math.hypot(p[0] - x, p[1] - y) < CAKE_R && (p[2] || 0) < 0.55) {
-            post(f, { op: 'kill' });
+            post(f, { op: 'kill', cause: 'cake' });
             hideToast();
           }
         }
@@ -1065,8 +1086,8 @@ export function createRaceChaos(api) {
     }, () => {
       const landT = now();
       if (mesh) {
-        mesh.position.set(x, y, zGround);
         mesh.rotation.z = 0;
+        bakeMeteorToFloor(mesh, x, y, zGround);
       }
       burstMeteorSmoke(x, y, zGround, smokeBatch);
       sealMeteorSmokeBatch(smokeBatch, landT);
@@ -1079,7 +1100,7 @@ export function createRaceChaos(api) {
           const p = f.last.pos;
           const d = Math.hypot(p[0] - x, p[1] - y);
           if (d < METEOR_BLAST_R && (p[2] || 0) < 0.58) {
-            post(f, { op: 'kill' });
+            post(f, { op: 'kill', cause: 'meteor' });
             hideToast();
           } else if (d < impulseR && d > 0.02) {
             const k = (1 - d / impulseR) * 14;
@@ -1330,7 +1351,7 @@ export function createRaceChaos(api) {
       const z = p[2] || 0;
       if (z > 0.28) continue;
       spikesSession.hitIds.add(f.id);
-      post(f, { op: 'kill' });
+      post(f, { op: 'kill', cause: 'spikes' });
       hideToast();
     }
   }
@@ -1738,6 +1759,7 @@ export function createRaceChaos(api) {
     if (cakes && cakes !== fxRoot) {
       while (cakes.children.length) disposeObj(cakes.children[0]);
     }
+    clearBakedMeteors();
     resetEnvPose();
     if (previewMesh) { disposeObj(previewMesh); previewMesh = null; }
     if (fxRoot) {
