@@ -784,7 +784,7 @@ body.race .race-card {
 body.race .race-card:has(.lobby-logo),
 body.race #raceCard:has(.lobby-logo) {
   position: relative;
-  padding-top: 72px;
+  padding-top: 44px;
 }
 body.race .race-card h1.lobby-brand,
 body.race #raceCard h1.lobby-brand {
@@ -1372,7 +1372,8 @@ body.race #groups .q:hover { color: var(--wood-ink); }
 body.race #groups .v { color: var(--wood-ink); }
 
 @media (max-width: 700px), (max-height: 500px) {
-  body.race { --wood-border: 22px; --lobby-border: 52px; }
+  /* Thicker headless frame (slice ~90): keep a readable wood rail on small panels. */
+  body.race { --wood-border: 26px; --lobby-border: 56px; }
   body.race #raceHud:not([hidden]) {
     top: max(8px, env(safe-area-inset-top));
     left: max(8px, env(safe-area-inset-left));
@@ -1476,10 +1477,16 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #groups .v { font-size: 10px; }
   body.race #groups .name { font-size: 11px; }
 
+  body.race #raceOverlay {
+    padding: max(40px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  }
+  body.race #raceOverlay:not(.results-panel) {
+    max-width: calc(100vw - 8px);
+  }
   body.race .race-card {
     min-width: 0;
-    width: min(400px, calc(100% - 24px));
-    max-width: 400px;
+    width: min(520px, calc(100vw - 12px));
+    max-width: calc(100vw - 12px);
     min-height: 0;
     max-height: min(88dvh, 640px);
     overflow: visible;
@@ -1490,8 +1497,16 @@ body.race #groups .v { color: var(--wood-ink); }
     margin: 0;
   }
   body.race .race-card h1 { font-size: 24px; }
-  body.race .race-card h1.lobby-brand {
-    width: min(56%, 180px);
+  body.race .race-card h1.lobby-brand,
+  body.race #raceCard h1.lobby-brand {
+    width: min(72%, 240px);
+  }
+  body.race .race-card:has(.lobby-logo),
+  body.race #raceCard:has(.lobby-logo) {
+    padding-top: 52px;
+  }
+  body.race .race-card:has(.lobby-logo) > p:first-of-type {
+    margin-top: 0;
   }
   body.race .race-card p { margin-bottom: 14px; }
   body.race .race-card button {
