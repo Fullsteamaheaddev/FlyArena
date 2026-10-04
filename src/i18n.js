@@ -136,6 +136,12 @@ export function chaosCopy(kind, name) {
   if (kind === 'laser') {
     return { title, line: t('chaos.laser.line') };
   }
+  if (kind === 'holy') {
+    if (name?.dud) return { title, line: t('chaos.holy.lineDud') };
+    if (name?.thrower && name?.target) return { title, line: t('chaos.holy.line', name) };
+    if (name?.thrower) return { title, line: t('chaos.holy.lineSolo', name) };
+    return { title, line: t('chaos.holy.lineAnon') };
+  }
   if (kind === 'ufo') {
     return { title, line: name ? t(`chaos.${kind}.line`, { name }) : t(`chaos.${kind}.lineAnon`) };
   }

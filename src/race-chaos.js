@@ -15,7 +15,7 @@ import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laser
 
 export const CHAOS_KINDS = [
   'thumb', 'spin', 'quake', 'flip', 'tilt', 'lightning', 'double', 'crumb', 'firefly', 'boop', 'puff', 'laser',
-  'meteor', 'sugarrain', 'ufo', 'spikes',
+  'meteor', 'sugarrain', 'ufo', 'spikes', 'holy',
 ];
 const KINDS = CHAOS_KINDS;
 
@@ -102,6 +102,7 @@ export function createRaceChaos(api) {
   let sugarRainSession = null;
   let ufoSession = null;
   let spikesSession = null;
+  let holySession = null;
   const LIGHT_POOL_N = 8;
   let lightPool = null, lightFree = [];
   const rimWorld = new T.Vector3();
@@ -1007,6 +1008,7 @@ export function createRaceChaos(api) {
     endSugarRain();
     endUfo();
     endSpikes();
+    endHoly();
     disposeMeteorSmoke();
   }
 
@@ -1356,7 +1358,323 @@ export function createRaceChaos(api) {
     }
   }
 
+  // Holy Hand Grenade: the named target is only an aim point. All rolls happen here on the
+  // host and ride the cue, so watchers replay the same miss.
+  const HOLY_SCALE = 1.8;
+  const HOLY_GROUND_Z = 0.276 * HOLY_SCALE;
+  const HOLY_KILL_R = 0.8;
+  const HOLY_IMPULSE_R = 2.2;
+  const HOLY_PIN_MS = 280;
+  const HOLY_BEAT_MS = 650;
+  const HOLY_OUTCOMES = [['miss', 0.4], ['close', 0.25], ['wild', 0.2], ['oops', 0.1], ['dud', 0.05]];
+
+  function rollHolyOutcome() {
+    let r = Math.random();
+    for (const [k, w] of HOLY_OUTCOMES) if ((r -= w) < 0) return k;
+    return 'miss';
+  }
+
+  function buildHolyPayload(live, opts = {}) {
+    const thrower = live.length ? pick(live) : null;
+    const sp = thrower?.last?.pos;
+    const [sx, sy] = sp ? [sp[0], sp[1]] : randomInDish(2);
+    const others = live.filter(f => f !== thrower);
+    let target = null;
+    if (others.length) {
+      const yaw = thrower?.last?.yaw ?? 0;
+      const ahead = others.filter(o => (o.last.pos[0] - sx) * Math.cos(yaw) + (o.last.pos[1] - sy) * Math.sin(yaw) > 0);
+      target = pick(ahead.length ? ahead : others);
+    }
+    const sugar = sugarDisc();
+    let ax, ay;
+    if (target) [ax, ay] = target.last.pos;
+    else {
+      const a = Math.random() * Math.PI * 2, d = randRange(1.5, 3);
+      ax = sugar.x + Math.cos(a) * d;
+      ay = sugar.y + Math.sin(a) * d;
+    }
+    const outcome = HOLY_OUTCOMES.some(([k]) => k === opts.outcome) ? opts.outcome : rollHolyOutcome();
+    const throwAz = Math.atan2(ay - sy, ax - sx);
+    // long or short along the throw line, with up to 35° of aim error
+    const offsetAround = (lo, hi) => {
+      const az = throwAz + (Math.random() < 0.5 ? 0 : Math.PI) + randRange(-1, 1) * Math.PI * 35 / 180;
+      const d = randRange(lo, hi);
+      return [ax + Math.cos(az) * d, ay + Math.sin(az) * d];
+    };
+    let land;
+    if (outcome === 'close') land = offsetAround(0.4, 1.1);
+    else if (outcome === 'dud') land = offsetAround(0.3, 1.2);
+    else if (outcome === 'oops') {
+      const a = Math.random() * Math.PI * 2, d = randRange(0.15, 0.5);
+      land = [sx + Math.cos(a) * d, sy + Math.sin(a) * d];
+    } else if (outcome === 'wild') {
+      land = randomInDish(1.4);
+      for (let i = 0; i < 40 && Math.hypot(land[0] - sugar.x, land[1] - sugar.y) < sugar.r + HOLY_KILL_R; i++) land = randomInDish(1.4);
+    } else land = offsetAround(1.4, 2.6);
+    let wind = [0, 0];
+    const env = api.env();
+    const w = env?.wind;
+    const wMag = w ? Math.hypot(w[0], w[1]) : 0;
+    if (outcome !== 'oops' && env?.arena?.shape === 'square' && wMag > 1e-6) {
+      const k = randRange(0.4, 1.0) / wMag;
+      wind = [w[0] * k, w[1] * k];
+      land = [land[0] + wind[0], land[1] + wind[1]];
+    }
+    land = clampIntoArena(land[0], land[1], 1.4);
+    const dist = Math.hypot(land[0] - sx, land[1] - sy);
+    const gag = opts.gag ?? Math.random() < 0.12;
+    return {
+      kind: 'holy',
+      flyId: thrower?.id ?? null,
+      name: thrower?.name || '',
+      color: thrower?.color || '#fff',
+      x: land[0], y: land[1], yaw: 0, deg: 0, points: [], hitBolt: null, killed: false,
+      holy: {
+        throwerId: thrower?.id ?? null,
+        throwerName: thrower?.name || '',
+        targetId: target?.id ?? null,
+        targetName: target?.name || '',
+        start: { x: sx, y: sy, z: (sp?.[2] ?? 0.13) + 0.25 },
+        land: { x: land[0], y: land[1] },
+        apexZ: 1.2 + Math.min(2.8, dist * 0.22),
+        flightMs: Math.round(700 + Math.min(400, dist * 45)),
+        count: gag ? [1, 2, 5, 3] : [1, 2, 3],
+        dud: outcome === 'dud',
+        outcome,
+        wind,
+        killR: HOLY_KILL_R,
+        impulseR: HOLY_IMPULSE_R,
+      },
+    };
+  }
+
+  function holyUnpin() {
+    const s = holySession;
+    if (!s?.pinned) return;
+    s.pinned = false;
+    if (s.physics) post(flies().find(x => x.id === s.throwerId), { op: 'pin', on: false });
+  }
+
+  function disposeHolyLabel(s) {
+    if (!s.label) return;
+    s.label.material.map?.dispose();
+    s.label.material.dispose();
+    s.label.parent?.remove(s.label);
+    s.label = null;
+  }
+
+  function setHolyLabel(text) {
+    const s = holySession;
+    if (!s) return;
+    if (!s.label) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const tex = new T.CanvasTexture(canvas);
+      tex.colorSpace = T.SRGBColorSpace;
+      s.label = new T.Sprite(new T.SpriteMaterial({ map: tex, transparent: true, depthTest: false, toneMapped: false }));
+      s.label.renderOrder = 20;
+      s.labelCanvas = canvas;
+      fxGroup().add(s.label);
+    }
+    const g = s.labelCanvas.getContext('2d');
+    g.clearRect(0, 0, 256, 256);
+    g.font = '200px "Luckiest Guy", Impact, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineJoin = 'round';
+    g.lineWidth = 18;
+    g.strokeStyle = '#2a1812';
+    g.strokeText(text, 128, 140);
+    g.fillStyle = text === '5' ? '#ff5a3c' : '#ffffff';
+    g.fillText(text, 128, 140);
+    s.label.material.map.needsUpdate = true;
+    s.label.position.set(s.land.x, s.land.y, HOLY_GROUND_Z * 2 + 1.0);
+    const label = s.label;
+    tween(180, u => label.scale.setScalar(1.3 * (1.6 - 0.6 * easeInOut(u))));
+  }
+
+  function endHoly() {
+    const s = holySession;
+    if (!s) return;
+    holyUnpin();
+    disposeHolyLabel(s);
+    if (s.grenade) disposeObj(s.grenade);
+    if (s.fireball) disposeObj(s.fireball);
+    releaseLight(s.light);
+    holySession = null;
+  }
+
+  function holyThrow(payload, physics) {
+    endHoly();
+    const h = payload.holy;
+    if (!h) return;
+    const { start, land } = h;
+    const beats = h.count?.length ? h.count : [1, 2, 3];
+    const landAt = HOLY_PIN_MS + h.flightMs;
+    const t0 = now();
+    const grenade = chaosMesh('grenade');
+    holySession = {
+      h, grenade, physics: !!physics, throwerId: h.throwerId, land, pinned: false,
+      label: null, labelCanvas: null, fireball: null, light: null,
+    };
+    busyUntil = Math.max(busyUntil, t0 + landAt + 300 + beats.length * HOLY_BEAT_MS + 1800);
+    if (grenade) {
+      grenade.scale.setScalar(HOLY_SCALE * 0.35);
+      grenade.position.set(start.x, start.y, start.z);
+      fxGroup().add(grenade);
+    }
+    const CAM_OFF = new T.Vector3(3.4, -3.1, 2.6);
+    easeCamTo(
+      new T.Vector3(start.x, start.y, 0.3).add(CAM_OFF),
+      new T.Vector3(start.x, start.y, 0.3),
+      HOLY_PIN_MS + 80,
+      undefined,
+      { orbit: true },
+    );
+    if (physics) {
+      const f = flies().find(x => x.id === h.throwerId);
+      if (f?.worker) {
+        post(f, { op: 'pin', on: true });
+        holySession.pinned = true;
+      }
+    }
+    const z0 = start.z + 0.3;
+    tween(HOLY_PIN_MS, u => {
+      if (!grenade) return;
+      grenade.scale.setScalar(HOLY_SCALE * (0.35 + 0.65 * easeInOut(u)));
+      grenade.position.z = start.z + 0.3 * u;
+    }, () => {
+      // oops: the thrower freezes in shock until the boom
+      if (h.outcome !== 'oops') holyUnpin();
+      api.audio()?.playHolyWhoosh?.();
+      // Worms-style chase cam: rides along with the grenade, settles over the landing spot
+      const cam = api.camera(), ctl = api.controls();
+      if (ctl) ctl.enabled = false;
+      const aim = new T.Vector3();
+      tween(h.flightMs, u => {
+        // straight line from hand to floor plus a parabolic hump of height apexZ
+        const x = start.x + (land.x - start.x) * u, y = start.y + (land.y - start.y) * u;
+        const z = z0 + (HOLY_GROUND_Z - z0) * u + 4 * h.apexZ * u * (1 - u);
+        if (grenade) {
+          grenade.position.set(x, y, z);
+          grenade.rotation.set(u * 7.5, u * 3.1, 0);
+        }
+        if (cam && ctl && holySession?.h === h) {
+          aim.set(x, y, 0.3 + (z - 0.3) * 0.5);
+          ctl.target.lerp(aim, 0.25);
+          cam.position.lerp(aim.clone().add(CAM_OFF).addScaledVector(CAM_OFF, 0.25 * Math.sin(u * Math.PI)), 0.25);
+          aimCam();
+        }
+      }, () => {
+        if (cam && ctl && holySession?.h === h) {
+          easeCamTo(new T.Vector3(land.x, land.y, 0.3).add(CAM_OFF), new T.Vector3(land.x, land.y, 0.3), 220);
+        }
+        holyLanded(h, physics);
+      });
+    });
+  }
+
+  function holyLanded(h, physics) {
+    const s = holySession;
+    if (s?.h !== h) return;
+    const g = s.grenade;
+    if (g) {
+      g.position.set(h.land.x, h.land.y, HOLY_GROUND_Z);
+      tween(700, u => {
+        const k = (1 - u) * (1 - u);
+        g.rotation.set(Math.sin(u * 18) * 0.35 * k, Math.cos(u * 14) * 0.22 * k, 0);
+      });
+    }
+    camShake(120, 0.08);
+    api.audio()?.playHolyThud?.();
+    const beats = h.count?.length ? h.count : [1, 2, 3];
+    beats.forEach((n, i) => later(300 + i * HOLY_BEAT_MS, () => {
+      if (holySession?.h !== h) return;
+      setHolyLabel(String(n));
+      api.audio()?.playHolyCount?.(n, i === beats.length - 1);
+      if (g) tween(140, u => g.scale.setScalar(HOLY_SCALE * (1 + 0.12 * Math.sin(u * Math.PI))));
+    }));
+    later(300 + beats.length * HOLY_BEAT_MS + 150, () => holyBoom(h, physics));
+  }
+
+  function holyBoom(h, physics) {
+    const s = holySession;
+    if (s?.h !== h) return;
+    const { x, y } = h.land;
+    holyUnpin();
+    disposeHolyLabel(s);
+    ensureMeteorSmoke();
+    const smoke = allocMeteorSmokeBatch();
+    burstMeteorSmoke(x, y, 0.1, smoke);
+    api.audio()?.playHolyBoom?.(!!h.dud);
+    if (h.dud) {
+      sealMeteorSmokeBatch(smoke, now());
+      lastToast = { kind: 'holy', name: { dud: true } };
+      const copy = chaosCopy('holy', { dud: true });
+      showToast(copy.title, copy.line);
+      const g = s.grenade;
+      if (g) tween(700, u => { g.rotation.set(0, easeInOut(u) * 1.45, 0); });
+      if (physics) {
+        const r = h.impulseR * 0.6;
+        for (const f of liveFlies(flies())) {
+          const p = f.last.pos, d = Math.hypot(p[0] - x, p[1] - y);
+          if (d >= r || d < 0.02) continue;
+          const k = (1 - d / r) * 3;
+          post(f, { op: 'impulse', vx: ((p[0] - x) / d) * k, vy: ((p[1] - y) / d) * k, vz: 1 });
+        }
+      }
+      later(1500, () => { if (holySession?.h === h) { endHoly(); releaseCam(500); } });
+      return;
+    }
+    if (s.grenade) { disposeObj(s.grenade); s.grenade = null; }
+    const fb = new T.Group();
+    const fireMat = c => new T.MeshBasicMaterial({ color: c, transparent: true, depthWrite: false, toneMapped: false });
+    const outer = new T.Mesh(new T.SphereGeometry(1, 20, 14), fireMat('#ff9a2e'));
+    const core = new T.Mesh(new T.SphereGeometry(1, 16, 12), fireMat('#fff3c4'));
+    fb.add(outer, core);
+    fb.position.set(x, y, 0.3);
+    fxGroup().add(fb);
+    s.fireball = fb;
+    tween(520, u => {
+      const e = 1 - (1 - u) ** 3;
+      outer.scale.setScalar(0.3 + e * h.killR * 1.9);
+      core.scale.setScalar(0.2 + e * h.killR * 1.1);
+      outer.material.opacity = 1 - u;
+      core.material.opacity = Math.max(0, 1 - u * 1.6);
+    }, () => {
+      disposeObj(fb);
+      if (holySession) holySession.fireball = null;
+    });
+    const light = borrowLight({ color: '#ffb050', distance: 9 });
+    s.light = light;
+    if (light) {
+      light.position.set(x, y, 0.8);
+      tween(600, u => { light.intensity = 30 * (1 - u); });
+    }
+    burstMeteorSmoke(x, y, 0.25, smoke);
+    sealMeteorSmokeBatch(smoke, now());
+    camShake(380, 0.4);
+    scorches.push({ x, y, r: 0.85 * scorchScale(), until: now() + 15000 });
+    api.repaintFloor?.();
+    if (physics) {
+      for (const f of liveFlies(flies())) {
+        const p = f.last.pos, d = Math.hypot(p[0] - x, p[1] - y);
+        if (d < h.killR && (p[2] || 0) < 0.6) {
+          post(f, f.id === h.throwerId
+            ? { op: 'kill', cause: 'holySelf' }
+            : { op: 'kill', cause: 'holy', by: h.throwerName || '' });
+          hideToast();
+        } else if (d < h.impulseR && d > 0.02) {
+          const k = (1 - d / h.impulseR) * 16;
+          post(f, { op: 'impulse', vx: ((p[0] - x) / d) * k, vy: ((p[1] - y) / d) * k, vz: 4 + k * 0.4 });
+        }
+      }
+    }
+    later(1300, () => { if (holySession?.h === h) { endHoly(); releaseCam(500); } });
+  }
+
   function chaosName(kind, payload) {
+    if (kind === 'holy') return payload.holy ? { thrower: payload.holy.throwerName, target: payload.holy.targetName } : null;
     if (kind === 'double') return payload.hitBolt != null ? (payload.name || '') : '';
     return payload.name || '';
   }
@@ -1551,11 +1869,14 @@ export function createRaceChaos(api) {
       ufoAbduct(payload, physics);
     } else if (kind === 'spikes') {
       spikeTrap(payload, physics);
+    } else if (kind === 'holy') {
+      holyThrow(payload, physics);
     }
   }
 
-  function buildPayload(kind) {
+  function buildPayload(kind, opts = {}) {
     const live = liveFlies(flies());
+    if (kind === 'holy') return buildHolyPayload(live, opts);
     const f = live.length ? pick(live) : null;
     const farthest = live.slice().sort((a, b) => Math.hypot(b.last.pos[0], b.last.pos[1]) - Math.hypot(a.last.pos[0], a.last.pos[1]))[0];
     const target = (kind === 'crumb' ? farthest : f);
@@ -1671,7 +1992,7 @@ export function createRaceChaos(api) {
       thumb: 1800, spin: 1600, quake: 5200, flip: 2200, tilt: 4000, lightning: 1600, double: 2800,
       crumb: CAKE_STAGGER_MS * (CAKE_SLICE_COUNT - 1) + 2800,
       firefly: 7200, boop: 1300, puff: 5200, laser: 3500,
-      meteor: 5600, sugarrain: 5400, ufo: 7000, spikes: 3600,
+      meteor: 5600, sugarrain: 5400, ufo: 7000, spikes: 3600, holy: 6400,
     }[kind] || 1200;
   }
 
@@ -1697,6 +2018,7 @@ export function createRaceChaos(api) {
         half: payload.half,
         strikes: payload.strikes,
         killed: payload.killed,
+        holy: payload.holy,
       });
     }
   }
@@ -1708,7 +2030,7 @@ export function createRaceChaos(api) {
       return null;
     }
     const physics = extra.physics !== false;
-    const payload = { ...buildPayload(k), ...extra, kind: k };
+    const payload = { ...buildPayload(k, extra), ...extra, kind: k };
     delete payload.physics;
     fire(k, payload, physics);
     return { kind: k, physics, flyId: payload.flyId, name: payload.name };

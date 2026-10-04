@@ -342,7 +342,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     const hold = {
       thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7,
       firefly: 7.1, boop: 1.1, puff: 5.1, laser: 1.5,
-      meteor: 3.2, sugarrain: 5.3, ufo: 6.8, spikes: 3.4,
+      meteor: 3.2, sugarrain: 5.3, ufo: 6.8, spikes: 3.4, holy: 5.6,
     }[kind] || 0.8;
     duck(true);
     setTimeout(() => duck(false), hold * 1000);
@@ -379,6 +379,86 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
       const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
       thud.connect(g); g.connect(master); thud.start(t0); thud.stop(t0 + 0.22);
     }
+    else if (kind === 'holy') sfxChoir(t0);
+  }
+  // "Hallelujah" stab: a major triad of detuned saws through a soft lowpass.
+  function sfxChoir(t0) {
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; lp.Q.value = 0.4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.12, t0 + 0.12);
+    g.gain.setValueAtTime(0.12, t0 + 0.9); g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.6);
+    lp.connect(g); g.connect(master);
+    for (const f of [261.6, 329.6, 392, 523.3]) {
+      for (const det of [-7, 7]) {
+        const o = ctx.createOscillator(); o.type = 'sawtooth';
+        o.frequency.value = f; o.detune.value = det;
+        o.connect(lp); o.start(t0); o.stop(t0 + 1.65);
+      }
+    }
+  }
+  function playHolyWhoosh() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const ns = noiseSrc(0.5); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(600, t0); bp.frequency.exponentialRampToValueAtTime(2200, t0 + 0.2); bp.frequency.exponentialRampToValueAtTime(500, t0 + 0.5);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.2, t0 + 0.08); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.5);
+    ns.connect(bp); bp.connect(g); g.connect(master); ns.start(t0);
+  }
+  function playHolyThud() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(160, t0); o.frequency.exponentialRampToValueAtTime(60, t0 + 0.1);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.3, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.16);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.18);
+    // metallic clink on top
+    const c = ctx.createOscillator(); c.type = 'square'; c.frequency.value = 1900;
+    const cg = ctx.createGain(); cg.gain.setValueAtTime(0.04, t0); cg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.07);
+    c.connect(cg); cg.connect(master); c.start(t0); c.stop(t0 + 0.08);
+  }
+  // 5 is the wrong number: a flat honk instead of a bell.
+  function playHolyCount(n, last) {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    if (n === 5) {
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(140, t0); o.frequency.linearRampToValueAtTime(110, t0 + 0.32);
+      g.gain.setValueAtTime(0.16, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.36);
+    } else {
+      o.type = 'sine';
+      o.frequency.value = last ? 1320 : 880;
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.4);
+    }
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.42);
+  }
+  function playHolyBoom(dud) {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    if (dud) {
+      const ns = noiseSrc(0.4); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
+      const ng = ctx.createGain(); ng.gain.setValueAtTime(0.18, t0); ng.gain.exponentialRampToValueAtTime(0.001, t0 + 0.38);
+      ns.connect(lp); lp.connect(ng); ng.connect(master); ns.start(t0);
+      // sad trombone: wah wah wah waaah
+      const notes = [[311, 0.3], [294, 0.3], [277, 0.3], [262, 0.9]];
+      let t = t0 + 0.35;
+      for (const [f, d] of notes) {
+        const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t);
+        if (d > 0.5) o.frequency.linearRampToValueAtTime(f * 0.97, t + d);
+        const bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 900;
+        const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.04); g.gain.setValueAtTime(0.12, t + d - 0.08); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+        o.connect(bp); bp.connect(g); g.connect(master); o.start(t); o.stop(t + d + 0.02);
+        t += d;
+      }
+      return;
+    }
+    sfxBolt(t0, 1.1);
+    playBuf(thunderBuf, t0, 0.9);
+    const sub = ctx.createOscillator(); sub.type = 'sine';
+    sub.frequency.setValueAtTime(70, t0); sub.frequency.exponentialRampToValueAtTime(28, t0 + 0.6);
+    const sg = ctx.createGain(); sg.gain.setValueAtTime(0.5, t0); sg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.7);
+    sub.connect(sg); sg.connect(master); sub.start(t0); sub.stop(t0 + 0.72);
   }
   function playBuf(buf, when, gain = 0.8) {
     if (!ctx || !buf) return;
@@ -673,6 +753,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, playChaos, playCakeLand,
     setMuted, setMotion, hold, playLaserToast, startLaserBeam, stopLaserBeam, playLaserKill,
     startUfoSting, stopUfoSting, startAmbience, stopAmbience, setAmbience,
+    playHolyWhoosh, playHolyThud, playHolyCount, playHolyBoom,
   };
 }
 

@@ -184,6 +184,9 @@ export default {
   'death.spikes': 'spikes',
   'death.laser': 'lasered by {name}',
   'death.laserAnon': 'lasered',
+  'death.holy': 'holy grenade',
+  'death.holyBy': 'grenaded by {name}',
+  'death.holySelf': 'own grenade',
   'death.starved': 'starved',
   'death.killed': '',
 
@@ -296,6 +299,11 @@ export default {
   'chaos.ufo.lineAnon': 'A fly gets beamed up.',
   'chaos.spikes.title': 'Spike trap',
   'chaos.spikes.line': 'Mind the floor.',
+  'chaos.holy.title': 'Holy Hand Grenade',
+  'chaos.holy.line': '{thrower} yeets it at {target}',
+  'chaos.holy.lineSolo': '{thrower} pulls the pin',
+  'chaos.holy.lineAnon': 'Count to three. Not five.',
+  'chaos.holy.lineDud': 'A damp squib.',
 
   'admin.title': 'Sugar Run pool',
   'admin.sub': 'Connect the owner wallet to set chip token, betting window, pool fee, operator, and mint faucet chips.',

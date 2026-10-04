@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinnedRoot } from 'three/addons/utils/SkeletonUtils.js';
 import { createSmokePuffTexture } from './race-chaos-smoke-tex.js';
-import { applyCelShading } from './cel-shade.js';
+import { applyCelShading, celOutlineExtruded } from './cel-shade.js';
 import { attachCakeSilhouette } from './race-chaos-props.js';
 import { applyUfoRimGlow } from './ufo-rim-glow.js';
 
@@ -12,6 +12,7 @@ const PATHS = {
   meteor_chunk: 'chaos/meteor_chunk.glb',
   sugar_crumb: 'chaos/sugar_crumb.glb',
   cake_slice: 'chaos/cake_slice.glb',
+  grenade: 'chaos/grenade.glb',
 };
 
 const templates = {};
@@ -57,6 +58,9 @@ export function cloneChaosProp(name) {
       }
     });
     attachCakeSilhouette(root, THREE);
+  } else if (name === 'grenade') {
+    applyCelShading(root, { outline: false });
+    celOutlineExtruded(root, { thickness: 0.009, radialWithin: 0.33, skip: o => o.name === 'WrapEdge' });
   } else applyCelShading(root);
   root.traverse(o => {
     if (!o.isMesh) return;

@@ -769,7 +769,26 @@ body.race .race-card h2.hist {
 }
 body.race #scoreboard h1 { font-size: 22px; color: var(--wood-ink); }
 body.race .race-card h1 { font-size: 34px; line-height: 1.1; color: var(--fly, var(--wood-ink)); }
-body.race #brainpanel h2 { font-size: 16px; }
+body.race #brainpanel h2 {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  line-height: 1;
+}
+body.race #brainpanel h2 .bp-title-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+body.race #brainpanel h2 .bp-fly-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
 body.race #scoreboard h2,
 body.race .race-card h2.hist {
   font-size: 14px;
@@ -1272,6 +1291,11 @@ body.race #scoreboard .race-clock span { color: var(--wood-ink-dim); }
 body.race #bpFold {
   font-family: var(--race-title); font-weight: 400; font-size: 28px; line-height: 1; padding: 6px 12px;
   color: var(--wood-ink); background: transparent; border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: center;
 }
 body.race #bpFold:hover { background: rgba(90, 58, 34, .1); }
 body.race .fly-label { position: relative; display: inline-block; }

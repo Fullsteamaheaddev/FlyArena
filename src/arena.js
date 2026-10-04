@@ -941,10 +941,7 @@ function relocalizeUi() {
   }
   if (groups.length) paintGroupRows();
   const sf = flies.find(x => x.id === selected);
-  if (sf && histFly === sf.id) {
-    const title = $('#bpTitle');
-    if (title) title.innerHTML = `${t('brain.inside', { name: sf.name })} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sf.color}"></i>`;
-  }
+  if (sf && (isRace || histFly === sf.id)) setBrainPanelTitle(sf);
   renderFlyList();
   if (isRace) paintRaceVitals(true);
   setupFoldsTitles();
@@ -1941,6 +1938,24 @@ function pinRaceAnnounce() {
   announceNdc.unproject(camera);
   raceAnnounce.position.copy(announceNdc);
 }
+function setBrainPanelTitle(fly) {
+  if (!fly) return;
+  const el = $('#bpTitle');
+  if (!el) return;
+  let label = el.querySelector('.bp-title-label');
+  let dot = el.querySelector('.bp-fly-dot');
+  if (!label) {
+    el.textContent = '';
+    label = document.createElement('span');
+    label.className = 'bp-title-label';
+    dot = document.createElement('span');
+    dot.className = 'bp-fly-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    el.append(label, dot);
+  }
+  label.textContent = t('brain.inside', { name: fly.name });
+  dot.style.background = fly.color;
+}
 function brainFoldChrome(folded) {
   const b = $('#bpFold'); if (!b) return;
   const mobile = raceMobile();
@@ -2899,6 +2914,7 @@ function startRaceFollow(id, { silent = false } = {}) {
   raceCamTween = { mode: 'in', t: 0, dur: 0.55, fromPos: camera.position.clone(), fromTarget: controls.target.clone() };
   renderFlyList();
   const f = flies.find(x => x.id === id);
+  if (isRace && f) setBrainPanelTitle(f);
   if (f?.ready && shouldPollBrainActivity()) f.worker.postMessage({ type: 'activity' });
   applyRaceZoomLimit();
   if (isWatch && f && (f.lastGroups || f.lastEyes) && groups.length) onActivity(f, { groups: f.lastGroups || [], eyes: f.lastEyes, t: f.last?.t || 0 });
@@ -2968,6 +2984,7 @@ function deathCauseLabel(s) {
   const c = s?.deathCause;
   if (!c?.kind) return '';
   if (c.kind === 'laser') return c.by ? t('death.laser', { name: c.by }) : t('death.laserAnon');
+  if (c.kind === 'holy' && c.by) return t('death.holyBy', { name: c.by });
   const key = `death.${c.kind}`;
   const label = t(key);
   return label === key ? '' : label;
@@ -3139,7 +3156,7 @@ function buildBrainPanel(data) {
   $('#brainpanel').hidden = false;
 }
 function onActivity(f, m) {
-  if (histFly !== f.id) { histFly = f.id; hist = groups.map(() => [[], []]); $('#bpTitle').innerHTML = `${t('brain.inside', { name: f.name })} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${f.color}"></i>`; }
+  if (histFly !== f.id) { histFly = f.id; hist = groups.map(() => [[], []]); setBrainPanelTitle(f); }
   const rows = $('#groups').children;
   groups.forEach((g, j) => {
     const h = hist[j]; h[0].push(m.groups[j * 2]); h[1].push(m.groups[j * 2 + 1]); if (h[0].length > HIST) { h[0].shift(); h[1].shift(); }
