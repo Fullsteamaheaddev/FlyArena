@@ -5,8 +5,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DESERT_MAP_PROP_NAMES } from './desert-prop-scale.js';
 
 const MAP_PROPS = {
-  desert: DESERT_MAP_PROP_NAMES,
-  dish: ['grass', 'doghouse'],
+  desert: [...DESERT_MAP_PROP_NAMES, 'sugar_pile'],
+  dish: ['grass', 'doghouse', 'sugar_pile'],
 };
 
 export { DESERT_MAP_PROP_NAMES };
@@ -23,7 +23,10 @@ export function preloadMapAssets(baseUrl = '/', map = 'desert') {
   loading[map] = Promise.all(names.map(async name => {
     try {
       const folder = map === 'dish' ? 'desert' : map;
-      const gltf = await loader.loadAsync(`${base}maps/${folder}/${name}.glb`);
+      const url = name === 'sugar_pile'
+        ? `${base}maps/sugar_pile.glb`
+        : `${base}maps/${folder}/${name}.glb`;
+      const gltf = await loader.loadAsync(url);
       gltf.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       templates[name] = gltf.scene;
     } catch (e) {

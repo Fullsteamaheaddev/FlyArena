@@ -8,6 +8,7 @@ import { mapPropMeshes } from './race-map-assets.js';
 import { hawkAt } from './race-wind.js';
 import { propScale } from './desert-prop-scale.js';
 import { applySwayWind, SWAY_KINDS, swayMaterials } from './race-map-sway.js';
+import { placeSugarPile } from './race-sugar-pile.js';
 
 // Night palette: the sand is lit by the moon, so the painted base stays dark and the warm
 // lamp pools below are what the eye reads as light.
@@ -266,6 +267,8 @@ export function buildDesertScene(envGroup, env, ctx) {
       root.add(im);
     }
   }
+
+  placeSugarPile(root, env);
 
   // --- warm lamps: stone post, iron bowl, unlit flame + glow sprite; a few carry a real light ---
   const lampStoneMat = new THREE.MeshStandardMaterial({ color: '#6b5335', roughness: 0.92 });

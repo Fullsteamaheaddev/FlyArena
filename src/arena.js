@@ -1573,6 +1573,7 @@ function applyWatchOverlay(st) {
     const overlay = $('#raceOverlay');
     overlay.classList.remove('show');
     overlay.hidden = true;
+    setLobbyBlur(false);
     watchOverlayPhase = 'live';
     lastLobbyKind = '';
     return;
@@ -2072,12 +2073,16 @@ function scheduleRaceBrainFold() {
   if (raceBrainTouched) return;
   setRaceBrainFolded(true, { instant: true });
 }
+function setLobbyBlur(on) {
+  document.body.classList.toggle('lobby-blur', !!(isRace && on && !$('#enterGate') && !$('#loading')));
+}
 function showRaceOverlayCard(card, { flyColor, enter = true } = {}) {
   const overlay = $('#raceOverlay');
   card.style.removeProperty('--fly');
   if (flyColor) card.style.setProperty('--fly', flyColor);
   overlay.classList.toggle('results-panel', card.dataset.kind === 'results');
   overlay.hidden = false;
+  setLobbyBlur(card.dataset.kind === 'lobby');
   if (!enter && overlay.classList.contains('show')) return;
   overlay.classList.remove('show');
   void overlay.offsetWidth;
@@ -2401,6 +2406,7 @@ function paintLobbyOverlay(force = false) {
       wireLobbyCard(card);
     }
     maybeLobbyTick();
+    setLobbyBlur(true);
     return;
   }
   lastLobbyKind = kind;
@@ -2548,6 +2554,7 @@ function startRace() {
   const overlay = $('#raceOverlay');
   overlay.classList.remove('show');
   overlay.hidden = true;
+  setLobbyBlur(false);
   raceStartWall = performance.now();
   paintRaceClock(t('clock.s', { n: 0 }));
   running = true;
@@ -2606,7 +2613,7 @@ function announceRaceWinner(f, why) {
 let deadFlyMap = null;
 function ensureDeadFlyMap() {
   if (deadFlyMap) return deadFlyMap;
-  deadFlyMap = new THREE.TextureLoader().load(`${BASE}deadfly.webp`, (tex) => {
+  deadFlyMap = new THREE.TextureLoader().load(`${BASE}deadfly.png`, (tex) => {
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.generateMipmaps = true;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -2745,8 +2752,9 @@ function checkRaceFinish(f) {
   }
   if (!running || raceWinner || raceResetting) return;
   const food = env.food[0], p = f?.last?.pos;
+  const winR = food?.winR ?? food?.r;
   if (food && p && f.last.alive !== false && !f.last.flying && p[2] < 0.22
-      && Math.hypot(p[0] - food.x, p[1] - food.y) < food.r) {
+      && Math.hypot(p[0] - food.x, p[1] - food.y) < winR) {
     announceRaceWinner(f);
     return;
   }
@@ -2934,7 +2942,7 @@ function deathCauseLabel(s) {
 }
 function flyDeadHtml(s) {
   const cause = deathCauseLabel(s);
-  return `<img class="fly-dead-icon" src="${BASE}deadfly.webp" alt=""><span class="fly-dead-cause">${cause}</span>`;
+  return `<img class="fly-dead-icon" src="${BASE}deadfly.png" alt=""><span class="fly-dead-cause">${cause}</span>`;
 }
 function flyRowHtml(f, selectedId = selected, raceVitals = false) {
   const s = f.last || {}; const e = s.energy ?? 0, h = s.health ?? 1;

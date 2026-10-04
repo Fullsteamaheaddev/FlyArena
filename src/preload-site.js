@@ -9,7 +9,7 @@ const IMAGES = [
   { path: 'button.png', high: true },
   { path: 'FruitFlyText.png' },
   { path: 'FLYticker.webp' },
-  { path: 'deadfly.webp' },
+  { path: 'deadfly.png' },
   { path: 'favicon-512.webp' },
 ];
 

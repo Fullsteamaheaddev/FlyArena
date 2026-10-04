@@ -138,7 +138,7 @@ export function desertEnv(base) {
     arena: { shape: 'square', half: DESERT_HALF, radius: DESERT_HALF, wallHeight: 2.4, clipHeight: 8, segments: 4, wallFriction: 1 },
     hazards: [],
     bitterPatches: [],
-    food: [{ x: 0, y: 0, r: 0.5, sugar: 1, bitter: 0, water: 0.2, amount: 8 }],
+    food: [{ x: 0, y: 0, r: 0.62, winR: 0.5, sugar: 1, bitter: 0, water: 0.2, amount: 8, hiddenDisc: true }],
     windRadial: 6,
     hungryForage: true,
     showOdor: true,

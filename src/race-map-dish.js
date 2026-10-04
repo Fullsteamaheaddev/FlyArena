@@ -6,6 +6,7 @@ import { propScale } from './desert-prop-scale.js';
 import { applySwayWind, SWAY_KINDS, swayForMaterial, swayMaterials } from './race-map-sway.js';
 import { applyCelShading, celOutlineMat } from './cel-shade.js';
 import { dishDoghouseProps, dishGrassProps } from './sim/maps/dish.js';
+import { placeSugarPile } from './race-sugar-pile.js';
 
 const HOUSE_INK = '#1c120c';
 const HOUSE_OUTLINE = 1.04;
@@ -323,6 +324,8 @@ export function buildDishScene(envGroup, env, ctx) {
       root.add(im);
     }
   }
+
+  placeSugarPile(root, env);
 
   const saved = {
     bg: scene.background?.clone?.() ?? scene.background,

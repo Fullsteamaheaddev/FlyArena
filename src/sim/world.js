@@ -44,7 +44,7 @@ export const PRESETS = {
       arena: { ...DEFAULT_ENV.arena, radius: 12.5, clipHeight: 8 },
       hazards: [],
       bitterPatches: [],
-      food: [{ x: 0, y: 0, r: 0.5, sugar: 1, bitter: 0, water: 0.2, amount: 8 }],
+      food: [{ x: 0, y: 0, r: 0.62, winR: 0.5, sugar: 1, bitter: 0, water: 0.2, amount: 8, hiddenDisc: true }],
       windRadial: 6,
       hungryForage: true,
       odors: [

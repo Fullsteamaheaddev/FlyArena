@@ -9,7 +9,7 @@ import { DESERT_MAP_PROP_NAMES, DESERT_PREVIEW_PROPS, propScale } from '../deser
 const params = new URLSearchParams(location.search);
 const setName = params.get('set') === 'desert' ? 'desert' : 'chaos';
 
-const CHAOS_PROPS = ['ufo', 'meteor_chunk', 'spike_trap', 'sugar_crumb', 'cake_slice'];
+const CHAOS_PROPS = ['ufo', 'meteor_chunk', 'spike_trap', 'sugar_crumb', 'cake_slice', 'sugar_pile'];
 
 const mount = document.getElementById('view');
 const partSelect = document.getElementById('part');
@@ -208,7 +208,9 @@ function viewTop() {
 }
 
 function glbUrl(name) {
-  const base = setName === 'desert' ? `/maps/desert/${name}.glb` : `/chaos/${name}.glb`;
+  const base = name === 'sugar_pile'
+    ? `/maps/sugar_pile.glb`
+    : setName === 'desert' ? `/maps/desert/${name}.glb` : `/chaos/${name}.glb`;
   return `${base}?t=${Date.now()}`;
 }
 
