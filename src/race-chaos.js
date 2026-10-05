@@ -405,7 +405,8 @@ export function createRaceChaos(api) {
     const pool = ensureLaserPool();
     if (!laserBurnLast) laserBurnLast = new Map();
     const allLive = liveFlies(flies());
-    const beamFlies = allLive;
+    const sid = laserSession.shooterId;
+    const beamFlies = sid != null ? allLive.filter(f => f.id === sid) : allLive;
     tickLaserBeams(pool, beamFlies, arena, t, laserBurnLast, {
       physics: laserSession.physics ?? physics,
       solids: collectLaserSolids(env),
@@ -1678,6 +1679,7 @@ export function createRaceChaos(api) {
   function chaosName(kind, payload) {
     if (kind === 'holy') return payload.holy ? { thrower: payload.holy.throwerName, target: payload.holy.targetName } : null;
     if (kind === 'double') return payload.hitBolt != null ? (payload.name || '') : '';
+    if (kind === 'laser') return payload.solo ? (payload.name || '') : '';
     return payload.name || '';
   }
 
@@ -1814,7 +1816,12 @@ export function createRaceChaos(api) {
       }
     } else if (kind === 'laser') {
       const dur = laserSessionDuration();
-      laserSession = { until: now() + dur, killed: new Set(), physics };
+      laserSession = {
+        until: now() + dur,
+        killed: new Set(),
+        physics,
+        shooterId: payload.solo ? payload.flyId : null,
+      };
       laserBurnLast = new Map();
       ensureLaserPool();
       api.audio()?.startLaserBeam?.();
@@ -1975,6 +1982,20 @@ export function createRaceChaos(api) {
         color = victim.color || '#fff';
       }
     }
+    let solo = false;
+    if (kind === 'laser') {
+      solo = opts.solo === true || (opts.solo !== false && Math.random() < 0.5);
+      const shooter = opts.flyId != null ? live.find(x => x.id === opts.flyId) : target;
+      if (solo && shooter) {
+        flyId = shooter.id;
+        name = shooter.name || '';
+        color = shooter.color || '#fff';
+      } else {
+        solo = false;
+        flyId = null;
+        name = '';
+      }
+    }
     return {
       kind,
       flyId,
@@ -1986,6 +2007,7 @@ export function createRaceChaos(api) {
       points: extra,
       hitBolt,
       killed: hitBolt != null,
+      solo,
     };
   }
 
@@ -1993,7 +2015,7 @@ export function createRaceChaos(api) {
     return {
       thumb: 1800, spin: 1600, quake: 5200, flip: 2200, tilt: 4000, lightning: 1600, double: 2800,
       crumb: CAKE_STAGGER_MS * (CAKE_SLICE_COUNT - 1) + 2800,
-      firefly: 7200, boop: 1300, puff: 5200, laser: 3500,
+      firefly: 7200, boop: 1300, puff: 5200, laser: 3200,
       meteor: 5600, sugarrain: 5400, ufo: 7000, spikes: 3600, holy: 6400,
     }[kind] || 1200;
   }
@@ -2021,6 +2043,7 @@ export function createRaceChaos(api) {
         strikes: payload.strikes,
         killed: payload.killed,
         holy: payload.holy,
+        solo: payload.solo,
       });
     }
   }

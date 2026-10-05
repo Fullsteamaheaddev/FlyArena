@@ -139,6 +139,7 @@ let hostMapChoice = null;
 
 /** Host: lobby pick wins, else dev ?map=, else the site-wide admin choice. */
 async function wantedRaceMap() {
+  if (chaosTestMode) return 'dish';
   if (hostMapChoice) return hostMapChoice;
   const q = import.meta.env.DEV ? normalizeMapId(new URLSearchParams(location.search).get('map')) : null;
   return q || fetchSiteMap();
@@ -425,7 +426,7 @@ function raceFloorLogoImg() {
       const img = new Image();
       img.onload = () => { raceFloorLogo = img; res(img); };
       img.onerror = () => res(null);
-      img.src = `${BASE}Flieslogo.png`;
+      img.src = `${BASE}Farmageddoncom.png`;
     });
   }
   return raceFloorLogoWait;
@@ -450,7 +451,7 @@ function paintRaceFloor(fx, fs, logo, ticker) {
   fx.strokeStyle = 'rgba(210,150,255,0.28)'; fx.lineWidth = fs / 51;
   for (const r of [0.22, 0.42, 0.62, 0.82]) { fx.beginPath(); fx.arc(mid, mid, r * mid, 0, Math.PI * 2); fx.stroke(); }
   if (logo) {
-    const dw = fs * 0.53, dh = dw * (logo.height / logo.width);
+    const dw = fs * 0.3445, dh = dw * (logo.height / logo.width);
     fx.save();
     fx.globalAlpha = 0.5;
     fx.translate(mid, mid);
@@ -617,9 +618,13 @@ function rebuildEnv() {
   let floorMat, wallMat;
   if (isRace && env.map === 'desert') {
     ++raceFloorPaint;
-    desertScene = buildDesertScene(envGroup, env, { renderer, scene, sun, hemi: hemiLight, rim: rimLight });
+    desertScene = buildDesertScene(envGroup, env, {
+      renderer, scene, sun, hemi: hemiLight, rim: rimLight,
+      getLogos: () => ({ logo: raceFloorLogo, ticker: raceWallLogo }),
+    });
     floorMesh = desertScene.floor; wallMesh = null;
     raceFloorPaintCtx = desertScene.floorPaint;
+    if (!raceFloorLogo) raceFloorLogoImg().then(img => { if (img) repaintRaceFloor(); });
   } else if (isRace && env.map === 'dish') {
     ++raceFloorPaint;
     dishScene = buildDishScene(envGroup, env, {
@@ -1033,6 +1038,8 @@ function setupRaceChrome() {
     laserBeam: `${BASE}LaserBeam.wav`,
     laserKill: `${BASE}LaserKill.wav`,
     xfiles: `${BASE}xfiles.wav`,
+    haleluja: `${BASE}haleluja.wav`,
+    grenadeThrow: `${BASE}Grenade%20throw.wav`,
   });
   if (env.map === 'desert') raceAudio.startAmbience();
   raceChaos = createRaceChaos({
@@ -1333,6 +1340,7 @@ function settleNote() {
   return t('race.settling');
 }
 function readyForNextRace() {
+  if (chaosTestMode) return Date.now() - resultsAt > CLAIM_WINDOW_MS;
   const configured = chainConfigured();
   // A settle that cannot happen is not worth SETTLE_GRACE_MS of staring at the results card.
   if (!configured || (poolOpError && !settledAt)) return Date.now() - resultsAt > CLAIM_WINDOW_MS;
@@ -1661,6 +1669,21 @@ function sampleWatchPose(f, now) {
   return { a: prev || a, b: a, blend: 1, extra: prev ? Math.min(WATCH_POSE_EXTRAP, renderAt - a.hostAt) : 0 };
 }
 function flyDrawPos(f) { return f.drawPos || f.last?.pos; }
+function lerpPosePos(a, b, u) {
+  if (!b) return a || null;
+  if (!a || u >= 1) return b;
+  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+}
+function pinFlyLabel(f, p) {
+  if (!f.label || !p) return;
+  syncFlySceneLabel(f);
+  if (f.label.visible) f.label.position.set(p[0], p[1], p[2] + flyLabelZ(f));
+}
+function followCamTo(p) {
+  followDelta.set(p[0], p[1], p[2]).sub(controls.target);
+  controls.target.add(followDelta);
+  camera.position.add(followDelta);
+}
 /** Dish pose the flies currently on screen were standing on. Watchers replay the cue on their own
  *  delayed timeline, so they keep drawing the newest pose (null). */
 function drawnDishSeq() {
@@ -1702,10 +1725,7 @@ function applyWatchBodies(f, a, b, blend, extra) {
   const pos = [ap[0] + (bp[0] - ap[0]) * u + ex, ap[1] + (bp[1] - ap[1]) * u + ey, ap[2] + (bp[2] - ap[2]) * u + ez];
   f.drawPos = pos;
   f.ring.position.set(pos[0], pos[1], ARENA_FLOOR_DECAL_Z);
-  if (f.label) {
-    syncFlySceneLabel(f);
-    if (f.label.visible) f.label.position.set(pos[0], pos[1], pos[2] + flyLabelZ(f));
-  }
+  pinFlyLabel(f, pos);
   updateWingBlur(f, { flying: u < 0.5 ? a.flying : b.flying });
 }
 function addVisualFly(row, bodyNames) {
@@ -2124,6 +2144,13 @@ function setLobbyBlur(on) {
 function setRaceHudLive(on) {
   document.body.classList.toggle('hud-live', !!(isRace && on));
   syncBpHint();
+}
+function hideRaceOverlay() {
+  const overlay = $('#raceOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('show', 'results-panel');
+  overlay.hidden = true;
+  setLobbyBlur(false);
 }
 function showRaceOverlayCard(card, { flyColor, enter = true } = {}) {
   const overlay = $('#raceOverlay');
@@ -2578,6 +2605,13 @@ async function showRaceStart() {
   if (isHost && chainConfigured()) openHostRace().catch(e => console.warn('openRace', e));
   refreshPoolSnap().then(() => paintLobbyOverlay());
   raceChaos?.reset();
+  if (chaosTestMode) {
+    hideRaceOverlay();
+    if (isHost) {
+      startRace();
+      raceChaos?.holdRoulette?.();
+    }
+  }
 }
 function formatWall(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -2601,10 +2635,7 @@ function paintRaceClock(wall) {
   $('#raceWall').textContent = wall;
 }
 function startRace() {
-  const overlay = $('#raceOverlay');
-  overlay.classList.remove('show');
-  overlay.hidden = true;
-  setLobbyBlur(false);
+  hideRaceOverlay();
   setProfileFolded(true, { instant: true });
   setRaceHudLive(true);
   raceStartWall = performance.now();
@@ -2845,6 +2876,7 @@ function recycleRaceFlies() {
 async function resetRace() {
   if (raceResetting) return;
   raceResetting = true;
+  if (chaosTestMode) hideRaceOverlay();
   clearInterval(raceResetTimer); raceResetTimer = null;
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   running = false; raceWinner = null; raceWinnerWhy = null; raceStartWall = null;
@@ -2963,8 +2995,7 @@ function tickRaceCamera(dt) {
     const f = flies.find(x => x.id === raceFollow);
     if (f?.last) {
       const p = flyDrawPos(f) || f.last.pos;
-      followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1);
-      controls.target.add(followDelta); camera.position.add(followDelta);
+      followCamTo(p);
     }
   }
 }
@@ -3300,16 +3331,13 @@ function animate() {
         }
         g.quaternion.copy(q); g.updateMatrix();
       }
-      f.ring.position.set(s.pos[0], s.pos[1], (env.dunes ? groundAt(s.pos, env) : 0) + ARENA_FLOOR_DECAL_Z);
-      if (f.label) {
-        syncFlySceneLabel(f);
-        if (f.label.visible) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
-      }
       updateWingBlur(f, s); f.drawnPose = s; f.drawnBlend = blend;
-    } else if (f.label && s) {
-      syncFlySceneLabel(f);
-      if (f.label.visible) f.label.position.set(s.pos[0], s.pos[1], s.pos[2] + flyLabelZ(f));
     }
+    const th = f.bodies?.thorax;
+    const pos = th ? [th.position.x, th.position.y, th.position.z] : (lerpPosePos(previous?.pos, s.pos, blend) || s.pos);
+    f.drawPos = pos;
+    f.ring.position.set(pos[0], pos[1], (env.dunes ? groundAt(pos, env) : 0) + ARENA_FLOOR_DECAL_Z);
+    pinFlyLabel(f, pos);
     }
     const mark = f.id === selected && raceFollow == null;
     f.ring.visible = mark;
@@ -3319,18 +3347,13 @@ function animate() {
     }
   }
   const sf = flies.find(x => x.id === selected);
-  if (!isRace && sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
+  if (!isRace && sf?.last && $('#follow').checked) followCamTo(flyDrawPos(sf) || sf.last.pos);
   tickRaceCamera(dt);
   if (isRace) raceChaos?.tick(dt);
   if (desertScene) tickDesert(now);
   if (dishScene) tickDish(now);
   if (isRace) {
-    for (const f of flies) {
-      const p = flyDrawPos(f);
-      if (!f.label || !p) continue;
-      syncFlySceneLabel(f);
-      if (f.label.visible) f.label.position.set(p[0], p[1], p[2] + flyLabelZ(f));
-    }
+    for (const f of flies) pinFlyLabel(f, flyDrawPos(f));
   }
   if (isRace && raceStartWall != null && !raceWinner) paintRaceClock(formatWall(now - raceStartWall));
   if (isRace && raceAudio && running && !raceWinner) {

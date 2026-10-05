@@ -4,9 +4,9 @@ function kinds() {
   return window.CHAOS_KINDS || window.__arena?.chaosKinds || [];
 }
 
-function fire(kind) {
+function fire(kind, extra) {
   window.__arena?.raceAudio?.unlock?.();
-  const r = (window.fireChaos || window.__arena?.fireChaos)?.(kind);
+  const r = (window.fireChaos || window.__arena?.fireChaos)?.(kind, extra);
   console.info('[chaos test]', r || kind);
 }
 
@@ -56,6 +56,11 @@ export function mountChaosTestPanel() {
     console.info('[chaos test] killFly', r);
   };
   grid.appendChild(kill);
+  const laserOne = document.createElement('button');
+  laserOne.className = 'wide';
+  laserOne.textContent = 'laser one';
+  laserOne.onclick = () => fire('laser', { solo: true });
+  grid.appendChild(laserOne);
   for (const kind of kinds()) {
     const b = document.createElement('button');
     b.textContent = kind;

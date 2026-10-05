@@ -29,7 +29,7 @@ rules, and the four GLB-backed wildcards (`meteor`, `sugarrain`, `ufo`, `spikes`
    Meteor, sugar rain, cake rain, the spike trap, and the UFO frame the camera then
    re-enable orbit; thumb, boop, flip, quake punch, and puff stay locked until release.
 5. **Toast** — “Luckiest Guy” copy from `COPY[kind]` in `race-chaos.js` (~2.4 s).
-6. **Debug** — On the host page, `fireChaos('laser')` / `window.CHAOS_KINDS` (see
+6. **Debug** — On the host page, `fireChaos('laser')` / `fireChaos('laser', { solo: true })` / `window.CHAOS_KINDS` (see
    `src/arena.js`).
 
 `CHAOS_KINDS` is exported and must stay the single source of truth for roulette and
@@ -105,7 +105,7 @@ reset.
 | `firefly` | Firefly moment | None | Rim lights ~7 s |
 | `boop` | Gentle boop | Small impulse on one fly | Finger pad; cam locked |
 | `puff` | Dandelion puff | 5 s inward `windRadial` + outward per-fly `bias` | Seed meshes; cam locked |
-| `laser` | Laser eyes | ~5 s session; beams can kill | `race-chaos-laser.js` pool |
+| `laser` | Laser eyes | ~3.2 s session; ~50% one fly, else all; beams can kill | cue `{ solo, flyId }`; `shooterId`; `fireChaos('laser', { solo: true })` |
 | `meteor` | Meteor shower | 3 slanted impacts; smoke lingers ≥5 s per impact; chunks ~15 s; ~15% targeted kill | Pull-back then orbit; `public/chaos/meteor_chunk.glb` |
 | `sugarrain` | Sugar crumbs | Light crumb rain + weak impulses; no kill, no cake patches | Pull-back then orbit; `public/chaos/sugar_crumb.glb` |
 | `ufo` | UFO | Shader beam + saucer GLB; lift/drop; no auto-kill | Frames then orbit; `ufo.glb` + `race-chaos-ufo-beam.js` |
@@ -209,7 +209,8 @@ These ship in `CHAOS_KINDS` alongside the original twelve (**17 kinds**, equal r
 ### `holy` (Holy Hand Grenade)
 
 - **Fantasy:** Worms-style lob. One fly throws, the grenade lands, wobbles, counts 1-2-3
-  (12%: 1-2-**5**-3) and explodes. Rarely hits what it was aimed at.
+  (12%: 1-2-**5**-3) and explodes. Toast time plays `Grenade throw.wav`; on **1**,
+  `haleluja.wav` plays. Rarely hits what it was aimed at.
 - **Outcomes (host roll):** miss 40% (1.4–2.6 off), close 25% (0.4–1.1), wild 20% (anywhere
   off the sugar disc), oops 10% (at the thrower's feet), dud 5% (smoke, “A damp squib.”,
   tiny shove). Aim error ±35°, long or short; desert wind nudges 0.4–1.0.

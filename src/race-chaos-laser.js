@@ -471,5 +471,5 @@ export function disposeLaserPool(pool) {
 }
 
 export function laserSessionDuration() {
-  return 3500;
+  return 3200;
 }

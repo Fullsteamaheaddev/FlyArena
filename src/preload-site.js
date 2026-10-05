@@ -19,7 +19,7 @@ const FLAGS = ['en.svg', 'es.svg', 'ko.svg', 'pt-BR.svg', 'ru.svg', 'zh-CN.svg']
 const AUDIO = [
   'yipee.wav', 'gong.wav', 'boop.wav', 'Thundersound.wav', 'thumb.wav',
   'splatter1.wav', 'splatter2.wav', 'LaserToast.wav', 'LaserBeam.wav',
-  'LaserKill.wav', 'xfiles.wav',
+  'LaserKill.wav', 'xfiles.wav', 'haleluja.wav', 'Grenade throw.wav',
 ];
 
 function joinBase(base, path) {

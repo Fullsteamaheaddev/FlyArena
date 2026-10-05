@@ -97,7 +97,7 @@ export function paintDishSandBase(fx, fs, logo, ticker) {
     fx.stroke();
   }
   if (logo) {
-    const dw = fs * 0.53, dh = dw * (logo.height / logo.width);
+    const dw = fs * 0.2756, dh = dw * (logo.height / logo.width);
     fx.save();
     fx.globalAlpha = 0.5;
     fx.translate(mid, mid);

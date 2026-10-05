@@ -165,6 +165,18 @@ function paintDesertBase(fx, fs, env) {
   fx.globalCompositeOperation = 'source-over';
 }
 
+function paintDesertCenterLogo(fx, fs, logo) {
+  if (!logo) return;
+  const mid = fs / 2;
+  const dw = fs * 0.2756, dh = dw * (logo.height / logo.width);
+  fx.save();
+  fx.globalAlpha = 0.5;
+  fx.translate(mid, mid);
+  fx.rotate(-Math.PI / 2);
+  fx.drawImage(logo, -dw / 2, -dh / 2, dw, dh);
+  fx.restore();
+}
+
 // ---------------- placement ----------------
 function propZ(p, env) {
   if (p.kind === 'lilypad') return 0.05;
@@ -176,10 +188,10 @@ function propZ(p, env) {
 /**
  * @param {THREE.Group} envGroup tilting env group (floor, walls, props)
  * @param {object} env desert env from desertEnv()
- * @param {{ renderer, scene, sun, hemi, rim }} ctx
+ * @param {{ renderer, scene, sun, hemi, rim, getLogos?: () => { logo, ticker } }} ctx
  */
 export function buildDesertScene(envGroup, env, ctx) {
-  const { renderer, scene, sun, hemi, rim } = ctx;
+  const { renderer, scene, sun, hemi, rim, getLogos } = ctx;
   const H = env.arena.half, aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const own = [];   // textures / materials / geometries this scene created
   const keep = o => { o.userData.keep = true; return o; };
@@ -195,14 +207,19 @@ export function buildDesertScene(envGroup, env, ctx) {
   }
   const base = baseCache;
   const fc = document.createElement('canvas'); fc.width = fc.height = fs; const fx = fc.getContext('2d');
-  fx.drawImage(base, 0, 0);
+  const drawFloorBase = () => {
+    fx.drawImage(base, 0, 0);
+    const { logo } = getLogos?.() || {};
+    paintDesertCenterLogo(fx, fs, logo);
+  };
+  drawFloorBase();
   const ft = new THREE.CanvasTexture(fc); ft.colorSpace = THREE.SRGBColorSpace; ft.anisotropy = aniso;
   const sandN = sandNormalTexture(); sandN.repeat.set(2 * H / 1.6, 2 * H / 1.6); sandN.anisotropy = aniso;
   own.push(sandN);
   const sandMat = new THREE.MeshStandardMaterial({ map: ft, normalMap: sandN, normalScale: new THREE.Vector2(0.35, 0.35), roughness: 0.96 });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(2 * H, 2 * H), sandMat);
   floor.receiveShadow = true; floor.userData.laserSurface = 'floor'; root.add(floor);
-  const floorPaint = { fx, fs, ft, paintBase: () => fx.drawImage(base, 0, 0) };
+  const floorPaint = { fx, fs, ft, paintBase: drawFloorBase };
 
   // --- sandstone walls, coping and corner towers (inner face exactly at +-H) ---
   const stone = sandstoneTexture(); stone.anisotropy = aniso; own.push(stone);

@@ -134,7 +134,7 @@ export function chaosCopy(kind, name) {
     return { title, line: name ? t('chaos.double.line', { name }) : t('chaos.double.lineAnon') };
   }
   if (kind === 'laser') {
-    return { title, line: t('chaos.laser.line') };
+    return { title, line: name ? t('chaos.laser.line', { name }) : t('chaos.laser.lineAnon') };
   }
   if (kind === 'holy') {
     if (name?.dud) return { title, line: t('chaos.holy.lineDud') };

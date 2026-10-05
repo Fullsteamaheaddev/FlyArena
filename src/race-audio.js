@@ -9,8 +9,10 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   const laserBeamUrl = extraUrls.laserBeam;
   const laserKillUrl = extraUrls.laserKill;
   const xfilesUrl = extraUrls.xfiles;
+  const halelujaUrl = extraUrls.haleluja;
+  const grenadeThrowUrl = extraUrls.grenadeThrow;
   let ctx, master, duckGain, musicGain, buzzGain, musicSrc, bedGain, musicBuf, menuBuf, yipeeBuf, gongBuf, boopBuf, thunderBuf, thumbBuf, splatter1Buf, splatter2Buf;
-  let xfilesBuf;
+  let xfilesBuf, halelujaBuf, grenadeThrowBuf;
   let laserToastBuf, laserBeamBuf, laserKillBuf;
   let laserBeamSrc, laserBeamGain;
   let xfilesSrc, xfilesGain;
@@ -85,6 +87,8 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     if (laserBeamUrl && !laserBeamBuf) laserBeamBuf = await decodeUrl(laserBeamUrl);
     if (laserKillUrl && !laserKillBuf) laserKillBuf = await decodeUrl(laserKillUrl);
     if (xfilesUrl && !xfilesBuf) xfilesBuf = await decodeUrl(xfilesUrl);
+    if (halelujaUrl && !halelujaBuf) halelujaBuf = await decodeUrl(halelujaUrl);
+    if (grenadeThrowUrl && !grenadeThrowBuf) grenadeThrowBuf = await decodeUrl(grenadeThrowUrl);
     if (ambWanted && !amb) startAmbience();
   }
   function startBuzz() {
@@ -379,7 +383,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
       const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
       thud.connect(g); g.connect(master); thud.start(t0); thud.stop(t0 + 0.22);
     }
-    else if (kind === 'holy') sfxChoir(t0);
+    else if (kind === 'holy') playHolyThrow(t0);
   }
   // "Hallelujah" stab: a major triad of detuned saws through a soft lowpass.
   function sfxChoir(t0) {
@@ -395,6 +399,12 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
         o.connect(lp); o.start(t0); o.stop(t0 + 1.65);
       }
     }
+  }
+  function playHolyThrow(when) {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = when ?? ctx.currentTime;
+    if (grenadeThrowBuf) playBuf(grenadeThrowBuf, t0, 0.9);
+    else sfxChoir(t0);
   }
   function playHolyWhoosh() {
     if (!ctx || ctx.state !== 'running' || muted) return;
@@ -432,6 +442,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
       g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.4);
     }
     o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.42);
+    if (n === 1) playBuf(halelujaBuf, t0, 0.85);
   }
   function playHolyBoom(dud) {
     if (!ctx || ctx.state !== 'running' || muted) return;
@@ -753,7 +764,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     unlock, playBed, stop, playYipee, playGong, playOof, playSelect, playTakeoff, playLobbyTick, playChaos, playCakeLand,
     setMuted, setMotion, hold, playLaserToast, startLaserBeam, stopLaserBeam, playLaserKill,
     startUfoSting, stopUfoSting, startAmbience, stopAmbience, setAmbience,
-    playHolyWhoosh, playHolyThud, playHolyCount, playHolyBoom,
+    playHolyThrow, playHolyWhoosh, playHolyThud, playHolyCount, playHolyBoom,
   };
 }
 
