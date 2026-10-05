@@ -235,6 +235,7 @@ export default {
 
   'race.wait': 'Ждём следующую гонку',
   'race.go': 'СТАРТ!',
+  'race.timer': 'таймер',
   'race.wins': '{name} побеждает!',
   'race.died': '{name} погибла!',
   'race.lastRemaining': 'последняя оставшаяся',

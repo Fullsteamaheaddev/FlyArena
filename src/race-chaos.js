@@ -1360,10 +1360,11 @@ export function createRaceChaos(api) {
 
   // Holy Hand Grenade: the named target is only an aim point. All rolls happen here on the
   // host and ride the cue, so watchers replay the same miss.
-  const HOLY_SCALE = 1.8;
+  const HOLY_SCALE = 1.8 / 5;
   const HOLY_GROUND_Z = 0.276 * HOLY_SCALE;
-  const HOLY_KILL_R = 0.8;
-  const HOLY_IMPULSE_R = 2.2;
+  // GLB is +Z-up, ~0.769 tall; blast disc is 5× that final height and kills inside it
+  const HOLY_KILL_R = 0.769 * HOLY_SCALE * 5;
+  const HOLY_IMPULSE_R = HOLY_KILL_R * 2.75;
   const HOLY_PIN_MS = 280;
   const HOLY_BEAT_MS = 650;
   const HOLY_OUTCOMES = [['miss', 0.4], ['close', 0.25], ['wild', 0.2], ['oops', 0.1], ['dud', 0.05]];
@@ -1605,7 +1606,8 @@ export function createRaceChaos(api) {
     disposeHolyLabel(s);
     ensureMeteorSmoke();
     const smoke = allocMeteorSmokeBatch();
-    burstMeteorSmoke(x, y, 0.1, smoke);
+    const smokeR = h.dud ? h.killR * 0.45 : h.killR * 2;
+    burstMeteorSmoke(x, y, 0.1, smoke, smokeR);
     api.audio()?.playHolyBoom?.(!!h.dud);
     if (h.dud) {
       sealMeteorSmokeBatch(smoke, now());
@@ -1645,16 +1647,16 @@ export function createRaceChaos(api) {
       disposeObj(fb);
       if (holySession) holySession.fireball = null;
     });
-    const light = borrowLight({ color: '#ffb050', distance: 9 });
+    const light = borrowLight({ color: '#ffb050', distance: Math.max(6, h.killR * 7) });
     s.light = light;
     if (light) {
       light.position.set(x, y, 0.8);
       tween(600, u => { light.intensity = 30 * (1 - u); });
     }
-    burstMeteorSmoke(x, y, 0.25, smoke);
+    burstMeteorSmoke(x, y, 0.25, smoke, smokeR);
     sealMeteorSmokeBatch(smoke, now());
     camShake(380, 0.4);
-    scorches.push({ x, y, r: 0.85 * scorchScale(), until: now() + 15000 });
+    scorches.push({ x, y, r: h.killR * scorchScale(), until: now() + 15000 });
     api.repaintFloor?.();
     if (physics) {
       for (const f of liveFlies(flies())) {

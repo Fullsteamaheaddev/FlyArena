@@ -110,7 +110,7 @@ reset.
 | `sugarrain` | Sugar crumbs | Light crumb rain + weak impulses; no kill, no cake patches | Pull-back then orbit; `public/chaos/sugar_crumb.glb` |
 | `ufo` | UFO | Shader beam + saucer GLB; lift/drop; no auto-kill | Frames then orbit; `ufo.glb` + `race-chaos-ufo-beam.js` |
 | `spikes` | Spike trap | `spike_trap.glb` (+Z spikes, 1.5×); kills inside while armed | Frames the trap then orbit; AABB `half` ~1.0–1.23 |
-| `holy` | Holy Hand Grenade | One fly lobs `grenade.glb` at another; mostly misses; blast kills within 0.8, impulse to 2.2 | Frames the arc then orbit; count 1-2-3 then boom |
+| `holy` | Holy Hand Grenade | One fly lobs `grenade.glb` at another; mostly misses; blast kill R = 5× grenade height | Frames the arc then orbit; count 1-2-3 then boom |
 
 Reference implementations for “spectacle + optional kill”: **`crumb`** (staggered props +
 env), **`laser`** (session + tick), **`lightning`** (payload `points` + `hitBolt`),
@@ -213,8 +213,8 @@ These ship in `CHAOS_KINDS` alongside the original twelve (**17 kinds**, equal r
 - **Outcomes (host roll):** miss 40% (1.4–2.6 off), close 25% (0.4–1.1), wild 20% (anywhere
   off the sugar disc), oops 10% (at the thrower's feet), dud 5% (smoke, “A damp squib.”,
   tiny shove). Aim error ±35°, long or short; desert wind nudges 0.4–1.0.
-- **Physics (host):** `pin` thrower during windup; at boom `kill` within `killR` 0.8
-  (`cause: 'holy', by: thrower`, or `holySelf`), outward `impulse` to `impulseR` 2.2.
+- **Physics (host):** `pin` thrower during windup; at boom `kill` within `killR`
+  (5× scaled grenade height), outward `impulse` to `impulseR`.
   The thrower is not immune.
 - **Payload:** `holy: { throwerId, targetId, start, land, apexZ, flightMs, count, dud,
   outcome, wind, killR, impulseR }`. Debug: `fireChaos('holy', { outcome: 'oops', gag: true })`.

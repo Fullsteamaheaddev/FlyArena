@@ -235,6 +235,7 @@ export default {
 
   'race.wait': '다음 경기를 기다리는 중',
   'race.go': '출발!',
+  'race.timer': '타이머',
   'race.wins': '{name} 승리!',
   'race.died': '{name} 사망!',
   'race.lastRemaining': '마지막 생존',

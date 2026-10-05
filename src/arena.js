@@ -1010,6 +1010,7 @@ function raceHistoryHtml(rows) {
 }
 function setupRaceChrome() {
   document.body.classList.add('race');
+  if (isWatch) document.body.classList.add('watch');
   $('#panel').hidden = true;
   $('#raceHud').hidden = false;
   document.title = 'Sugar Run';
@@ -1118,6 +1119,7 @@ function setupRaceChrome() {
     positionBpHint(null, { instant: true });
     syncProfileScrim();
     syncVitalBarWidth($('#raceVitals'));
+    brainFoldChrome($('#brainpanel')?.classList.contains('folded'));
   });
   setProfileFolded(true, { instant: true });
   setupWalletPick();
@@ -1255,6 +1257,7 @@ function setupRaceSocials() {
   nav.innerHTML = `<a class="race-social race-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
     <a class="race-social race-social-ticker" id="raceTicker" href="#" aria-label="FLYticker"><img src="${BASE}FLYticker.webp" alt="FLYticker" draggable="false" /></a>`;
   document.body.appendChild(nav);
+  if (isWatch) $('#scoreboard header')?.appendChild(nav);
   $('#raceTicker')?.addEventListener('click', onRaceTickerClick);
   paintRaceTicker();
   loadSiteTicker();
@@ -1509,6 +1512,7 @@ function sampleSimRate(now) {
 }
 function paintSimRate(r) {
   const el = $('#simRate'); if (!el) return;
+  if (isWatch) { el.hidden = true; return; }
   el.hidden = !r;
   if (!r) return;
   el.textContent = r.backend ? t('race.simRateBe', { rate: r.rate.toFixed(2), target: r.target, be: r.backend }) : t('race.simRate', { rate: r.rate.toFixed(2), target: r.target });
@@ -1808,7 +1812,7 @@ function applyWatchState(st) {
   }
   if (st.chaosCue) queueWatchCue(st.chaosCue, received, hasHost);
   if (st.clock) {
-    paintSimRate(st.phase === 'live' ? st.clock.sim : null);
+    if (!isWatch) paintSimRate(st.phase === 'live' ? st.clock.sim : null);
     if (st.phase === 'live') {
       const elapsed = st.clock.elapsed ?? parseWallMs(st.clock.wall);
       if (elapsed != null && raceStartWall == null) raceStartWall = performance.now() - elapsed;
@@ -1958,8 +1962,7 @@ function setBrainPanelTitle(fly) {
 }
 function brainFoldChrome(folded) {
   const b = $('#bpFold'); if (!b) return;
-  const mobile = raceMobile();
-  b.textContent = mobile ? (folded ? '∧' : '∨') : (folded ? '<' : '>');
+  b.textContent = folded ? '<' : '>';
   b.title = folded ? t('brain.show') : t('brain.hide');
   b.setAttribute('aria-expanded', String(!folded));
 }

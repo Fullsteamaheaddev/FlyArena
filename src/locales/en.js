@@ -247,6 +247,7 @@ export default {
 
   'race.wait': 'Waiting for the next race',
   'race.go': 'GO!',
+  'race.timer': 'timer',
   'race.wins': '{name} wins!',
   'race.died': '{name} died!',
   'race.lastRemaining': 'last remaining',

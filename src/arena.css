@@ -545,6 +545,39 @@ body.race .race-social-ticker.is-off {
 body.race .race-social-ticker:not(.is-off) {
   cursor: pointer;
 }
+body.race.watch #simRate { display: none !important; }
+body.race.watch #scoreboard #raceSocials {
+  position: static;
+  left: auto;
+  bottom: auto;
+  z-index: 1;
+  margin: 6px 0 2px;
+  gap: 6px;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  animation: none;
+}
+body.race.watch #scoreboard #raceSocials.in {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+body.race.watch #scoreboard .race-social {
+  width: 34px;
+  height: 34px;
+}
+body.race.watch #scoreboard .race-social svg { width: 16px; height: 16px; }
+body.race.watch #scoreboard .race-social img { width: 22px; height: 22px; }
+body.race.watch #scoreboard .race-social-ticker {
+  width: 44px;
+  height: 44px;
+}
+body.race.watch #scoreboard .race-social-ticker img {
+  width: 30px;
+  height: 30px;
+  opacity: 0.85;
+}
 body.race .race-social-x[aria-disabled="true"] { pointer-events: none; }
 body.race #enterGate .enter-token {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1296,6 +1329,7 @@ body.race #bpFold {
   justify-content: center;
   flex-shrink: 0;
   align-self: center;
+  transform: none;
 }
 body.race #bpFold:hover { background: rgba(90, 58, 34, .1); }
 body.race .fly-label { position: relative; display: inline-block; }
@@ -1502,6 +1536,12 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #scoreboard .race-clock { margin-top: 2px; }
   body.race #scoreboard .race-clock b { font-size: 20px; }
   body.race #scoreboard .race-clock span { font-size: 10px; }
+  body.race.watch #scoreboard #raceSocials { margin: 4px 0 0; gap: 4px; }
+  body.race.watch #scoreboard .race-social { width: 28px; height: 28px; }
+  body.race.watch #scoreboard .race-social svg { width: 14px; height: 14px; }
+  body.race.watch #scoreboard .race-social img { width: 18px; height: 18px; }
+  body.race.watch #scoreboard .race-social-ticker { width: 36px; height: 36px; }
+  body.race.watch #scoreboard .race-social-ticker img { width: 24px; height: 24px; }
   body.race #raceVitals {
     gap: 6px;
     width: 144px;
@@ -1552,14 +1592,14 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #brainpanel:not(.folded) {
     display: flex;
     flex-direction: column;
-    max-height: 81dvh;
+    max-height: 65dvh;
     overflow: hidden;
   }
   body.race #brainpanel:not(.folded) header {
     position: sticky;
     top: 0;
     z-index: 1;
-    background: var(--wood-cream);
+    background: transparent;
   }
   body.race #brainpanel:not(.folded) #bpBody {
     flex: 1;
@@ -1573,7 +1613,14 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #raceSocials {
     bottom: max(72px, calc(env(safe-area-inset-bottom) + 64px));
   }
-  body.race #bpFold { font-size: 20px; padding: 6px 12px; min-height: 44px; min-width: 44px; }
+  body.race.watch #scoreboard #raceSocials {
+    position: static;
+    bottom: auto;
+  }
+  body.race #bpFold {
+    font-size: 20px; padding: 6px 12px; min-height: 44px; min-width: 44px;
+    transform: rotate(90deg);
+  }
   body.race #bpHint:not([hidden]) { display: grid; place-items: center; }
   body.race #brain {
     width: 100%;

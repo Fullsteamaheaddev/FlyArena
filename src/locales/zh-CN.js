@@ -235,6 +235,7 @@ export default {
 
   'race.wait': '等待下一场比赛',
   'race.go': '开始！',
+  'race.timer': '计时',
   'race.wins': '{name} 获胜！',
   'race.died': '{name} 死了！',
   'race.lastRemaining': '最后剩下的',

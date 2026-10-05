@@ -204,15 +204,16 @@ export function sealMeteorSmokeBatch(batchId, landTime) {
   freezeBatchDrift(batchId);
 }
 
-export function burstMeteorSmoke(x, y, z, batchId) {
-  const w = METEOR_TRAIL_WIDTH * 1.05;
+export function burstMeteorSmoke(x, y, z, batchId, size) {
+  const w = size != null ? size : METEOR_TRAIL_WIDTH * 1.05;
+  const spread = size != null ? size * 0.32 : METEOR_SCALE;
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
-    const r = (0.12 + Math.random() * 0.1) * METEOR_SCALE;
+    const r = (0.12 + Math.random() * 0.1) * spread;
     spawnMeteorSmokePuff(
       x + Math.cos(a) * r,
       y + Math.sin(a) * r,
-      z + 0.03 * METEOR_SCALE,
+      z + 0.03 * (size != null ? size : METEOR_SCALE),
       w,
       batchId,
       null,

@@ -235,6 +235,7 @@ export default {
 
   'race.wait': 'Esperando a próxima corrida',
   'race.go': 'JÁ!',
+  'race.timer': 'timer',
   'race.wins': '{name} vence!',
   'race.died': '{name} morreu!',
   'race.lastRemaining': 'última de pé',
