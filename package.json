@@ -14,7 +14,9 @@
     "deploy:base-sepolia": "hardhat run scripts/deploy-pool.mjs --network baseSepolia",
     "deploy:robinhood-testnet": "hardhat run scripts/deploy-pool.mjs --network robinhoodTestnet",
     "test:contracts": "hardhat test",
-    "test:pool": "hardhat run scripts/test-pool-live.mjs --network robinhoodTestnet"
+    "test:pool": "hardhat run scripts/test-pool-live.mjs --network robinhoodTestnet",
+    "brand:pdf": "node scripts/build-brand-system-pdf.mjs",
+    "brand:rebrand-infographic": "node scripts/export-rebrand-infographic.mjs"
   },
   "keywords": [],
   "author": "",

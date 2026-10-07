@@ -1,4 +1,4 @@
-// Sugar Run desert map: a 50 x 50 cm walled square with three identical lanes, at night.
+// Flies Armageddon desert map: a 50 x 50 cm walled square with three identical lanes, at night.
 // Everything a fly can touch, smell or see is written once in lane-local (d, s) coordinates
 // (d out from the centre along the lane, s sideways) and rotated to the three lanes, so the
 // race stays fair. Corner dressing is render-only (no MuJoCo geoms, invisible to the eyes).

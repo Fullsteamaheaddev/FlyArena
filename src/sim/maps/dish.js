@@ -1,4 +1,4 @@
-// Sugar Run dish map: spawn-ring grass hedge + three cel-shaded doghouses.
+// Flies Armageddon dish map: spawn-ring grass hedge + three cel-shaded doghouses.
 
 export const DISH_RADIUS = 18.75;          // 12.5 × 1.5
 export const DISH_SPAWN_R = 15.75;         // 10.5 × 1.5

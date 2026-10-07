@@ -80,7 +80,7 @@ export default {
   'preset.maze': 'Labirinto com comida no fundo',
   'preset.social': 'Social: cinco moscas, um pedaço de comida',
   'preset.courtship': 'Corte: um macho e uma fêmea',
-  'preset.race': 'Sugar Run',
+  'preset.race': 'Flies Armageddon',
   'map.dish': 'Prato',
   'map.desert': 'Deserto (50 × 50 cm, noite)',
 
@@ -204,12 +204,12 @@ export default {
   'wallet.title': 'Abrir uma carteira',
   'wallet.body': 'Continue num app que consiga abrir este site.',
 
-  'enter.title': 'Bem-vindo ao Sugar Run',
+  'enter.title': 'Bem-vindo ao Flies Armageddon',
   'enter.body': 'Três cérebros de 165.122 neurônios correm pelo açúcar no centro. Quem chegar primeiro vence — ou a última de pé. Escolha uma mosca e aposte.',
   'enter.press': 'Entrar',
   'enter.copyToken': 'Copiar endereço do token',
 
-  'host.title': 'Hospedar Sugar Run',
+  'host.title': 'Hospedar Flies Armageddon',
   'host.body': 'Digite a senha de host para conduzir esta corrida.',
   'host.password': 'Senha',
   'host.submit': 'Hospedar',
@@ -305,7 +305,7 @@ export default {
   'death.starved': 'morta de fome',
   'death.killed': 'morta',
 
-  'admin.title': 'Poço do Sugar Run',
+  'admin.title': 'Poço do Flies Armageddon',
   'admin.sub': 'Conecte a carteira do dono para definir o token, a janela de apostas, a taxa, o operador e cunhar fichas da torneira.',
   'admin.statusConnect': 'Conecte a carteira do dono.',
   'admin.connect': 'Conectar',

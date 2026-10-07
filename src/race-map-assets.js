@@ -1,4 +1,4 @@
-// Sugar Run map props: GLBs baked by scripts/export_desert_props.mjs into public/maps/<map>/.
+// Flies Armageddon map props: GLBs baked by scripts/export_desert_props.mjs into public/maps/<map>/.
 // Clones share geometry and materials with the template, so one shader patch covers every copy.
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 

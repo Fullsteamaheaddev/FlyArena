@@ -80,7 +80,7 @@ export default {
   'preset.maze': '迷宫，食物在远端',
   'preset.social': '社交：五只果蝇，一块食物',
   'preset.courtship': '求偶：一雄一雌',
-  'preset.race': 'Sugar Run',
+  'preset.race': 'Flies Armageddon',
   'map.dish': '培养皿',
   'map.desert': '沙漠（50 × 50 厘米，夜晚）',
 
@@ -204,12 +204,12 @@ export default {
   'wallet.title': '打开钱包',
   'wallet.body': '请在能浏览本站的应用中继续。',
 
-  'enter.title': '欢迎来到 Sugar Run',
+  'enter.title': '欢迎来到 Flies Armageddon',
   'enter.body': '三个 165,122 神经元的果蝇大脑冲向中央的糖。先到者胜，或最后存活者胜。选一只果蝇并下注。',
   'enter.press': '进入',
   'enter.copyToken': '复制代币地址',
 
-  'host.title': '主持 Sugar Run',
+  'host.title': '主持 Flies Armageddon',
   'host.body': '输入主持密码以运行本场比赛。',
   'host.password': '密码',
   'host.submit': '主持',
@@ -305,7 +305,7 @@ export default {
   'death.starved': '饿死',
   'death.killed': '死亡',
 
-  'admin.title': 'Sugar Run 奖池',
+  'admin.title': 'Flies Armageddon 奖池',
   'admin.sub': '连接所有者钱包以设置筹码代币、投注窗口、奖池手续费、操作员，并铸造水龙头筹码。',
   'admin.statusConnect': '连接所有者钱包。',
   'admin.connect': '连接',

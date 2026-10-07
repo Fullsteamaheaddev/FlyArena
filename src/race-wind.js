@@ -1,4 +1,4 @@
-// Visual/audio wind for Sugar Run maps: a deterministic function of the match clock, so the host
+// Visual/audio wind for Flies Armageddon maps: a deterministic function of the match clock, so the host
 // and every watcher sway the same palms and hear the same gusts without extra network traffic.
 // It never touches physics (windRadial / the GUST chaos push are separate).
 

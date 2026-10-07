@@ -1,6 +1,6 @@
-# Sugar Run chaos events
+# Flies Armageddon chaos events
 
-Mid-race **chaos roulette** is the equal-odds wildcard layer on the Sugar Run preset
+Mid-race **chaos roulette** is the equal-odds wildcard layer on the Flies Armageddon preset
 (`arena.html?env=race`, `/racehost`). The host simulates physics; spectators replay the
 same cues visually. This guide lists the shipped kinds, how they plug into code, cleanup
 rules, and the four GLB-backed wildcards (`meteor`, `sugarrain`, `ufo`, `spikes`).
@@ -234,5 +234,5 @@ Host + relay watchers should replay `chaosCue` with visuals only (`physics: fals
 
 ## Related docs
 
-- [Arena app](../15-arena.md) — Sugar Run preset, workers, UI
+- [Arena app](../15-arena.md) — Flies Armageddon preset, workers, UI
 - [Apps](apps.md) — race URL and host/watch split

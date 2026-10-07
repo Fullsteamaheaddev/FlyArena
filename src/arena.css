@@ -138,7 +138,7 @@ body.race .race-card .race-hist b { font-family: var(--race-title); font-weight:
   font-display: swap;
 }
 
-/* Sugar Run race only: even grey outlines + block titles; lab #panel stays as it is */
+/* Flies Armageddon race only: even grey outlines + block titles; lab #panel stays as it is */
 body.race {
   --race-title: "Luckiest Guy", ui-rounded, system-ui, sans-serif;
   --race-body: Helvetica, "Helvetica Neue", Arial, sans-serif;
@@ -1499,13 +1499,23 @@ body.race #raceVitals .bar {
 body.race #raceVitals .bar-energy > i { background: #c9922a !important; }
 body.race #raceVitals .bar-health > i { background: #3d9a52 !important; }
 body.race .fly-label-info {
-  position: absolute; bottom: calc(100% + 8px); top: auto; left: 50%; width: 280px; padding: 10px 12px; text-align: left; color: var(--fg);
-  background: var(--panel); border: 4px solid var(--race-outline); border-radius: 18px; box-shadow: none;
+  position: absolute; bottom: calc(100% + 8px); top: auto; left: 50%; width: 280px; padding: 12px 14px; text-align: left;
+  color: var(--wood-ink);
+  background: color-mix(in srgb, var(--fly, var(--wood-line)) 16%, var(--wood-cream));
+  border: 2px solid color-mix(in srgb, var(--fly, var(--wood-line)) 50%, var(--wood-line));
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(42, 24, 16, .28);
+  font-family: var(--race-body);
   cursor: default; opacity: 0; transform: translate(-50%, -8px); visibility: hidden; pointer-events: none;
   transition: opacity .2s ease, transform .2s ease, visibility .2s;
 }
 body.race .fly-label-info.open {
   opacity: 1; transform: translate(-50%, 0); visibility: visible; pointer-events: auto;
+}
+body.race .fly-label-info .kv span:nth-child(odd) { color: var(--wood-ink-dim); }
+body.race .fly-label-info .kv span:nth-child(even) { color: var(--wood-ink); }
+body.race .fly-label-info .kv span:nth-child(2) {
+  color: color-mix(in srgb, var(--fly, var(--wood-ink)) 55%, var(--wood-ink-dim));
 }
 body.race .race-card p,
 body.race .race-card .flyt,

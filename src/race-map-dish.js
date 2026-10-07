@@ -1,4 +1,4 @@
-// Sugar Run dish map: garden dirt plate, wooden fence rim, swaying grass (render-only).
+// Flies Armageddon dish map: garden dirt plate, wooden fence rim, swaying grass (render-only).
 import * as THREE from 'three';
 import { groundAt } from './sim/senses.js';
 import { mapPropMeshes } from './race-map-assets.js';

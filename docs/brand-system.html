@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Flies Armageddon — Brand System</title>
+<style>
+  @font-face {
+    font-family: "Luckiest Guy";
+    src: url("../public/fonts/luckiest-guy.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+  }
+  @page { size: A4; margin: 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 11pt/1.45 Helvetica, "Helvetica Neue", Arial, sans-serif;
+    color: #2a1810;
+    background: #fff8ee;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  h1, h2, h3, .display {
+    font-family: "Luckiest Guy", ui-rounded, system-ui, sans-serif;
+    font-weight: 400;
+    margin: 0 0 0.35em;
+    line-height: 1.1;
+  }
+  h1 { font-size: 28pt; -webkit-text-stroke: 1.5px #2a1810; paint-order: stroke fill; }
+  h2 { font-size: 16pt; margin-top: 1.4em; border-bottom: 2px solid #5a3a22; padding-bottom: 0.2em; }
+  h3 { font-size: 12pt; margin-top: 1em; color: #5a3a22; }
+  p, li { margin: 0 0 0.55em; }
+  ul { margin: 0 0 0.8em; padding-left: 1.2em; }
+  .muted { color: rgba(42, 24, 16, 0.72); }
+  .page { page-break-after: always; padding: 4mm 0 8mm; }
+  .page:last-child { page-break-after: auto; }
+  .cover {
+    min-height: 250mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 12mm;
+    background: linear-gradient(180deg, #c5dce8 0%, #fff8ee 42%, #fff8ee 100%);
+  }
+  .cover img.hero { width: 88%; max-width: 160mm; height: auto; }
+  .cover img.wordmark { width: 70%; max-width: 120mm; }
+  .cover .sub { font-size: 13pt; max-width: 34em; }
+  .cover .ver { font-size: 9pt; letter-spacing: 0.12em; text-transform: uppercase; }
+  .swatch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 4mm 0; }
+  .swatch {
+    border: 2px solid #5a3a22;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .swatch .chip { height: 22mm; }
+  .swatch .meta { padding: 3mm 4mm; font-size: 9pt; }
+  .swatch code { font-size: 8.5pt; display: block; margin-top: 2px; }
+  .logo-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin: 5mm 0; align-items: start; }
+  .logo-card {
+    border: 2px solid #5a3a22;
+    border-radius: 10px;
+    padding: 4mm;
+    background: #fff8ee;
+    text-align: center;
+  }
+  .logo-card img { max-width: 100%; height: auto; max-height: 45mm; object-fit: contain; }
+  .logo-card.dark { background: #2a1810; }
+  .logo-card.sky { background: #c5dce8; }
+  .chip-demo {
+    display: inline-flex;
+    align-items: center;
+    gap: 3mm;
+    padding: 3mm 5mm;
+    border-radius: 12px;
+    border: 2px solid color-mix(in srgb, var(--fly) 50%, #5a3a22);
+    background: color-mix(in srgb, var(--fly) 16%, #fff8ee);
+    margin: 2mm 2mm 2mm 0;
+  }
+  .chip-demo .dot { width: 4mm; height: 4mm; border-radius: 50%; background: var(--fly); }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 4mm 0; }
+  th, td { border: 1px solid rgba(90, 58, 34, 0.35); padding: 2.5mm 3mm; text-align: left; vertical-align: top; }
+  th { background: rgba(90, 58, 34, 0.12); }
+  .do-dont { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .do-dont div { padding: 4mm; border-radius: 8px; font-size: 9.5pt; }
+  .do { background: rgba(61, 154, 82, 0.12); border: 1px solid #3d9a52; }
+  .dont { background: rgba(180, 35, 24, 0.08); border: 1px solid #b42318; }
+  .announce {
+    display: inline-block;
+    font-family: "Luckiest Guy", sans-serif;
+    font-size: 22pt;
+    color: #fff;
+    -webkit-text-stroke: 2px #1a1208;
+    paint-order: stroke fill;
+    text-shadow: 0 2px 0 #000;
+    margin: 4mm 0;
+  }
+  .format-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 4mm 0; align-items: start; }
+  .format-card {
+    border: 2px solid #5a3a22;
+    border-radius: 10px;
+    padding: 3mm;
+    background: #fff;
+    font-size: 9pt;
+  }
+  .format-card h3 { margin-top: 0; font-size: 10.5pt; }
+  .frame {
+    position: relative;
+    width: 100%;
+    border: 2px solid #5a3a22;
+    border-radius: 6px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #c5dce8 0%, #fff8ee 55%);
+    margin: 2mm 0 3mm;
+  }
+  .frame.r-3-2 { aspect-ratio: 3 / 2; }
+  .frame.r-16-9 { aspect-ratio: 16 / 9; }
+  .frame.r-3-1 { aspect-ratio: 3 / 1; }
+  .frame.r-1-1 { aspect-ratio: 1 / 1; max-width: 42mm; }
+  .frame .safe {
+    position: absolute;
+    border: 2px dashed rgba(180, 35, 24, 0.75);
+    background: rgba(255, 248, 238, 0.15);
+    box-sizing: border-box;
+  }
+  .frame .label {
+    position: absolute;
+    left: 2mm;
+    top: 2mm;
+    font-size: 7pt;
+    font-weight: 600;
+    color: #2a1810;
+    background: rgba(255, 248, 238, 0.92);
+    padding: 1mm 2mm;
+    border-radius: 4px;
+    border: 1px solid rgba(90, 58, 34, 0.35);
+  }
+  .frame .zone {
+    position: absolute;
+    font-size: 6.5pt;
+    color: rgba(42, 24, 16, 0.85);
+    background: rgba(255, 255, 255, 0.75);
+    padding: 1mm 2mm;
+    border-radius: 3px;
+  }
+  .frame img.fill {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 42%;
+  }
+  .frame.banner img.fill { object-position: 55% center; }
+  .stack-list { font-size: 9pt; margin: 0; padding-left: 1.1em; }
+  .stack-list li { margin-bottom: 0.35em; }
+  .spec-note {
+    font-size: 8.5pt;
+    padding: 3mm;
+    border-radius: 6px;
+    background: rgba(197, 220, 232, 0.35);
+    border: 1px solid rgba(90, 58, 34, 0.25);
+    margin: 3mm 0;
+  }
+  .container-gallery {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm;
+    margin: 4mm 0;
+  }
+  .container-shot {
+    border: 2px solid #5a3a22;
+    border-radius: 10px;
+    padding: 3mm;
+    background: #c5dce8;
+    text-align: center;
+  }
+  .container-shot img {
+    display: block;
+    width: 100%;
+    max-height: 52mm;
+    object-fit: contain;
+    margin: 0 auto;
+    filter: drop-shadow(0 2px 6px rgba(42, 24, 16, 0.18));
+  }
+  .container-shot .cap {
+    font-size: 8pt;
+    margin-top: 2mm;
+    text-align: left;
+    color: rgba(42, 24, 16, 0.85);
+  }
+  .container-shot .cap strong { display: block; font-size: 9pt; color: #2a1810; }
+  .container-shot.tall img { max-height: 68mm; }
+  .slice-demo {
+    font-family: ui-monospace, monospace;
+    font-size: 8pt;
+    background: rgba(255, 248, 238, 0.9);
+    border: 1px dashed #5a3a22;
+    padding: 2mm 3mm;
+    border-radius: 6px;
+    margin: 2mm 0;
+  }
+  .ref-shot {
+    display: block;
+    width: 100%;
+    max-height: 95mm;
+    object-fit: contain;
+    margin: 3mm 0;
+    border: 2px solid #5a3a22;
+    border-radius: 6px;
+    background: #c5dce8;
+  }
+</style>
+</head>
+<body>
+
+<section class="page cover">
+  <p class="ver muted">Brand system · 2026</p>
+  <img class="hero" src="../public/FliesImageLogo.png" alt="" />
+  <img class="wordmark" src="../public/Flieslogo.png" alt="Flies Armageddon" />
+  <p class="sub">Three flies, three brains — 165,122 neurons each — racing for the sugary centre.<br />Pick a fly. Cheer. Bet.</p>
+  <h1>Flies Armageddon</h1>
+</section>
+
+<section class="page">
+  <h2>1. Brand essence</h2>
+  <p><strong>Flies Armageddon</strong> is a spectator race built on a real fruit-fly connectome sim: competitive, funny, slightly chaotic, but grounded in science. Tone is arcade energy (Worms-style mayhem) with warm wood-and-cream game UI — not sterile lab chrome.</p>
+  <ul>
+    <li><strong>Promise:</strong> watch tiny brains compete; cheer, bet, survive the chaos.</li>
+    <li><strong>Personality:</strong> loud, playful, lucky, slightly apocalyptic (stone wordmark, explosions in key art).</li>
+    <li><strong>Audience:</strong> crypto spectators, bio-curious gamers, chaos enjoyers.</li>
+  </ul>
+  <h3>Taglines (approved)</h3>
+  <ul>
+    <li>Three flies, three brains — 165,122 neurons each — racing for the sugary center. Pick a fly. Cheer. Bet.</li>
+    <li>Welcome to Flies Armageddon (enter gate)</li>
+    <li>COMING SOON (marketing beats)</li>
+  </ul>
+  <h3>Social</h3>
+  <p>X: <code>https://x.com/Farmageddon</code> (handle may change; keep code in sync with <code>X_HREF</code> in <code>src/arena.js</code>).</p>
+</section>
+
+<section class="page">
+  <h2>2. Logos &amp; marks</h2>
+  <table>
+    <tr><th>Asset</th><th>File</th><th>Use</th></tr>
+    <tr><td><strong>Primary wordmark</strong></td><td><code>public/Flieslogo.png</code></td><td>Lobby overlay, loading spinner, in-game brand header. Alt text: “Flies Armageddon”.</td></tr>
+    <tr><td><strong>Hero / key art</strong></td><td><code>public/FliesImageLogo.png</code></td><td>OG/Twitter share image, loading backdrop, social banners, “coming soon” art.</td></tr>
+    <tr><td><strong>Arena floor mark</strong></td><td><code>public/Farmageddoncom.png</code></td><td>Centre disc on dish &amp; desert maps (~27.6% of floor texture width).</td></tr>
+    <tr><td><strong>Wood frames (race UI)</strong></td><td><code>container-headless.png</code>, <code>LobbyContainer.png</code>, <code>LandingContainer.png</code>, <code>button.png</code></td><td>See §5 — primary product chrome; not optional skin.</td></tr>
+    <tr><td><strong>Favicon</strong></td><td><code>public/favicon-512.webp</code></td><td>Browser tab &amp; PWA icon.</td></tr>
+  </table>
+  <div class="logo-row">
+    <div class="logo-card sky"><img src="../public/FliesImageLogo.png" alt="" /><p class="muted">Hero on sky</p></div>
+    <div class="logo-card"><img src="../public/Flieslogo.png" alt="" /><p class="muted">Wordmark on cream</p></div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card"><img src="../public/Farmageddoncom.png" alt="" style="max-height:28mm" /><p class="muted">Floor mark</p></div>
+    <div class="logo-card dark"><img src="../public/Flieslogo.png" alt="" /><p class="muted" style="color:#fff8ee">Avoid low-contrast backgrounds</p></div>
+  </div>
+  <h3>Clear space</h3>
+  <p>Keep at least the height of the “F” in FLIES as clear space around the wordmark. Do not outline, recolor, or squash the logo below 120px wide on web.</p>
+</section>
+
+<section class="page">
+  <h2>3. Color</h2>
+  <h3>Race UI (primary product skin)</h3>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip" style="background:#fff8ee"></div><div class="meta"><strong>Wood cream</strong><code>#fff8ee</code> Boards, chips, panels</div></div>
+    <div class="swatch"><div class="chip" style="background:#2a1810"></div><div class="meta"><strong>Wood ink</strong><code>#2a1810</code> Body text</div></div>
+    <div class="swatch"><div class="chip" style="background:#5a3a22"></div><div class="meta"><strong>Wood line</strong><code>#5a3a22</code> Borders, rules</div></div>
+    <div class="swatch"><div class="chip" style="background:#c5dce8"></div><div class="meta"><strong>Race sky</strong><code>#c5dce8</code> Page / arena backdrop</div></div>
+    <div class="swatch"><div class="chip" style="background:#9aa3b2"></div><div class="meta"><strong>Race outline</strong><code>#9aa3b2</code> Legacy grey stroke (lab panels)</div></div>
+    <div class="swatch"><div class="chip" style="background:rgba(42,24,16,.72)"></div><div class="meta"><strong>Ink dim</strong><code>rgba(42,24,16,.72)</code> Secondary copy</div></div>
+  </div>
+  <h3>Fly racer palette (default trio)</h3>
+  <p class="chip-demo" style="--fly:#ffb347"><span class="dot"></span> Amber <code>#ffb347</code></p>
+  <p class="chip-demo" style="--fly:#5ac8fa"><span class="dot"></span> Blue <code>#5ac8fa</code></p>
+  <p class="chip-demo" style="--fly:#a3e635"><span class="dot"></span> Lime <code>#a3e635</code></p>
+  <p class="muted">Vitals rows &amp; nametag hover cards tint with <code>--fly</code>: 16% fly + cream fill, 50% fly + wood-line border.</p>
+  <h3>Gameplay accents</h3>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip" style="background:#c9922a"></div><div class="meta"><strong>Energy bar</strong><code>#c9922a</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#3d9a52"></div><div class="meta"><strong>Health bar</strong><code>#3d9a52</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#ffb347"></div><div class="meta"><strong>Accent (CTA)</strong><code>#ffb347</code> Primary buttons</div></div>
+  </div>
+  <h3>Lab / connectome UI (secondary)</h3>
+  <p class="muted">Dark glass for brain viewer &amp; panel: bg <code>#07090f</code>, panel <code>rgba(12,15,24,.88)</code>, text <code>#d7dbe6</code>. Use only outside race mode.</p>
+</section>
+
+<section class="page">
+  <h2>4. Typography</h2>
+  <table>
+    <tr><th>Role</th><th>Family</th><th>CSS</th></tr>
+    <tr><td>Display / titles</td><td>Luckiest Guy</td><td><code>--race-title</code> · <code>public/fonts/luckiest-guy.woff2</code></td></tr>
+    <tr><td>Body / stats</td><td>Helvetica Neue, Arial</td><td><code>--race-body</code></td></tr>
+    <tr><td>Tabular data</td><td>inherit</td><td><code>font-variant-numeric: tabular-nums</code> (clocks, stakes)</td></tr>
+  </table>
+  <p class="display" style="font-size:22pt;margin-top:5mm">Luckiest Guy sample headline</p>
+  <p>Body sample: behaviour labels, pool copy, and nametag stat grids use 12–13px Helvetica with wood ink on cream.</p>
+  <h3>On a cream plaque (infographics)</h3>
+  <p>Do <strong>not</strong> use Luckiest Guy or white stroke on the parchment. Board titles and column headers are Helvetica/Arial extra-bold, all caps, wood ink (<code>#2a1810</code> / <code>#5a3a22</code>). Luckiest Guy stays on the hanging wordmark PNG and on in-game shouts (winner/chaos) over the 3D scene.</p>
+  <h3>Winner / chaos display type</h3>
+  <p class="announce">AMBER WINS</p>
+  <p class="muted">White fill, 2–3px dark stroke, drop shadow — see <code>.race-announce-text</code> and chaos toast in <code>arena.css</code>.</p>
+</section>
+
+<section class="page">
+  <h2>5. Wooden container system</h2>
+  <p>Flies Armageddon race mode is instantly recognizable by <strong>hand-painted wood frames</strong> — not flat cards or glassmorphism. All race chrome PNGs live in <code>public/</code>, preloaded in <code>src/preload-site.js</code>, and wired in <code>src/arena.css</code> under <code>body.race</code>. Pair frames with <strong>race sky</strong> (<code>#c5dce8</code>) page backdrop and <strong>wood cream</strong> (<code>#fff8ee</code>) content areas inside the boards.</p>
+  <h3>Production assets (use these)</h3>
+  <table>
+    <tr><th>Asset</th><th>Pixels</th><th>Technique</th><th>In-product use</th></tr>
+    <tr>
+      <td><code>container-headless.png</code></td>
+      <td>1175×739</td>
+      <td><code>border-image</code> nine-slice</td>
+      <td>Scoreboard, brain panel, profile wallet — HUD that stays on screen during races</td>
+    </tr>
+    <tr>
+      <td><code>LobbyContainer.png</code></td>
+      <td>1889×2115</td>
+      <td><code>border-image</code> nine-slice</td>
+      <td>Lobby overlay, results, wallet picker — tall “garden” frame with leaves/grass corners</td>
+    </tr>
+    <tr>
+      <td><code>LandingContainer.png</code></td>
+      <td>1198×766</td>
+      <td>Single <code>background: contain</code></td>
+      <td>Enter gate dialog (welcome / token / Enter button)</td>
+    </tr>
+    <tr>
+      <td><code>button.png</code></td>
+      <td>1257×384</td>
+      <td>Stretch-fit background on CTA</td>
+      <td>Primary wood pill buttons (Enter, connect flows on frame)</td>
+    </tr>
+  </table>
+  <p class="spec-note"><strong>Legacy / do not ship in new UI:</strong> <code>container.png</code> (1800×1773, older framed board) remains preloaded for cache warmth only — production HUD uses <strong>headless</strong> variant. <code>ContainerHeadless.png</code> is a duplicate filename casing of <code>container-headless.png</code>; canonical URL is lowercase <code>/container-headless.png</code>.</p>
+  <h3>Native proportions (do not squash)</h3>
+  <table>
+    <tr><th>Asset</th><th>Native px</th><th>Ratio</th><th>Shape</th><th>How to size</th></tr>
+    <tr><td><code>LobbyContainer.png</code></td><td>1889×2115</td><td>~0.89:1</td><td><strong>Portrait</strong> garden board</td><td>Keep near this ratio. Nine-slice grows the cream <em>center</em> a little; never force it into 3:2 / 16:9.</td></tr>
+    <tr><td><code>LandingContainer.png</code></td><td>1198×766</td><td>~1.56:1</td><td><strong>Landscape</strong> stone plaque</td><td><code>aspect-ratio: 1198 / 766</code>; <code>background-size: contain</code>. Closest match to a 3:2 social canvas.</td></tr>
+    <tr><td><code>container-headless.png</code></td><td>1175×739</td><td>~1.59:1</td><td>Landscape HUD</td><td>Nine-slice OK for HUD width; stay roughly landscape. Do not stretch into a square or a strip.</td></tr>
+    <tr><td><code>button.png</code></td><td>1257×384</td><td>~3.27:1</td><td>Wide CTA slab</td><td><code>background-size: contain</code> on a short wide button. Never <code>cover</code>.</td></tr>
+    <tr><td><code>Flieslogo.png</code></td><td>954×725</td><td>~1.32:1</td><td>Stacked stone wordmark</td><td><code>height: auto; object-fit: contain</code>. Hang <strong>above</strong> lobby/landing — never squash into a column.</td></tr>
+  </table>
+  <h3>CSS tokens (race)</h3>
+  <div class="slice-demo">
+    --wood-slice: 90 88 92 88 · --wood-border: 30px (26px on narrow)<br />
+    --lobby-slice: 17% 21% 24% 21% · --lobby-border: 70px (56px on narrow)<br />
+    --wood-board-pad-bottom: 16px · Enter card aspect: 1198 / 766
+  </div>
+</section>
+
+<section class="page">
+  <h2>5a. Container reference (visual)</h2>
+  <div class="container-gallery">
+    <div class="container-shot">
+      <img src="../public/container-headless.png" alt="" />
+      <p class="cap"><strong>container-headless.png</strong> Cream board + wood rail, no decorative header. Slice <code>90 88 92 88</code>, border <code>30px</code>. Content sits on cream; keep copy out of the bottom wood rail (use <code>--wood-board-pad-bottom</code>).</p>
+    </div>
+    <div class="container-shot tall">
+      <img src="../public/LobbyContainer.png" alt="" />
+      <p class="cap"><strong>LobbyContainer.png</strong> Full garden frame: grass/leaf corners, wood edges. Slice <code>17% 21% 24% 21%</code>, border <code>70px</code>. Hang <code>Flieslogo.png</code> above top edge (<code>.lobby-brand</code>, ~78px breathe padding).</p>
+    </div>
+    <div class="container-shot">
+      <img src="../public/LandingContainer.png" alt="" />
+      <p class="cap"><strong>LandingContainer.png</strong> Wide landing plaque. Fitted with <code>background-size: contain</code>; safe copy box ≈ inset 11% L/R, 34% top → 14% bottom (<code>.enter-fill</code>). Wordmark at <code>top: -8%</code> centered.</p>
+    </div>
+    <div class="container-shot">
+      <img src="../public/button.png" alt="" />
+      <p class="cap"><strong>button.png</strong> Orange wood CTA slab. White Luckiest Guy label + warm shadow <code>0 2px 0 #7a3a00</code>. Scale hover <code>1.08</code> — do not swap to flat CSS buttons in race mode.</p>
+    </div>
+  </div>
+  <h3>When to use which frame</h3>
+  <ul>
+    <li><strong>Headless</strong> — persistent HUD, smaller footprints, score/clock/brain traces; pairs with fly-tinted chips inside.</li>
+    <li><strong>Lobby</strong> — modal moments: betting lobby, race results, wallet choice. <strong>Portrait only.</strong> Wordmark hangs above the top edge, not inside the cream.</li>
+    <li><strong>Landing</strong> — enter gate and <strong>landscape social comps</strong> (3:2 / 16:9). One plaque, native ratio, wordmark at <code>top: -8%</code> centered (~36% of plaque width).</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h2>5c. Hard layout rules</h2>
+  <p>These failed in the first rebrand infographic: a portrait lobby nine-sliced onto a 1500×1000 canvas, the stacked wordmark used as a giant left column, and copy sitting on the grass rail / outside the board.</p>
+  <div class="do-dont">
+    <div class="do"><strong>Do</strong><ul>
+      <li>Pick the frame whose <em>native</em> ratio matches the canvas (landing ≈ 3:2; lobby ≈ portrait).</li>
+      <li>Keep all type, logos, and swatches on the <strong>cream inner board</strong> — never on wood, leaves, grass, or rocks.</li>
+      <li>Size logos with <code>width</code> + <code>height: auto</code> + <code>object-fit: contain</code>. Preserve 954×725 for the wordmark.</li>
+      <li>Landing <strong>enter gate</strong> copy uses inset 11% L/R, 34% top, 14% bottom.</li>
+      <li>Landing <strong>infographics</strong> use a wider cream: ~12% L/R, ~20% top, ~12% bottom, content optically centered — not bunched under the wordmark with empty parchment below.</li>
+      <li>Letterbox a frame on sky/cream if the canvas is the wrong shape. Empty sky is correct; stretched wood is not.</li>
+    </ul></div>
+    <div class="dont"><strong>Don’t</strong><ul>
+      <li>Nine-slice <code>LobbyContainer</code> across a wide 3:2 or 16:9 rectangle.</li>
+      <li>Put footers, handles, or headlines outside / overlapping the frame.</li>
+      <li>Put a second logo, hero explosion, or URL footer inside a plaque that already has the wordmark on top.</li>
+      <li>Use white Luckiest Guy + stroke for titles sitting on cream (that style is for in-scene shouts).</li>
+      <li>Use <code>background-size: cover</code> or <code>fill</code> on chrome PNGs.</li>
+      <li>Set only <code>width</code> or only <code>height</code> on the wordmark in a way that changes aspect.</li>
+    </ul></div>
+  </div>
+  <p class="spec-note"><strong>Nine-slice is not a free stretch.</strong> <code>border-image</code> tiles the <em>center</em> so a HUD can grow a few dozen pixels. It does not license changing a portrait garden board into a landscape poster.</p>
+</section>
+
+<section class="page">
+  <h2>5b. Containers in marketing</h2>
+  <p>Social art should <strong>feel</strong> like the game: sky backdrop, cream boards, wood edges — at <strong>native container ratios</strong>.</p>
+  <ul>
+    <li><strong>3:2 / 16:9 comps:</strong> <code>LandingContainer.png</code> at 1198×766, <code>contain</code>, centered on <code>#c5dce8</code>. Do not use lobby.</li>
+    <li><strong>Portrait stories / posters:</strong> <code>LobbyContainer.png</code> near 1889×2115. Wordmark hangs above.</li>
+    <li><strong>Composites:</strong> key art or screenshots sit <em>inside</em> the cream; never crop off corner leaves.</li>
+    <li><strong>Screenshots:</strong> race HUD with headless panels at ~1.59:1 — that is the live brand.</li>
+    <li><strong>Do not</strong> replace wood with generic rounded rectangles, Material cards, or lab dark glass (<code>#panel</code>) in race marketing.</li>
+    <li><strong>Host gate</strong> is an exception (dark grey outline UI) — not for public marketing hero shots.</li>
+  </ul>
+  <h3>Chips, nametags &amp; motion (in-frame UI)</h3>
+  <p>Nametag pills: dark translucent fill, 2px fly-color border, Luckiest Guy name. Hover stat card = vitals chip (cream + <code>--fly</code> tint, 12px radius, shadow <code>0 8px 22px rgba(42,24,16,.28)</code>). Panel motion: fold ease <code>cubic-bezier(0.34, 1.2, 0.64, 1)</code>, HUD slide 0.45s; lobby card enter scale <code>raceCardEnter</code> + idle breathe on enter gate.</p>
+  <h3>File checklist (containers)</h3>
+  <ul>
+    <li><code>public/container-headless.png</code> · <code>LobbyContainer.png</code> · <code>LandingContainer.png</code> · <code>button.png</code></li>
+    <li>Slice values and selectors: <code>src/arena.css</code> (<code>body.race #scoreboard</code>, <code>.race-card</code>, <code>#enterGate .enter-card</code>, <code>#enterBtn</code>)</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h2>6. Social &amp; format systems</h2>
+  <p>One visual language across link previews, profile banners, and feed infographics: <strong>sky → cream</strong> backdrop, <strong>FliesImageLogo</strong> hero art, <strong>Flieslogo</strong> wordmark, <strong>Luckiest Guy</strong> for shout lines. Export masters at <strong>2×</strong> when platforms allow (e.g. 3000×2000 for 3:2).</p>
+  <h3>Format matrix</h3>
+  <table>
+    <tr><th>System</th><th>Canvas (px)</th><th>Ratio</th><th>Primary use</th><th>Repo master</th></tr>
+    <tr><td><strong>3:2 infographic / link art</strong></td><td>1500×1000 <span class="muted">(ship 1245×844)</span></td><td>3:2</td><td>OG/Twitter image, loading screen, feed stills, decks</td><td><code>FliesImageLogo.png</code></td></tr>
+    <tr><td><strong>X profile banner</strong></td><td>1500×500</td><td>3:1</td><td><code>x.com</code> header</td><td>Export from banner template (below)</td></tr>
+    <tr><td><strong>16:9 announcement</strong></td><td>1920×1080 <span class="muted">(min 1280×720)</span></td><td>16:9</td><td>“Coming soon”, YouTube thumb, Discord</td><td><code>flies-armageddon-coming-soon.jpg</code></td></tr>
+    <tr><td><strong>1.91:1 link crop</strong></td><td>1200×630</td><td>~1.91:1</td><td>Facebook / Slack / LinkedIn previews</td><td>Center-crop from 3:2 master</td></tr>
+    <tr><td><strong>Square post</strong></td><td>1080×1080</td><td>1:1</td><td>Instagram / Threads still</td><td>Crop hero + wordmark stack</td></tr>
+    <tr><td><strong>Vertical story</strong></td><td>1080×1920</td><td>9:16</td><td>Stories / Shorts cover (optional)</td><td>Sky fill + hero lower two-thirds</td></tr>
+  </table>
+  <p class="spec-note"><strong>Site default today:</strong> <code>index.html</code> / <code>arena.html</code> set <code>og:image</code> and <code>twitter:image</code> to <code>/FliesImageLogo.png</code> (1245×844, ~3:2). Keep new OG exports at 3:2 unless you intentionally add a separate 1200×630 asset.</p>
+</section>
+
+<section class="page">
+  <h2>6a. 3:2 infographic system</h2>
+  <p><strong>Master canvas:</strong> 1500×1000 px (3:2). <strong>Hero file:</strong> <code>public/FliesImageLogo.png</code> (1245×844) — scale proportionally. <strong>Infographic chrome:</strong> land the layout on <code>LandingContainer.png</code> at native 1198×766 (letterboxed on sky). Do not nine-slice the portrait lobby onto this canvas.</p>
+  <div class="format-grid">
+    <div class="format-card">
+      <h3>Layout wireframe</h3>
+      <div class="frame r-3-2">
+        <span class="label">3:2 · 1500×1000</span>
+        <div class="safe" style="inset: 5%;"></div>
+        <img class="fill" src="../public/FliesImageLogo.png" alt="" />
+        <span class="zone" style="left: 8%; bottom: 8%;">Wordmark or URL (optional plate)</span>
+        <span class="zone" style="right: 8%; top: 10%;">Luckiest Guy headline (max 2 lines)</span>
+      </div>
+      <p class="muted">Dashed box = 5% safe margin (75 px at 1500 width). Keep logos and type inside.</p>
+    </div>
+    <div class="format-card">
+      <h3>Layer stack (top → bottom)</h3>
+      <ol class="stack-list">
+        <li><strong>Headline</strong> — On full-bleed hero art only: Luckiest Guy, white + stroke. On a landing plaque, use wood-ink extra-bold all caps (§6d) instead.</li>
+        <li><strong>Wordmark</strong> — <code>Flieslogo.png</code> hangs on the top rail. Native 954×725. Never a column inside the board; never a second hero PNG inside the cream.</li>
+        <li><strong>Hero</strong> — flies + explosion key art; focal point slightly above vertical center (~42% from top).</li>
+        <li><strong>Background</strong> — gradient <code>#c5dce8</code> → <code>#fff8ee</code> or full-bleed art with sky preserved at top.</li>
+        <li><strong>Footer strip</strong> (optional) — tagline or <code>x.com/…</code> in Helvetica 24–28 px, wood ink on cream bar.</li>
+      </ol>
+      <h3>Typography on art</h3>
+      <ul>
+        <li>Headline: 72–120 px at 1500 width (scale with canvas).</li>
+        <li>Subcopy: Helvetica/Arial 28–36 px, <code>#2a1810</code> or white on dark smoke only.</li>
+        <li>Tabular stats (stakes, clock): tabular nums, same as in-game HUD.</li>
+      </ul>
+      <h3>Export</h3>
+      <ul>
+        <li><strong>PNG</strong> for UI / crisp logos; <strong>JPG</strong> 82–88% for photo-heavy comps.</li>
+        <li>Embed sRGB; no neon Sugar Run palette (retired).</li>
+      </ul>
+    </div>
+  </div>
+  <h3>16:9 variant (announcements)</h3>
+  <p>Extend or letterbox the 3:2 hero: place wordmark + “COMING SOON” in upper third; keep flies in center. Reference: <code>flies-armageddon-coming-soon.jpg</code> (1280×720). Target <strong>1920×1080</strong> for new exports.</p>
+  <div class="frame r-16-9" style="max-width: 120mm;">
+    <img class="fill" src="../public/flies-armageddon-coming-soon.jpg" alt="" />
+    <span class="label">16:9 example</span>
+  </div>
+</section>
+
+<section class="page">
+  <h2>6b. 1500×500 banner system (X / wide headers)</h2>
+  <p><strong>Canvas:</strong> exactly <strong>1500×500 px</strong> (3:1). Wide, low crop — design for <em>bleed</em>, not for dense copy.</p>
+  <div class="format-grid">
+    <div class="format-card">
+      <h3>Safe zones (X profile)</h3>
+      <div class="frame r-3-1 banner">
+        <span class="label">1500×500</span>
+        <div class="safe" style="left: 0; bottom: 0; width: 28%; height: 55%; border-color: rgba(90,58,34,0.9); background: rgba(42,24,16,0.08);"></div>
+        <div class="safe" style="inset: 8% 6% 12% 6%; border-color: rgba(180,35,24,0.75);"></div>
+        <img class="fill" src="../public/FliesImageLogo.png" alt="" />
+        <span class="zone" style="left: 2%; bottom: 4%; font-size: 6pt;">Avatar overlap</span>
+        <span class="zone" style="left: 50%; top: 50%; transform: translate(-50%,-50%);">Title-safe center</span>
+      </div>
+      <ul class="muted" style="font-size:8.5pt">
+        <li><strong>Lower-left ~28% × 55%</strong> — profile photo covers this on X; no logos or critical text.</li>
+        <li><strong>Inner ~88% × 80%</strong> — keep wordmark and headlines here (dashed red).</li>
+        <li>Prefer <strong>horizontal wordmark</strong> or single-line Luckiest Guy centered; avoid small type (&lt; 20 px at 1500 width).</li>
+      </ul>
+    </div>
+    <div class="format-card">
+      <h3>Composition recipes</h3>
+      <p><strong>A — Key art bleed:</strong> Crop <code>FliesImageLogo</code> to 3:1 (object-position ~55% center). Soft sky at top, action in middle-right. Optional small wordmark right of center.</p>
+      <p><strong>B — Cream band:</strong> Full-width sky gradient top 60%; bottom 40% wood cream with centered <code>Flieslogo</code> (height ≈ 200–240 px) + one tagline line.</p>
+      <p><strong>C — Event strip:</strong> Luckiest Guy date/“LIVE” on left third (in safe zone, above avatar); hero art right two-thirds.</p>
+      <h3>Export checklist</h3>
+      <ul>
+        <li>Filename pattern: <code>flies-armageddon-banner-x-1500x500.png</code></li>
+        <li>Test on mobile X profile — avatar is circular, bottom-left.</li>
+        <li>Match URL in bio to <code>X_HREF</code> in product (<code>https://x.com/Farmageddon</code> until handle changes).</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Other wide placements</h3>
+  <table>
+    <tr><th>Placement</th><th>Size</th><th>Notes</th></tr>
+    <tr><td>Discord server banner</td><td>960×540</td><td>Scale down from 16:9 or center slice of 3:2.</td></tr>
+    <tr><td>Open Graph (alt crop)</td><td>1200×630</td><td>Center crop; verify headline not clipped in Slack/iMessage.</td></tr>
+    <tr><td>Email hero</td><td>600×400</td><td>Half-scale 3:2; max 200 KB JPG.</td></tr>
+  </table>
+</section>
+
+<section class="page">
+  <h2>6c. Square &amp; feed crops</h2>
+  <div class="format-grid">
+    <div class="format-card">
+      <h3>1080×1080 (1:1)</h3>
+      <div class="frame r-1-1">
+        <img class="fill" src="../public/FliesImageLogo.png" alt="" style="object-position: center 38%;" />
+      </div>
+      <p>Crop center-weighted on hero flies. Stack wordmark in lower 25% on cream gradient. One headline only.</p>
+    </div>
+    <div class="format-card">
+      <h3>In-feed still (3:2)</h3>
+      <p>Use full infographic master — no extra border. Caption voice: short, present tense; link to live race or pool.</p>
+      <p><strong>Alt text pattern:</strong> “Flies Armageddon — [fly names] racing for the sugar” or “COMING SOON — Flies Armageddon”.</p>
+      <h3>Animated / video</h3>
+      <p>Match 16:9 or 9:16 safe zones; keep wood UI out of video unless recording actual product. Gong / chaos SFX are in-product only unless promoting a clip.</p>
+    </div>
+  </div>
+</section>
+
+</section>
+
+<section class="page">
+  <h2>6d. Plaque infographic recipe (canonical)</h2>
+  <p>Feed infographics on <code>LandingContainer</code> follow this layout — not a two-column article with a hero thumbnail. Reference:</p>
+  <img class="ref-shot" src="social/plaque-infographic-reference.jpg" alt="Canonical plaque infographic: centered title, three equal columns, palette row at the bottom" />
+  <h3>Breakdown</h3>
+  <table>
+    <tr><th>Layer</th><th>How theirs works</th><th>What to avoid</th></tr>
+    <tr><td>Chrome</td><td>Sky gradient, native landing plaque, wordmark hangs on the top rail only.</td><td>Lobby stretch; wordmark as a giant inside column.</td></tr>
+    <tr><td>Title</td><td>One line, centered, all caps, wood-brown extra-bold. Names the sheet.</td><td>White Luckiest Guy + black stroke on cream; stacked headlines + a paragraph.</td></tr>
+    <tr><td>Body</td><td>Three <strong>equal</strong> columns, shared top edge. Bold column label + icon + 2–4 short lines.</td><td>Asymmetric 1fr + thumbnail; wrapping sentences; nested share-art PNG.</td></tr>
+    <tr><td>Icons</td><td>Simple monochrome marks in wood ink, one per line, aligned.</td><td>Orange dotted bullets; decorative clip-art.</td></tr>
+    <tr><td>Palette</td><td>Five swatches, <strong>one row, centered under the columns</strong> as a closer.</td><td>Swatches glued to a side stack; a fifth chip wrapping alone.</td></tr>
+    <tr><td>Density</td><td>Content optically centered in the parchment with even cream around it.</td><td>Enter-gate 34% top inset (leaves a dead lower board); footers and URLs inside the plaque.</td></tr>
+    <tr><td>Brand marks</td><td>Wordmark on top is enough. No second FliesImageLogo inside.</td><td>Hero art competing with the hanging logo; file-name captions.</td></tr>
+  </table>
+  <h3>Grid</h3>
+  <ul>
+    <li>Safe cream ≈ <strong>12% left/right, 20% top, 12% bottom</strong> of the plaque (looser than enter-gate fill).</li>
+    <li>Title spans full cream; then <code>grid-template-columns: 1fr 1fr 1fr</code> with equal gap.</li>
+    <li>Max ~3 items per column. Labels wrap to two lines only if needed; no paragraphs.</li>
+    <li>Swatch row: 5 chips, no wrap, centered, ~8–12px above the inner bottom of the cream.</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h2>7. Voice &amp; copy</h2>
+  <ul>
+    <li>Short sentences. Present tense. Exclamation sparingly — chaos toasts can be louder than UI labels.</li>
+    <li>Death causes are full phrases (“killed by lightning”), never single nouns.</li>
+    <li>Science is real but not preachy: neuron counts and “brain” language are fair game; don’t promise real-money outcomes beyond on-chain pool rules.</li>
+    <li>Brand name is always <strong>Flies Armageddon</strong> (two words, title case). Not “Sugar Run” (retired).</li>
+  </ul>
+  <h2>8. Do / don’t</h2>
+  <div class="do-dont">
+    <div class="do"><strong>Do</strong><ul>
+      <li>Use Flieslogo on cream or sky backgrounds.</li>
+      <li>Use FliesImageLogo for social/Open Graph.</li>
+      <li>Tint UI with racer fly colors via <code>--fly</code>.</li>
+      <li>Use the four wood container PNGs (§5) for race UI and on-brand comps.</li>
+      <li>Keep wood frames; don’t replace with flat Material cards in race mode.</li>
+    </ul></div>
+    <div class="dont"><strong>Don’t</strong><ul>
+      <li>Reuse retired <code>card.webp</code> Sugar Run neon art.</li>
+      <li>Stretch or recolor the stone wordmark gradients.</li>
+      <li>Nine-slice a portrait lobby frame onto a landscape social canvas.</li>
+      <li>Let type, handles, or footers sit on wood rails, grass, or outside the plaque.</li>
+      <li>Drop hero art or a second wordmark inside a plaque infographic (the hanging logo is enough).</li>
+      <li>Set plaque titles in white Luckiest Guy; use wood-ink extra-bold on cream.</li>
+      <li>Place wordmark on busy mid-tone photos without a cream plate behind it.</li>
+      <li>Mix lab dark theme into race lobby without intentional contrast (e.g. host gate exception).</li>
+    </ul></div>
+  </div>
+  <h3>File checklist for marketing</h3>
+  <ul>
+    <li><code>public/container-headless.png</code>, <code>LobbyContainer.png</code>, <code>LandingContainer.png</code>, <code>button.png</code> — race wood system (§5)</li>
+    <li><code>public/FliesImageLogo.png</code> — 1245×844 (~3:2) OG / hero / infographic master</li>
+    <li><code>public/Flieslogo.png</code> — 954×725 wordmark for lobby-style lockups</li>
+    <li><code>public/flies-armageddon-coming-soon.jpg</code> — 1280×720 (16:9) “COMING SOON”</li>
+    <li><code>docs/social/plaque-infographic-reference.jpg</code> — canonical 3-column plaque layout</li>
+    <li><code>public/flies-armageddon-rebrand-infographic.png</code> — 1500×1000 rebrand infographic (<code>npm run brand:rebrand-infographic</code>)</li>
+    <li><code>flies-armageddon-banner-x-1500x500.png</code> — create &amp; add to <code>public/</code> when ready</li>
+    <li><code>docs/brand-system.pdf</code> — this document (<code>npm run brand:pdf</code>)</li>
+  </ul>
+</section>
+
+</body>
+</html>

@@ -129,7 +129,7 @@ const HOST_SECRET_KEY = 'sugarRunHostSecret';
 const TICKER_KEY = 'sugarRunTickerUrl';
 let hostSecret = '';
 let hostGateResolve = null;
-const X_HREF = 'https://x.com/SugarRunFun';
+const X_HREF = 'https://x.com/Farmageddon';
 const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
 let lastRaceFliesKey = '';
 let watchTickerUrl = null;
@@ -813,7 +813,7 @@ async function addFly(pos, yaw, sex = 'm', ident = null) {
   const f = { id, worker, color, sex, name: ident?.name || (isRace ? RACE_NAMES[id] || `fly ${id}` : `fly ${id}`), ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
   scene.add(f.group); flies.push(f); batches.add(f);
   if (isRace) {
-    const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color;
+    const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color; el.style.setProperty('--fly', f.color);
     el.innerHTML = `<span class="fly-label-chip">${f.name}</span><div class="fly-label-info"></div>`;
     const selectFly = () => {
       selected = f.id;
@@ -1018,7 +1018,7 @@ function setupRaceChrome() {
   if (isWatch) document.body.classList.add('watch');
   $('#panel').hidden = true;
   $('#raceHud').hidden = false;
-  document.title = 'Sugar Run';
+  document.title = 'Flies Armageddon';
   $('#follow').checked = false;
   const capL = $('#eyeL')?.closest('figure')?.querySelector('figcaption');
   const capR = $('#eyeR')?.closest('figure')?.querySelector('figcaption');
@@ -1260,7 +1260,7 @@ function setupRaceSocials() {
   const nav = document.createElement('nav');
   nav.id = 'raceSocials';
   nav.hidden = true;
-  nav.setAttribute('aria-label', 'Sugar Run links');
+  nav.setAttribute('aria-label', 'Flies Armageddon links');
   nav.innerHTML = `<a class="race-social race-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
     <a class="race-social race-social-ticker" id="raceTicker" href="#" aria-label="FLYticker"><img src="${BASE}FLYticker.webp" alt="FLYticker" draggable="false" /></a>`;
   document.body.appendChild(nav);
@@ -1734,7 +1734,7 @@ function addVisualFly(row, bodyNames) {
   f.bodyGroups = bodyNames.map(n => f.bodies[n] || null);
   ensureWingBlur(f);
   scene.add(f.group); flies.push(f); batches.add(f);
-  const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color;
+  const el = document.createElement('div'); el.className = 'fly-label'; el.tabIndex = 0; el.style.color = f.color; el.style.setProperty('--fly', f.color);
   el.innerHTML = `<span class="fly-label-chip">${f.name}</span><div class="fly-label-info"></div>`;
   el.addEventListener('pointerdown', e => { e.stopPropagation(); startRaceFollow(f.id); });
   const setOpen = open => {
@@ -1758,6 +1758,7 @@ function applyWatchFlyIdent(f, row) {
   const el = f.label?.element;
   if (el) {
     el.style.color = f.color;
+    el.style.setProperty('--fly', f.color);
     const chip = el.querySelector('.fly-label-chip');
     if (chip) chip.textContent = f.name;
   }
@@ -3080,7 +3081,7 @@ function flyRowHtml(f, selectedId = selected, raceVitals = false) {
 function flyKvHtml(f) {
   const s = f.last; if (!s) return '';
   const c = s.cmd || {};
-  return `<div class="kv"><span>${t('kv.behaviour')}</span><span style="color:var(--acc)">${behaviorLabel(s.behavior)}</span><span>${t('kv.energy')}</span><span>${(s.energy * 100).toFixed(0)}%</span><span>${t('kv.health')}</span><span>${(s.health * 100).toFixed(0)}%</span>
+  return `<div class="kv"><span>${t('kv.behaviour')}</span><span>${behaviorLabel(s.behavior)}</span><span>${t('kv.energy')}</span><span>${(s.energy * 100).toFixed(0)}%</span><span>${t('kv.health')}</span><span>${(s.health * 100).toFixed(0)}%</span>
       <span>${t('kv.foodEaten')}</span><span>${(s.eaten * 1000).toFixed(1)} mg·eq</span><span>${t('kv.distance')}</span><span>${(s.dist || 0).toFixed(1)} cm</span><span>${t('kv.takeoffs')}</span><span>${s.jumps || 0} / ${s.flights || 0}</span><span>${t('kv.drive')}</span><span>${s.drive || '–'}</span>${s.nm ? `<span>${t('kv.hormones')}</span><span>${s.nm.akh.toFixed(2)} / ${s.nm.dilp.toFixed(2)}</span><span>${t('kv.oa')}</span><span>${t('kv.arousal', { hz: s.nm.oa.toFixed(1), pct: (s.nm.arousal * 100).toFixed(0) })}</span>` : ''}<span>${t('kv.walkDrive')}</span><span>${(c.drive || 0).toFixed(0)} Hz</span>
       <span>${t('kv.back')}</span><span>${(c.back || 0).toFixed(0)} Hz</span><span>${t('kv.steer')}</span><span>${(c.turn || 0).toFixed(2)}</span>
       <span>${t('kv.gf')}</span><span>${(c.escape || 0).toFixed(0)} Hz</span><span>${t('kv.mn9')}</span><span>${(s.mn9 || 0).toFixed(0)} Hz</span>

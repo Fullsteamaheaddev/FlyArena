@@ -1,4 +1,4 @@
-// Shared wind sway for Sugar Run map props (reeds, palms, lilypads).
+// Shared wind sway for Flies Armageddon map props (reeds, palms, lilypads).
 import * as THREE from 'three';
 
 export const swayUniforms = { uSwayT: { value: 0 }, uWind: { value: new THREE.Vector3(1, 0, 0.35) } };

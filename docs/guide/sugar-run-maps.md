@@ -1,6 +1,6 @@
-# Sugar Run maps
+# Flies Armageddon maps
 
-Sugar Run (`/racehost`, `/`, `arena.html?env=race`) can race on more than one map. The
+Flies Armageddon (`/racehost`, `/`, `arena.html?env=race`) can race on more than one map. The
 owner picks the map at `/admin`; the host can also switch it from the lobby card.
 The choice is site-wide. A host lobby pick applies immediately (scene rebuild +
 respawn on the new spots). Watchers follow the map in the host's match snapshots.

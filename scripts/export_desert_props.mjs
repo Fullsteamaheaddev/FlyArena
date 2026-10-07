@@ -1,5 +1,5 @@
 /**
- * Bake Sugar Run desert map GLBs (+Z up, unit-normalised) into public/maps/desert/.
+ * Bake Flies Armageddon desert map GLBs (+Z up, unit-normalised) into public/maps/desert/.
  * Run: node scripts/export_desert_props.mjs
  *
  * Normalisation (the renderer scales at placement):

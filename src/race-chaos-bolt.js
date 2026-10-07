@@ -1,4 +1,4 @@
-// Jagged tube lightning — shared by Sugar Run chaos FX and /local/prop-studio.
+// Jagged tube lightning — shared by Flies Armageddon chaos FX and /local/prop-studio.
 
 const LAYER_CORE = 0;
 const LAYER_SHEATH = 1;

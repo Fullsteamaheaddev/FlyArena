@@ -1,4 +1,4 @@
-// Sugar Run desert map: render-only scene dressing. Physics, senses and fairness live in
+// Flies Armageddon desert map: render-only scene dressing. Physics, senses and fairness live in
 // src/sim/maps/desert.js; this draws the sand, walls, water, props, the night sky
 // and ambient motion (palm sway, dust, tumbleweeds, lamp flicker) on top of the same env.
 import * as THREE from 'three';

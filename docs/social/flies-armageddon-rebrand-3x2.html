@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Flies Armageddon — Rebrand infographic (3:2)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 1500px;
+    height: 1000px;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #2a1810;
+    background: linear-gradient(180deg, #c5dce8 0%, #e8f0f4 42%, #fff8ee 100%);
+  }
+  .stage {
+    width: 1500px;
+    height: 1000px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0 64px 52px;
+  }
+  .plaque-wrap {
+    position: relative;
+    width: 1180px;
+    aspect-ratio: 1198 / 766;
+    flex: none;
+  }
+  .wordmark {
+    position: absolute;
+    left: 50%;
+    top: -7%;
+    transform: translate(-50%, -50%);
+    width: 22%;
+    height: auto;
+    aspect-ratio: 954 / 725;
+    object-fit: contain;
+    z-index: 3;
+    filter: drop-shadow(0 3px 0 rgba(42, 24, 16, 0.28));
+    pointer-events: none;
+  }
+  .plaque {
+    position: absolute;
+    inset: 0;
+    background: url("../../public/LandingContainer.png") center / contain no-repeat;
+  }
+  .fill {
+    position: absolute;
+    top: 16%;
+    left: 9.5%;
+    right: 9.5%;
+    bottom: 14%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 26px;
+    min-height: 0;
+  }
+  .title {
+    font-family: "Arial Black", "Arial Bold", Arial, Helvetica, sans-serif;
+    font-size: 38px;
+    font-weight: 900;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+    text-align: center;
+    color: #3d2918;
+    line-height: 1.05;
+    flex: none;
+    margin: 0;
+  }
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 32px;
+    align-items: start;
+    flex: none;
+  }
+  .col h2 {
+    font-family: "Arial Black", "Arial Bold", Arial, Helvetica, sans-serif;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: center;
+    color: #2a1810;
+    line-height: 1.12;
+    margin-bottom: 20px;
+    min-height: 2.4em;
+  }
+  .item {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    column-gap: 12px;
+    align-items: start;
+    margin-bottom: 16px;
+    font-size: 19px;
+    font-weight: 500;
+    line-height: 1.25;
+    color: #1a1208;
+  }
+  .item svg {
+    width: 30px;
+    height: 30px;
+    fill: #1a1208;
+  }
+  .swatches {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: nowrap;
+    flex: none;
+    margin: 0;
+    padding: 0;
+  }
+  .sw {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border: 2px solid #5a3a22;
+    flex: none;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="plaque-wrap">
+      <img class="wordmark" src="../../public/Flieslogo.png" width="954" height="725" alt="Flies Armageddon" />
+      <div class="plaque" aria-hidden="true"></div>
+      <div class="fill">
+        <p class="title">Rebranding to Flies Armageddon</p>
+        <div class="cols">
+          <section class="col">
+            <h2>What<br>changed</h2>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              <span>Sugar Run name</span>
+            </div>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+              <span>Neon share art</span>
+            </div>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/></svg>
+              <span>Lab-chrome<br>race UI</span>
+            </div>
+          </section>
+          <section class="col">
+            <h2>What<br>stays</h2>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+              <span>Three flies racing</span>
+            </div>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-6h2v6zm4 0h-2V7h2v10z"/></svg>
+              <span>165,122<br>neurons each</span>
+            </div>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+              <span>Pick a fly.<br>Cheer. Bet.</span>
+            </div>
+          </section>
+          <section class="col">
+            <h2>How to<br>say it</h2>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+              <span>Flies Armageddon</span>
+            </div>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              <span>Wood-and-cream<br>UI</span>
+            </div>
+            <div class="item">
+              <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+              <span>Never “Sugar Run”</span>
+            </div>
+          </section>
+        </div>
+        <div class="swatches" aria-label="Palette">
+          <div class="sw" style="background:#ffb347"></div>
+          <div class="sw" style="background:#5ac8fa"></div>
+          <div class="sw" style="background:#a3e635"></div>
+          <div class="sw" style="background:#fff8ee"></div>
+          <div class="sw" style="background:#c5dce8"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

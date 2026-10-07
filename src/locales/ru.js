@@ -80,7 +80,7 @@ export default {
   'preset.maze': 'Лабиринт с едой в конце',
   'preset.social': 'Социум: пять мух, одно пятно еды',
   'preset.courtship': 'Ухаживание: самец и самка',
-  'preset.race': 'Sugar Run',
+  'preset.race': 'Flies Armageddon',
   'map.dish': 'Чашка',
   'map.desert': 'Пустыня (50 × 50 см, ночь)',
 
@@ -204,12 +204,12 @@ export default {
   'wallet.title': 'Открыть кошелёк',
   'wallet.body': 'Продолжите в приложении, которое может открыть этот сайт.',
 
-  'enter.title': 'Добро пожаловать в Sugar Run',
+  'enter.title': 'Добро пожаловать в Flies Armageddon',
   'enter.body': 'Три мозга плодовой мушки на 165 122 нейрона бегут к сахару в центре. Побеждает первая — или последняя на ногах. Выбери муху и поставь.',
   'enter.press': 'Войти',
   'enter.copyToken': 'Скопировать адрес токена',
 
-  'host.title': 'Хост Sugar Run',
+  'host.title': 'Хост Flies Armageddon',
   'host.body': 'Введите пароль хоста, чтобы вести эту гонку.',
   'host.password': 'Пароль',
   'host.submit': 'Хост',
@@ -305,7 +305,7 @@ export default {
   'death.starved': 'погибла от голода',
   'death.killed': 'погибла',
 
-  'admin.title': 'Пул Sugar Run',
+  'admin.title': 'Пул Flies Armageddon',
   'admin.sub': 'Подключите кошелёк владельца, чтобы задать токен, окно ставок, комиссию пула, оператора и чеканить фишки крана.',
   'admin.statusConnect': 'Подключите кошелёк владельца.',
   'admin.connect': 'Подключить',

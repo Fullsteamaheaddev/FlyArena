@@ -1,4 +1,4 @@
-// Site-wide Sugar Run map choice: /api/map (Netlify Blobs), localStorage fallback for local dev.
+// Site-wide Flies Armageddon map choice: /api/map (Netlify Blobs), localStorage fallback for local dev.
 export const RACE_MAP_KEY = 'sugarRunMap';
 const KNOWN = ['dish', 'desert'];
 

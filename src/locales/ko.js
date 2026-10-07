@@ -80,7 +80,7 @@ export default {
   'preset.maze': '끝에 먹이가 있는 미로',
   'preset.social': '사회: 파리 다섯, 먹이 한 곳',
   'preset.courtship': '구애: 수컷과 암컷',
-  'preset.race': 'Sugar Run',
+  'preset.race': 'Flies Armageddon',
   'map.dish': '접시',
   'map.desert': '사막 (50 × 50 cm, 밤)',
 
@@ -204,12 +204,12 @@ export default {
   'wallet.title': '지갑 열기',
   'wallet.body': '이 사이트를 열 수 있는 앱에서 계속하세요.',
 
-  'enter.title': 'Sugar Run에 오신 것을 환영합니다',
+  'enter.title': 'Flies Armageddon에 오신 것을 환영합니다',
   'enter.body': '뉴런 165,122개짜리 초파리 뇌 셋이 가운데 설탕을 향해 달립니다. 먼저 도착하거나 마지막까지 살아남은 쪽이 이깁니다. 파리를 고르고 베팅하세요.',
   'enter.press': '입장',
   'enter.copyToken': '토큰 주소 복사',
 
-  'host.title': 'Sugar Run 호스트',
+  'host.title': 'Flies Armageddon 호스트',
   'host.body': '이 경기를 진행하려면 호스트 비밀번호를 입력하세요.',
   'host.password': '비밀번호',
   'host.submit': '호스트',
@@ -305,7 +305,7 @@ export default {
   'death.starved': '굶어 죽음',
   'death.killed': '죽음',
 
-  'admin.title': 'Sugar Run 풀',
+  'admin.title': 'Flies Armageddon 풀',
   'admin.sub': '소유자 지갑을 연결해 칩 토큰, 베팅 창, 풀 수수료, 운영자를 설정하고 수도꼭지 칩을 발행하세요.',
   'admin.statusConnect': '소유자 지갑을 연결하세요.',
   'admin.connect': '연결',

@@ -32,7 +32,7 @@ export const PRESETS = {
   courtship: { label: 'Courtship: a male and a female', env: () => ({ ...structuredClone(DEFAULT_ENV), obstacles: [], hazards: [], bitterPatches: [], food: [], odors: [] }),
     flySpots: [{ pos: [-0.6, 0], yaw: 0, sex: 'm' }, { pos: [0.4, 0.3], yaw: 2.4, sex: 'f' }] },
   race: {
-    label: 'Sugar Run',
+    label: 'Flies Armageddon',
     flies: 3,
     maxFlies: 3,
     flySpots: [0, 1, 2].map(i => {
@@ -64,7 +64,7 @@ export const PRESETS = {
   },
 };
 
-// Sugar Run maps. `dish` is the original plate; `desert` is the 50 cm night square (src/sim/maps/desert.js).
+// Flies Armageddon maps. `dish` is the original plate; `desert` is the 50 cm night square (src/sim/maps/desert.js).
 export const RACE_MAPS = {
   dish: { label: 'Dish', flySpots: dishSpots(), env: () => dishEnv(PRESETS.race.env()) },
   desert: { label: 'Desert', flySpots: desertSpots(), env: () => desertEnv(DEFAULT_ENV) },
@@ -85,7 +85,7 @@ function squareArenaParts(a, parts) {
 
 export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, nProxies = 0 } = {}) {
   const a = env.arena, parts = [];
-  // Floor + walls on a mocap body so Sugar Run can tilt / punch / rattle the real collision dish.
+  // Floor + walls on a mocap body so Flies Armageddon can tilt / punch / rattle the real collision dish.
   parts.push('<body name="arena" mocap="true">');
   if (a.shape === 'square') squareArenaParts(a, parts);
   else parts.push(`<geom name="floor" type="cylinder" size="${(a.radius + 0.1).toFixed(4)} 0.25" pos="0 0 -0.25" rgba=".55 .5 .42 1" friction="1.4" solref="0.002 1" condim="3" group="0"/>`);

@@ -80,7 +80,7 @@ export default {
   'preset.maze': 'Maze with food at the far end',
   'preset.social': 'Social: five flies, one food patch',
   'preset.courtship': 'Courtship: a male and a female',
-  'preset.race': 'Sugar Run',
+  'preset.race': 'Flies Armageddon',
   'map.dish': 'Dish',
   'map.desert': 'Desert (50 × 50 cm, night)',
 
@@ -216,12 +216,12 @@ export default {
   'wallet.title': 'Open a wallet',
   'wallet.body': 'Continue in an app that can browse this site.',
 
-  'enter.title': 'Welcome to Sugar Run',
+  'enter.title': 'Welcome to Flies Armageddon',
   'enter.body': 'Three 165,122-neuron fruit-fly brains race to the sugar at the centre. First there — or last alive — wins. Pick a fly and bet.',
   'enter.press': 'Enter',
   'enter.copyToken': 'Copy token address',
 
-  'host.title': 'Host Sugar Run',
+  'host.title': 'Host Flies Armageddon',
   'host.body': 'Enter the host password to run this race.',
   'host.password': 'Password',
   'host.submit': 'Host',
@@ -306,7 +306,7 @@ export default {
   'chaos.holy.lineAnon': 'Count to three. Not five.',
   'chaos.holy.lineDud': 'A damp squib.',
 
-  'admin.title': 'Sugar Run pool',
+  'admin.title': 'Flies Armageddon pool',
   'admin.sub': 'Connect the owner wallet to set chip token, betting window, pool fee, operator, and mint faucet chips.',
   'admin.statusConnect': 'Connect the owner wallet.',
   'admin.connect': 'Connect',
