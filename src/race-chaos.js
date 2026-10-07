@@ -231,6 +231,8 @@ export function createRaceChaos(api) {
   function post(f, msg) { if (f?.worker) f.worker.postMessage({ type: 'chaos', ...msg }); }
   function postAll(msg) { for (const f of liveFlies(flies())) post(f, msg); }
   function postEvery(msg) { for (const f of flies()) post(f, msg); }
+  /** Delayed chaos still runs after a winner so SFX can finish; kills must not. */
+  function hostPhysics(physics) { return !!physics && api.isHostLive?.() !== false; }
 
   function setCue(partial) {
     cueId += 1;
@@ -626,14 +628,14 @@ export function createRaceChaos(api) {
   function strike(x, y, killR, physics, opts = {}) {
     let killed = false;
     let sx = x, sy = y;
-    if (physics && opts.killFlyId != null) {
+    if (hostPhysics(physics) && opts.killFlyId != null) {
       const f = liveFlies(flies()).find(fl => fl.id === opts.killFlyId);
       if (f?.last) {
         sx = f.last.pos[0]; sy = f.last.pos[1];
         post(f, { op: 'kill', cause: 'lightning' });
         killed = true;
       }
-    } else if (physics && killR > 0) {
+    } else if (hostPhysics(physics) && killR > 0) {
       for (const f of liveFlies(flies())) {
         const p = f.last.pos;
         if (Math.hypot(p[0] - x, p[1] - y) < killR) { post(f, { op: 'kill', cause: 'lightning' }); killed = true; }
@@ -916,7 +918,7 @@ export function createRaceChaos(api) {
       mesh.rotation.x = 0;
       mesh.rotation.z = yaw;
       api.audio()?.playCakeLand?.();
-      if (physics) {
+      if (hostPhysics(physics)) {
         for (const f of liveFlies(flies())) {
           const p = f.last.pos;
           if (Math.hypot(p[0] - x, p[1] - y) < CAKE_R && (p[2] || 0) < 0.55) {
@@ -1097,7 +1099,7 @@ export function createRaceChaos(api) {
       camShake(200, 0.22);
       scorches.push({ x, y, r: 0.5 * scorchScale(), until: now() + 15000 });
       api.repaintFloor?.();
-      if (physics) {
+      if (hostPhysics(physics)) {
         const impulseR = 1.65;
         for (const f of liveFlies(flies())) {
           const p = f.last.pos;
@@ -1329,7 +1331,7 @@ export function createRaceChaos(api) {
     tween(riseMs, u => {
       mesh.position.z = -0.55 + (0.02 - -0.55) * easeInOut(u);
       // Lethal only while the points are punching up through a fly already on the pad.
-      if (physics && u > 0.42) spikeTrapHits();
+      if (hostPhysics(physics) && u > 0.42) spikeTrapHits();
     }, () => {
       if (spikesSession) spikesSession.stabbing = false;
       later(holdMs, () => {
@@ -1343,7 +1345,7 @@ export function createRaceChaos(api) {
   }
 
   function spikeTrapHits() {
-    if (!spikesSession?.stabbing || !spikesSession.physics) return;
+    if (!spikesSession?.stabbing || !hostPhysics(spikesSession.physics)) return;
     const { x, y, half } = spikesSession;
     for (const f of liveFlies(flies())) {
       if (spikesSession.hitIds.has(f.id)) continue;
@@ -1617,7 +1619,7 @@ export function createRaceChaos(api) {
       showToast(copy.title, copy.line);
       const g = s.grenade;
       if (g) tween(700, u => { g.rotation.set(0, easeInOut(u) * 1.45, 0); });
-      if (physics) {
+      if (hostPhysics(physics)) {
         const r = h.impulseR * 0.6;
         for (const f of liveFlies(flies())) {
           const p = f.last.pos, d = Math.hypot(p[0] - x, p[1] - y);
@@ -1659,7 +1661,7 @@ export function createRaceChaos(api) {
     camShake(380, 0.4);
     scorches.push({ x, y, r: h.killR * scorchScale(), until: now() + 15000 });
     api.repaintFloor?.();
-    if (physics) {
+    if (hostPhysics(physics)) {
       for (const f of liveFlies(flies())) {
         const p = f.last.pos, d = Math.hypot(p[0] - x, p[1] - y);
         if (d < h.killR && (p[2] || 0) < 0.6) {
@@ -2130,20 +2132,22 @@ export function createRaceChaos(api) {
   }
 
   function stopLive() {
-    disposeAllFx();
+    // Keep in-flight FX/tweens so delayed SFX (holy boom, meteor hits, cake land) still play.
+    nextAt = Infinity;
+    endLaserSession();
+    api.audio()?.stopUfoSting?.(0.4);
     postEvery({ op: 'pin', on: false });
     postEvery({ op: 'spin', on: false });
     postEvery({ op: 'loose', on: false });
     postEvery({ op: 'slip', on: false });
     postEvery({ op: 'bias', ax: 0, ay: 0 });
-    nextAt = Infinity;
   }
 
   function tick() {
     const t = now();
     const cur = tweens;
     tweens = [];
-    let laterBudget = 1;
+    let laterBudget = 8;
     for (const tw of cur) {
       if (tw.later && t >= tw.until) {
         if (laterBudget <= 0) { tweens.push(tw); continue; }

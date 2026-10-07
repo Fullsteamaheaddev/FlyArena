@@ -2671,7 +2671,7 @@ function announceRaceWinner(f, why) {
   raceAudio?.playBed('menu');
   raceAudio?.playYipee();
   announceRace(t('race.wins', { name: f.name }), f.color);
-  raceChaos?.reset();
+  raceChaos?.stopLive();
   followRaceWinner(f);
   clearTimeout(raceBrainTimer); raceBrainTimer = null;
   const card = $('#raceCard');
