@@ -249,7 +249,7 @@
     <tr><td><strong>Primary wordmark</strong></td><td><code>public/Flieslogo.png</code></td><td>Lobby overlay, loading spinner, in-game brand header. Alt text: “Flies Armageddon”.</td></tr>
     <tr><td><strong>Hero / key art</strong></td><td><code>public/FliesImageLogo.png</code></td><td>OG/Twitter share image, loading backdrop, social banners, “coming soon” art.</td></tr>
     <tr><td><strong>Arena floor mark</strong></td><td><code>public/Farmageddoncom.png</code></td><td>Centre disc on dish &amp; desert maps (~27.6% of floor texture width).</td></tr>
-    <tr><td><strong>Wood frames (race UI)</strong></td><td><code>container-headless.png</code>, <code>LobbyContainer.png</code>, <code>LandingContainer.png</code>, <code>button.png</code></td><td>See §5 — primary product chrome; not optional skin.</td></tr>
+    <tr><td><strong>Wood frames (race UI)</strong></td><td><code>container-headless.png</code>, <code>LobbyContainer.png</code>, <code>LandingContainer.png</code>, <code>Button.webp</code></td><td>See §5 — primary product chrome; not optional skin.</td></tr>
     <tr><td><strong>Favicon</strong></td><td><code>public/favicon-512.webp</code></td><td>Browser tab &amp; PWA icon.</td></tr>
   </table>
   <div class="logo-row">
@@ -332,10 +332,10 @@
       <td>Enter gate dialog (welcome / token / Enter button)</td>
     </tr>
     <tr>
-      <td><code>button.png</code></td>
-      <td>1257×384</td>
-      <td>Stretch-fit background on CTA</td>
-      <td>Primary wood pill buttons (Enter, connect flows on frame)</td>
+      <td><code>Button.webp</code></td>
+      <td>1663×473</td>
+      <td><code>background: contain</code> on native ~3.52:1 slab</td>
+      <td>Enter CTA and lobby primary buttons (<code>--wood-btn</code>)</td>
     </tr>
   </table>
   <p class="spec-note"><strong>Legacy / do not ship in new UI:</strong> <code>container.png</code> (1800×1773, older framed board) remains preloaded for cache warmth only — production HUD uses <strong>headless</strong> variant. <code>ContainerHeadless.png</code> is a duplicate filename casing of <code>container-headless.png</code>; canonical URL is lowercase <code>/container-headless.png</code>.</p>
@@ -345,7 +345,7 @@
     <tr><td><code>LobbyContainer.png</code></td><td>1889×2115</td><td>~0.89:1</td><td><strong>Portrait</strong> garden board</td><td>Keep near this ratio. Nine-slice grows the cream <em>center</em> a little; never force it into 3:2 / 16:9.</td></tr>
     <tr><td><code>LandingContainer.png</code></td><td>1198×766</td><td>~1.56:1</td><td><strong>Landscape</strong> stone plaque</td><td><code>aspect-ratio: 1198 / 766</code>; <code>background-size: contain</code>. Closest match to a 3:2 social canvas.</td></tr>
     <tr><td><code>container-headless.png</code></td><td>1175×739</td><td>~1.59:1</td><td>Landscape HUD</td><td>Nine-slice OK for HUD width; stay roughly landscape. Do not stretch into a square or a strip.</td></tr>
-    <tr><td><code>button.png</code></td><td>1257×384</td><td>~3.27:1</td><td>Wide CTA slab</td><td><code>background-size: contain</code> on a short wide button. Never <code>cover</code>.</td></tr>
+    <tr><td><code>Button.webp</code></td><td>1663×473</td><td>~3.52:1</td><td>Wide CTA slab</td><td><code>background-size: contain</code> on a short wide button. Never <code>cover</code>.</td></tr>
     <tr><td><code>Flieslogo.png</code></td><td>954×725</td><td>~1.32:1</td><td>Stacked stone wordmark</td><td><code>height: auto; object-fit: contain</code>. Hang <strong>above</strong> lobby/landing — never squash into a column.</td></tr>
   </table>
   <h3>CSS tokens (race)</h3>
@@ -372,8 +372,8 @@
       <p class="cap"><strong>LandingContainer.png</strong> Wide landing plaque. Fitted with <code>background-size: contain</code>; safe copy box ≈ inset 11% L/R, 34% top → 14% bottom (<code>.enter-fill</code>). Wordmark at <code>top: -8%</code> centered.</p>
     </div>
     <div class="container-shot">
-      <img src="../public/button.png" alt="" />
-      <p class="cap"><strong>button.png</strong> Orange wood CTA slab. White Luckiest Guy label + warm shadow <code>0 2px 0 #7a3a00</code>. Scale hover <code>1.08</code> — do not swap to flat CSS buttons in race mode.</p>
+      <img src="../public/Button.webp" alt="" />
+      <p class="cap"><strong>Button.webp</strong> Orange wood CTA slab (1663×473). White Luckiest Guy label + warm shadow <code>0 2px 0 #7a3a00</code>. Scale hover <code>1.08</code> — do not swap to flat CSS buttons in race mode.</p>
     </div>
   </div>
   <h3>When to use which frame</h3>
@@ -423,7 +423,7 @@
   <p>Nametag pills: dark translucent fill, 2px fly-color border, Luckiest Guy name. Hover stat card = vitals chip (cream + <code>--fly</code> tint, 12px radius, shadow <code>0 8px 22px rgba(42,24,16,.28)</code>). Panel motion: fold ease <code>cubic-bezier(0.34, 1.2, 0.64, 1)</code>, HUD slide 0.45s; lobby card enter scale <code>raceCardEnter</code> + idle breathe on enter gate.</p>
   <h3>File checklist (containers)</h3>
   <ul>
-    <li><code>public/container-headless.png</code> · <code>LobbyContainer.png</code> · <code>LandingContainer.png</code> · <code>button.png</code></li>
+    <li><code>public/container-headless.png</code> · <code>LobbyContainer.png</code> · <code>LandingContainer.png</code> · <code>Button.webp</code></li>
     <li>Slice values and selectors: <code>src/arena.css</code> (<code>body.race #scoreboard</code>, <code>.race-card</code>, <code>#enterGate .enter-card</code>, <code>#enterBtn</code>)</li>
   </ul>
 </section>
@@ -607,7 +607,7 @@
   </div>
   <h3>File checklist for marketing</h3>
   <ul>
-    <li><code>public/container-headless.png</code>, <code>LobbyContainer.png</code>, <code>LandingContainer.png</code>, <code>button.png</code> — race wood system (§5)</li>
+    <li><code>public/container-headless.png</code>, <code>LobbyContainer.png</code>, <code>LandingContainer.png</code>, <code>Button.webp</code> — race wood system (§5)</li>
     <li><code>public/FliesImageLogo.png</code> — 1245×844 (~3:2) OG / hero / infographic master</li>
     <li><code>public/Flieslogo.png</code> — 954×725 wordmark for lobby-style lockups</li>
     <li><code>public/flies-armageddon-coming-soon.jpg</code> — 1280×720 (16:9) “COMING SOON”</li>

@@ -158,6 +158,9 @@ body.race {
   --lobby-slice: 17% 21% 24% 21%;
   --lobby-border: 70px;
   --race-sky: #c5dce8;
+  /* Landing enter gate only — button.webp includes “ENTER” (1115×316). */
+  --wood-btn-enter: url("/button.webp");
+  --wood-btn-enter-ratio: 1115 / 316;
 }
 html.race,
 html.race body,
@@ -340,10 +343,10 @@ body.race #enterGate .lobby-logo {
 }
 body.race #enterGate .enter-fill {
   position: absolute;
-  top: 34%;
+  top: 24%;
   left: 11%;
   right: 11%;
-  bottom: 14%;
+  bottom: 16%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -363,29 +366,41 @@ body.race #enterGate .enter-copy {
   flex: none;
   width: 100%;
 }
+body.race #enterGate .enter-social-x {
+  flex: none;
+  margin: 0.85em 0 0.7em;
+}
+body.race #enterGate .enter-cta {
+  flex: 1;
+  display: grid;
+  grid-template-rows: auto minmax(8px, 0.4fr) auto 1fr;
+  align-items: center;
+  justify-items: center;
+  width: 100%;
+  min-height: 0;
+  margin-top: 0;
+}
+body.race #enterGate .enter-cta:has(.enter-token[hidden]) {
+  grid-template-rows: minmax(8px, 0.4fr) auto 1fr;
+}
 body.race #enterGate .enter-token-slot {
   display: flex;
-  flex: 1;
+  grid-row: 1;
   align-items: center;
   justify-content: center;
-  min-height: 0;
   width: 100%;
 }
-body.race #enterGate .enter-token-slot:has(.enter-token[hidden]) {
-  flex: 0 0 0;
+body.race #enterGate .enter-cta:has(.enter-token[hidden]) .enter-token-slot {
   display: none;
 }
-body.race #enterGate .enter-fill:has(.enter-token[hidden]) .enter-actions {
-  margin-top: auto;
-}
 body.race #enterGate .enter-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35em;
-  flex: none;
-  width: 100%;
-  margin-top: 0;
+  display: contents;
+}
+body.race #enterGate #enterBtn {
+  grid-row: 3;
+}
+body.race #enterGate .enter-cta:has(.enter-token[hidden]) #enterBtn {
+  grid-row: 2;
 }
 body.race #enterGate #enterTitle {
   margin: 0;
@@ -401,48 +416,67 @@ body.race #enterGate p {
   font-size: clamp(14px, 1.3vw, 17px);
   line-height: 1.35;
 }
+@media (min-width: 701px) and (min-height: 751px) {
+  body.race #enterGate #enterTitle {
+    font-size: clamp(32px, 2.9vw, 42px);
+    line-height: 1.05;
+    letter-spacing: 0.015em;
+  }
+  body.race #enterGate p {
+    font-size: clamp(18px, 1.45vw, 21px);
+    line-height: 1.42;
+    max-width: 26em;
+  }
+  body.race #enterGate .enter-copy {
+    gap: 0.72em;
+  }
+}
 body.race #enterGate #enterBtn {
   appearance: none;
-  display: flex; align-items: center; justify-content: center;
+  display: block;
   flex: none;
-  width: min(100%, 14em);
-  height: 3.5em;
+  justify-self: center;
+  width: min(100%, calc(60px * 1115 / 316));
+  min-width: min(100%, calc(60px * 1115 / 316));
+  max-width: calc(60px * 1115 / 316);
+  aspect-ratio: var(--wood-btn-enter-ratio);
+  height: auto;
   max-height: 60px;
-  min-height: 44px;
+  min-height: 36px;
   margin: 0;
-  padding: 0 18%;
+  padding: 0;
   border: 0;
   border-radius: 0;
-  background: url("/button.png") center / contain no-repeat;
+  background: var(--wood-btn-enter) center / contain no-repeat;
   background-color: transparent;
-  color: #fff;
-  font: 400 clamp(14px, 1.5vw, 18px)/1.05 var(--race-title);
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-  text-shadow: 0 2px 0 #7a3a00, 0 3px 6px rgba(60, 20, 0, .45);
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
   cursor: pointer;
-  transform: scale(1);
+  transform: none;
   transition: transform .35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 body.race #enterGate #enterBtn:hover,
 body.race #enterGate #enterBtn:focus-visible {
   transform: scale(1.08);
   filter: none;
-  background: url("/button.png") center / contain no-repeat;
+  background: var(--wood-btn-enter) center / contain no-repeat;
   background-color: transparent;
   border-color: transparent;
 }
 body.race #enterGate .enter-social {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 44px; height: 44px; border-radius: 999px;
+  width: 32px; height: 32px; border-radius: 999px;
   color: #2a1810; border: 2px solid transparent;
   transition: color .15s ease, border-color .15s ease, background .15s ease;
 }
 body.race #enterGate .enter-social:hover,
 body.race #enterGate .enter-social:focus-visible {
-  color: #1a1008; border-color: #5a3a22; background: rgba(90, 58, 34, .08);
+  color: #1a1008;
+  border-color: transparent;
+  background: transparent;
 }
-body.race #enterGate .enter-social svg { width: 20px; height: 20px; fill: currentColor; }
+body.race #enterGate .enter-social svg { width: 16px; height: 16px; fill: currentColor; }
 body.race #hostGate {
   position: fixed; inset: 0; z-index: 40;
   display: flex; align-items: center; justify-content: center;
@@ -968,6 +1002,29 @@ body.race #raceCard #betPlace {
 body.race #raceCard .bet-wallet { margin: 2px 0 0; gap: 6px; }
 body.race #raceCard .race-hist { margin: 4px 0 0; padding-top: 6px; }
 body.race #raceCard h2.hist { margin: 0; }
+body.race #raceCard[data-kind="wait"] {
+  width: min(380px, calc(100vw - 32px));
+  max-width: 380px;
+  padding: 56px 22px 30px;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+}
+body.race #raceCard[data-kind="wait"] h1.lobby-brand {
+  width: min(58%, 200px);
+}
+body.race #raceCard[data-kind="wait"] .wait-msg {
+  margin: 10px 0 0;
+  max-width: 16em;
+  font-family: var(--race-title);
+  font-weight: 400;
+  font-size: clamp(17px, 3.6vw, 22px);
+  line-height: 1.22;
+  color: var(--wood-ink);
+}
+body.race .race-card-breathe:has(#raceCard[data-kind="wait"]) {
+  padding-top: 64px;
+}
 body.race #raceCard[data-kind="results"] {
   width: min(400px, calc(100vw - 32px));
   max-width: 400px;
@@ -1699,7 +1756,7 @@ body.race #groups .v { color: var(--wood-ink); }
   }
   body.race #enterGate h1.lobby-brand { width: 38%; top: -6%; }
   body.race #enterGate .enter-fill {
-    top: 36%;
+    top: 28%;
     left: 10%;
     right: 10%;
     bottom: 12%;
@@ -1713,13 +1770,14 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #enterGate #enterTitle { font-size: clamp(12px, 3.4vw, 16px); }
   body.race #enterGate p { font-size: 9.5px; line-height: 1.12; }
   body.race #enterGate #enterBtn {
-    width: min(100%, 10em);
-    height: 30px;
+    width: min(100%, calc(30px * 1115 / 316));
+    max-width: calc(30px * 1115 / 316);
+    aspect-ratio: var(--wood-btn-enter-ratio);
+    height: auto;
     max-height: 30px;
-    min-height: 28px;
-    font-size: clamp(10px, 2.8vw, 12px);
-    padding: 0 14%;
-    white-space: nowrap;
+    min-height: 0;
+    padding: 0;
+    font-size: 0;
   }
   body.race #enterGate .enter-social {
     width: 22px; height: 22px; min-width: 22px; min-height: 22px;
@@ -1825,20 +1883,25 @@ body.race #groups .v { color: var(--wood-ink); }
 
 @media (max-height: 750px) and (min-width: 701px) {
   body.race #enterGate .enter-fill {
-    top: 36%;
-    bottom: 13%;
+    top: 26%;
+    bottom: 14%;
     gap: 0.35em;
     padding: 0.1em 0.2em 0.1em;
     justify-content: flex-start;
   }
   body.race #enterGate .enter-actions { margin-top: 0; }
-  body.race #enterGate #enterTitle { font-size: clamp(16px, 2.6vh, 22px); }
-  body.race #enterGate p { font-size: clamp(12px, 1.9vh, 14px); line-height: 1.25; }
+  body.race #enterGate .enter-copy { gap: 0.62em; }
+  body.race #enterGate #enterTitle { font-size: clamp(24px, 3.8vh, 34px); }
+  body.race #enterGate p { font-size: clamp(15px, 2.4vh, 18px); line-height: 1.35; }
   body.race #enterGate #enterBtn {
-    height: 44px;
+    width: min(100%, calc(44px * 1115 / 316));
+    max-width: calc(44px * 1115 / 316);
+    aspect-ratio: var(--wood-btn-enter-ratio);
+    height: auto;
     max-height: 44px;
-    min-height: 40px;
-    font-size: 14px;
+    min-height: 0;
+    padding: 0;
+    font-size: 0;
   }
   body.race #enterGate .enter-social {
     width: 36px; height: 36px;
@@ -1853,7 +1916,7 @@ body.race #groups .v { color: var(--wood-ink); }
     width: min(92vw, calc((72dvh - 12px) * 1198 / 766));
   }
   body.race #enterGate .enter-fill {
-    top: 38%;
+    top: 30%;
     bottom: 12%;
     gap: 0.12em;
     justify-content: flex-start;
@@ -1862,10 +1925,13 @@ body.race #groups .v { color: var(--wood-ink); }
   body.race #enterGate #enterTitle { font-size: clamp(13px, 3.4vh, 18px); }
   body.race #enterGate p { font-size: clamp(10px, 2.6vh, 12px); line-height: 1.15; }
   body.race #enterGate #enterBtn {
-    height: 36px;
+    width: min(100%, calc(36px * 1115 / 316));
+    max-width: calc(36px * 1115 / 316);
+    aspect-ratio: var(--wood-btn-enter-ratio);
+    height: auto;
     max-height: 36px;
-    min-height: 32px;
-    font-size: clamp(11px, 3vh, 13px);
-    white-space: nowrap;
+    min-height: 0;
+    padding: 0;
+    font-size: 0;
   }
 }

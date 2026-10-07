@@ -7,7 +7,7 @@ const IMAGES = [
   { path: 'LobbyContainer.png', high: true },
   { path: 'FliesImageLogo.png', high: true },
   { path: 'Flieslogo.png', high: true },
-  { path: 'button.png', high: true },
+  { path: 'button.webp', high: true },
   { path: 'FruitFlyText.png' },
   { path: 'FLYticker.webp' },
   { path: 'deadfly.png' },

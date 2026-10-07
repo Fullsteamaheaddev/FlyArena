@@ -981,7 +981,7 @@ function paintEnterGateCopy() {
   const p = el.querySelector('.enter-fill p');
   if (p) p.textContent = t('enter.body');
   const btn = el.querySelector('#enterBtn');
-  if (btn) btn.textContent = t('enter.press');
+  if (btn) btn.setAttribute('aria-label', t('enter.press'));
 }
 function setupFoldsTitles() {
   if (isRace) {
@@ -1305,12 +1305,14 @@ function setupEnterGate() {
         <h1 id="enterTitle">${t('enter.title')}</h1>
         <p>${t('enter.body')}</p>
       </div>
-      <div class="enter-token-slot">
-        <button type="button" class="enter-token" id="enterToken" hidden></button>
-      </div>
-      <div class="enter-actions">
-        <button type="button" class="enter-go" id="enterBtn">${t('enter.press')}</button>
-        <a class="enter-social enter-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
+      <a class="enter-social enter-social-x" href="${X_HREF}" target="_blank" rel="noopener noreferrer" aria-label="X">${X_SVG}</a>
+      <div class="enter-cta">
+        <div class="enter-token-slot">
+          <button type="button" class="enter-token" id="enterToken" hidden></button>
+        </div>
+        <div class="enter-actions">
+          <button type="button" class="enter-go enter-btn-img" id="enterBtn" aria-label="${t('enter.press')}"></button>
+        </div>
       </div>
     </div>
   </div>`;
@@ -1585,8 +1587,8 @@ function showWatchWaiting(msg) {
   const card = $('#raceCard');
   lastLobbyKind = '';
   lastPoolKey = '';
-  if (card) card.dataset.kind = '';
-  card.innerHTML = `${lobbyBrandHtml()}<p>${msg}</p>`;
+  if (card) card.dataset.kind = 'wait';
+  card.innerHTML = `${lobbyBrandHtml()}<p class="wait-msg">${msg}</p>`;
   if (watchOverlayPhase !== 'wait') showRaceOverlayCard(card);
   else { const overlay = $('#raceOverlay'); overlay.hidden = false; }
   watchOverlayPhase = 'wait';

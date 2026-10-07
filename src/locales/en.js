@@ -217,7 +217,7 @@ export default {
   'wallet.body': 'Continue in an app that can browse this site.',
 
   'enter.title': 'Welcome to Flies Armageddon',
-  'enter.body': 'Three 165,122-neuron fruit-fly brains race to the sugar at the centre. First there — or last alive — wins. Pick a fly and bet.',
+  'enter.body': 'Three 165,122-neuron fruit-fly brains going head to head in all out war. Last standing, or first to the center wins. Pick a fly and bet',
   'enter.press': 'Enter',
   'enter.copyToken': 'Copy token address',
 
