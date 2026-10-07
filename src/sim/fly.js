@@ -3,7 +3,7 @@
 //   physics state -> Senses (+ CompoundEye every 10 ms) -> sensory neuron drive -> brain (2 x 0.5 ms LIF steps)
 //   -> Motor (descending commands / motor neurons) -> actuators -> physics (10 x 0.1 ms MuJoCo steps)
 import { buildWorldXML } from './world.js';
-import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt, onObstacleTop, obstacleDist, groundAt } from './senses.js';
+import { Senses, CompoundEye, clearance, heatAt, windAt, upwindAt, onObstacleTop, obstacleDist, groundAt, wallGap } from './senses.js';
 import { Intrinsic } from './intrinsic.js';
 import { Neuromod } from './neuromod.js';
 import { Flight } from './flight.js';
@@ -543,22 +543,40 @@ export class FlyAgent {
   }
   guardDish() {
     const id = this.dishMocap;
-    if (id == null || id < 0) return;
     const d = this.mjd;
-    const o = id * 3, q = id * 4;
-    const px = d.mocap_pos[o], py = d.mocap_pos[o + 1], pz = d.mocap_pos[o + 2];
-    const qw = d.mocap_quat[q], qx = d.mocap_quat[q + 1], qy = d.mocap_quat[q + 2], qz = d.mocap_quat[q + 3];
-    const nx = 2 * (qx * qz + qw * qy);
-    const ny = 2 * (qy * qz - qw * qx);
-    const nz = 1 - 2 * (qx * qx + qy * qy);
-    const dist = (d.qpos[0] - px) * nx + (d.qpos[1] - py) * ny + (d.qpos[2] - pz) * nz;
-    if (dist >= 0) return;
-    const push = -dist;
-    d.qpos[0] += nx * push;
-    d.qpos[1] += ny * push;
-    d.qpos[2] += nz * push;
-    const vn = d.qvel[0] * nx + d.qvel[1] * ny + d.qvel[2] * nz;
-    if (vn < 0) { d.qvel[0] -= vn * nx; d.qvel[1] -= vn * ny; d.qvel[2] -= vn * nz; }
+    if (id != null && id >= 0) {
+      const o = id * 3, q = id * 4;
+      const px = d.mocap_pos[o], py = d.mocap_pos[o + 1], pz = d.mocap_pos[o + 2];
+      const qw = d.mocap_quat[q], qx = d.mocap_quat[q + 1], qy = d.mocap_quat[q + 2], qz = d.mocap_quat[q + 3];
+      const nx = 2 * (qx * qz + qw * qy);
+      const ny = 2 * (qy * qz - qw * qx);
+      const nz = 1 - 2 * (qx * qx + qy * qy);
+      const dist = (d.qpos[0] - px) * nx + (d.qpos[1] - py) * ny + (d.qpos[2] - pz) * nz;
+      if (dist < 0) {
+        const push = -dist;
+        d.qpos[0] += nx * push;
+        d.qpos[1] += ny * push;
+        d.qpos[2] += nz * push;
+        const vn = d.qvel[0] * nx + d.qvel[1] * ny + d.qvel[2] * nz;
+        if (vn < 0) { d.qvel[0] -= vn * nx; d.qvel[1] -= vn * ny; d.qvel[2] -= vn * nz; }
+      }
+    }
+    this.unstickRim();
+  }
+  /** Keep the thorax just inside the arena wall so walkers/jumpers cannot hang on the fence. */
+  unstickRim() {
+    if (this.chaosPin) return;
+    const dq = this.dishPose;
+    if (dq && dq.qx * dq.qx + dq.qy * dq.qy > 0.01) return;
+    const d = this.mjd;
+    const { gap, nx, ny } = wallGap([d.qpos[0], d.qpos[1]], this.env);
+    const clear = 0.05;
+    if (gap >= clear) return;
+    const push = clear - gap;
+    d.qpos[0] -= nx * push;
+    d.qpos[1] -= ny * push;
+    const vr = d.qvel[0] * nx + d.qvel[1] * ny;
+    if (vr > 0) { d.qvel[0] -= vr * nx; d.qvel[1] -= vr * ny; }
   }
   dropUprightIfNeeded() {
     if (this.flight.active || this.motor.jumping || this.chaosSpin || this.chaosPin) return;

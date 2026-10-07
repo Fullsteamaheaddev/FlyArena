@@ -41,7 +41,7 @@ export const PRESETS = {
     }),
     env: () => ({
       ...structuredClone(DEFAULT_ENV),
-      arena: { ...DEFAULT_ENV.arena, radius: 12.5, clipHeight: 8 },
+      arena: { ...DEFAULT_ENV.arena, radius: 12.5, clipHeight: 8, wallFriction: 0.02, wallCondim: 1 },
       hazards: [],
       bitterPatches: [],
       food: [{ x: 0, y: 0, r: 0.62, winR: 0.5, sugar: 1, bitter: 0, water: 0.2, amount: 8, hiddenDisc: true }],
@@ -72,14 +72,18 @@ export const RACE_MAPS = {
 export const RACE_MAP_IDS = Object.keys(RACE_MAPS);
 export function raceMap(id) { return RACE_MAPS[id] || RACE_MAPS.dish; }
 
+function wallContact(a, group) {
+  return `group="${group}" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}" condim="${a.wallCondim ?? 3}"`;
+}
+
 function squareArenaParts(a, parts) {
   const H = a.half, t = 0.05, fz = (a.wallHeight / 2).toFixed(4);
   parts.push(`<geom name="floor" type="box" size="${(H + 0.1).toFixed(4)} ${(H + 0.1).toFixed(4)} 0.25" pos="0 0 -0.25" rgba=".82 .7 .5 1" friction="1.4" solref="0.002 1" condim="3" group="0"/>`);
   const walls = [[H + t, 0, 0], [0, H + t, Math.PI / 2], [-(H + t), 0, 0], [0, -(H + t), Math.PI / 2]];
   const clipH = a.clipHeight ?? a.wallHeight, extra = clipH - a.wallHeight;
   walls.forEach(([x, y, th], k) => {
-    parts.push(`<geom name="wall${k}" type="box" size="${t} ${(H + 2 * t).toFixed(4)} ${fz}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${fz}" euler="0 0 ${th.toFixed(4)}" rgba=".72 .56 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
-    if (extra > 0.01) parts.push(`<geom name="wallclip${k}" type="box" size="${t} ${(H + 2 * t).toFixed(4)} ${(extra / 2).toFixed(4)}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${(a.wallHeight + extra / 2).toFixed(4)}" euler="0 0 ${th.toFixed(4)}" rgba="0 0 0 0" group="3" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+    parts.push(`<geom name="wall${k}" type="box" size="${t} ${(H + 2 * t).toFixed(4)} ${fz}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${fz}" euler="0 0 ${th.toFixed(4)}" rgba=".72 .56 .38 1" ${wallContact(a, 0)}/>`);
+    if (extra > 0.01) parts.push(`<geom name="wallclip${k}" type="box" size="${t} ${(H + 2 * t).toFixed(4)} ${(extra / 2).toFixed(4)}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${(a.wallHeight + extra / 2).toFixed(4)}" euler="0 0 ${th.toFixed(4)}" rgba="0 0 0 0" ${wallContact(a, 3)}/>`);
   });
 }
 
@@ -99,7 +103,7 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
   for (let k = 0; k < n; k++) {
     const th = (k + 0.5) / n * 2 * Math.PI, len = 2 * Math.PI * a.radius / n * 0.55;
     const x = (a.radius + t) * Math.cos(th), y = (a.radius + t) * Math.sin(th);
-    parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${a.wallHeight / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${a.wallHeight / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+    parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${a.wallHeight / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${a.wallHeight / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" ${wallContact(a, 0)}/>`);
   }
   const clipH = a.clipHeight ?? a.wallHeight;
   if (a.shape !== 'square' && clipH > a.wallHeight + 0.01) {
@@ -108,7 +112,7 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
     for (let k = 0; k < n; k++) {
       const th = (k + 0.5) / n * 2 * Math.PI, len = 2 * Math.PI * a.radius / n * 0.55;
       const x = (a.radius + t) * Math.cos(th), y = (a.radius + t) * Math.sin(th);
-      parts.push(`<geom name="wallclip${k}" type="box" size="${t} ${len.toFixed(4)} ${(extra / 2).toFixed(4)}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${zc.toFixed(4)}" euler="0 0 ${th.toFixed(4)}" rgba="0 0 0 0" group="3" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+      parts.push(`<geom name="wallclip${k}" type="box" size="${t} ${len.toFixed(4)} ${(extra / 2).toFixed(4)}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${zc.toFixed(4)}" euler="0 0 ${th.toFixed(4)}" rgba="0 0 0 0" ${wallContact(a, 3)}/>`);
     }
   }
   env.obstacles.forEach((o, k) => {

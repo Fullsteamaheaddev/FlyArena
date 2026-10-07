@@ -27,6 +27,7 @@ jobs:
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          URL: https://${{ github.event.repository.owner.login }}.github.io/${{ github.event.repository.name }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

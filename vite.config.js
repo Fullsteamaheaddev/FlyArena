@@ -48,9 +48,61 @@ const watchRoute = {
   configureServer(server) { server.middlewares.use(serveLocalOverlay); },
   configurePreviewServer(server) { server.middlewares.use(serveLocalOverlay); },
 };
+
+/** Open Graph / Twitter card — keep in sync with src/locales/en.js enter.body */
+const SHARE_META = {
+  title: 'Flies Armageddon',
+  description:
+    'Three 165,122-neuron fruit-fly brains going head to head in all out war. Last standing, or first to the center wins. Pick a fly and bet',
+  imageFile: 'flies-armageddon-rebrand-infographic.png',
+  imageWidth: 1500,
+  imageHeight: 1000,
+  imageAlt: 'Flies Armageddon — three connectome fruit flies race to the center',
+};
+
+function sharePublicAsset(site, basePath, file) {
+  const base = (basePath || '/').replace(/\/$/, '') || '';
+  const path = `${base}/${file}`.replace(/\/+/g, '/');
+  if (!site) return path;
+  return `${site.replace(/\/$/, '')}${path}`;
+}
+
+function sharePageUrl(site, basePath) {
+  if (!site) return '';
+  const base = basePath || '/';
+  if (base === '/') return `${site.replace(/\/$/, '')}/`;
+  const path = base.endsWith('/') ? base : `${base}/`;
+  return `${site.replace(/\/$/, '')}${path}`;
+}
+
+const shareMeta = {
+  name: 'share-meta',
+  transformIndexHtml: {
+    order: 'pre',
+    handler(html, { filename }) {
+      if (!filename || !/(?:^|[\\/])(index|arena)\.html$/.test(filename)) return html;
+      const site = String(process.env.URL || process.env.VITE_SITE_URL || '').trim();
+      const basePath = process.env.BASE_PATH || '/';
+      const image = sharePublicAsset(site, basePath, SHARE_META.imageFile);
+      const page = sharePageUrl(site, basePath);
+      const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      let out = html
+        .replaceAll('__SHARE_DESCRIPTION__', esc(SHARE_META.description))
+        .replaceAll('__SHARE_OG_IMAGE__', esc(image));
+      if (page) {
+        out = out.replaceAll('__SHARE_OG_URL__', esc(page));
+      } else {
+        out = out.replace(/<link rel="canonical" href="__SHARE_OG_URL__" \/>\r?\n?/g, '');
+        out = out.replace(/<meta property="og:url" content="__SHARE_OG_URL__" \/>\r?\n?/g, '');
+      }
+      return out;
+    },
+  },
+};
+
 export default defineConfig({
   base: process.env.BASE_PATH || '/', // CI sets /fly-brain/ for GitHub Pages
-  plugins: [dropUnpacked, watchRoute],
+  plugins: [dropUnpacked, watchRoute, shareMeta],
   define: { __DATA_FILES__: JSON.stringify(DATA_FILES) },
   server: { headers: isolation, fs: { allow: [repoRoot, localRoot] } },
   preview: { headers: isolation },
