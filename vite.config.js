@@ -54,9 +54,9 @@ const SHARE_META = {
   title: 'Flies Armageddon',
   description:
     'Three 165,122-neuron fruit-fly brains going head to head in all out war. Last standing, or first to the center wins. Pick a fly and bet',
-  imageFile: 'flies-armageddon-rebrand-infographic.png',
-  imageWidth: 1500,
-  imageHeight: 1000,
+  imageFile: 'FliesImageLogo.png',
+  imageWidth: 1245,
+  imageHeight: 844,
   imageAlt: 'Flies Armageddon — three connectome fruit flies race to the center',
 };
 
