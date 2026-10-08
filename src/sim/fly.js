@@ -219,8 +219,7 @@ export class FlyAgent {
     const op = m.op;
     if (op === 'pin') {
       this.chaosPin = m.on !== false;
-      if (this.chaosPin) { if (this.flight.active) this.flight.end(); }
-      else { this.chaosZapped = false; this.chaosZapMs = 0; }   // releasing a pin also cancels a taser lock
+      if (!this.chaosPin) { this.chaosZapped = false; this.chaosZapMs = 0; }   // releasing a pin also cancels a taser lock
       return;
     }
     if (op === 'spin') {
@@ -229,7 +228,6 @@ export class FlyAgent {
       this.chaosSpinLeft = (m.turns || 3.5) * Math.PI * 2;
       if (this.chaosSpin) {
         this.releaseClaws();
-        if (this.flight.active) this.flight.end();
         d.qvel[2] += m.vz || 6;
         d.qvel[5] = this.chaosSpinWz;
       } else {
@@ -244,7 +242,7 @@ export class FlyAgent {
       this.setSlipFriction(this.chaosSlip);
       return;
     }
-    if (op === 'ground') { if (this.flight.active) this.flight.end(); return; }
+    if (op === 'ground') return;   // cue still posts this; in-air flies keep flying
     if (op === 'dish') {
       const id = this.dishMocap;
       if (id == null || id < 0) return;
@@ -289,7 +287,6 @@ export class FlyAgent {
       this.pullTarget = [m.x ?? 0, m.y ?? 0, m.z ?? 0];
       this.pullK = m.k ?? 0.5;
       this.releaseClaws();
-      if (this.flight.active) this.flight.end();
       return;
     }
     if (op === 'kill') {
@@ -303,7 +300,6 @@ export class FlyAgent {
       if (died) return;
       if (m.vx || m.vy || m.vz || m.wx || m.wy || m.wz) {
         this.releaseClaws();
-        if (this.flight.active) this.flight.end();
         d.qvel[0] += m.vx || 0;
         d.qvel[1] += m.vy || 0;
         d.qvel[2] += m.vz || 0;
@@ -319,15 +315,11 @@ export class FlyAgent {
       this.chaosZapMs = Math.max(0, m.ms ?? 1200);
       this.chaosZapped = this.chaosZapMs > 0;
       this.chaosPin = this.chaosZapped;
-      if (this.chaosZapped) {
-        this.releaseClaws();
-        if (this.flight.active) this.flight.end();
-      }
+      if (this.chaosZapped) this.releaseClaws();
       return;
     }
     if (op === 'impulse' || op === 'flip') {
       this.releaseClaws();
-      if (this.flight.active) this.flight.end();
       d.qvel[0] += m.vx || 0;
       d.qvel[1] += m.vy || 0;
       d.qvel[2] += m.vz || 0;
@@ -501,10 +493,10 @@ export class FlyAgent {
     this.cmd = this.motor.apply(this.t, 1, { up: this.mjd.xmat[this.bid.thorax * 9 + 8], touching: gated, voluntary: this.takeoffPending || (this.intrinsic && this.t < this.intrinsic.takeoffUntil),
       court: this.intrinsic?.state === 'court' ? { sing: !!this.intrinsic.courtSing, side: this.intrinsic.courtSide } : null,
       contact: st.bodyContact.left || st.bodyContact.right || st.antTouch.left || st.antTouch.right,
-      pin: pinned || spinning,
+      pin: (pinned || spinning) && !this.flight.active,
       loose: this.chaosLoose || spinning,
       slip: this.chaosSlip });
-    if (pinned) {
+    if (pinned && !this.flight.active) {
       this.cmd.v = 0; this.cmd.turn = 0;
       d.qvel[0] = 0; d.qvel[1] = 0;
       if (d.qvel[2] > 0) d.qvel[2] = 0;

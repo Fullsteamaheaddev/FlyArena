@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinnedRoot } from 'three/addons/utils/SkeletonUtils.js';
 import { createSmokePuffTexture } from './race-chaos-smoke-tex.js';
-import { applyCelShading, celOutlineExtruded } from './cel-shade.js';
+import { applyCelShading, applyChickenCelShading, celOutlineExtruded } from './cel-shade.js';
 import { attachCakeSilhouette } from './race-chaos-props.js';
 import { applyUfoRimGlow } from './ufo-rim-glow.js';
 
@@ -18,12 +18,26 @@ const PATHS = {
   bazooka: 'chaos/bazooka.glb',
   missile: 'chaos/missile.glb',
   taser: 'chaos/taser.glb',
-  rubber_chicken: 'chaos/rubber_chicken.glb',
+  rubber_chicken: 'Rubberchicken.glb',
 };
 
 const templates = {};
 let assetBase = '';
 let smokeTexture = null;
+
+/**
+ * Authored Rubberchicken.glb is Y-up; chaos props are +Z up. Keep the correction on an
+ * inner node so chickenToss can spin the wrapper without flattening the bird.
+ */
+function orientAuthoredChicken(scene) {
+  const box = new THREE.Box3().setFromObject(scene);
+  const size = box.getSize(new THREE.Vector3());
+  if (size.y > size.z * 1.15) scene.rotation.x = Math.PI / 2;
+  const wrap = new THREE.Group();
+  wrap.name = 'rubber_chicken';
+  wrap.add(scene);
+  return wrap;
+}
 
 export async function preloadChaosAssets(THREE, baseUrl = '/') {
   assetBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -32,7 +46,7 @@ export async function preloadChaosAssets(THREE, baseUrl = '/') {
     try {
       const gltf = await loader.loadAsync(`${assetBase}${path}`);
       if (key === 'ufo') applyUfoRimGlow(gltf.scene, { sceneLights: true });
-      templates[key] = gltf.scene;
+      templates[key] = key === 'rubber_chicken' ? orientAuthoredChicken(gltf.scene) : gltf.scene;
     } catch (e) {
       console.warn(`[chaos-assets] failed ${path}`, e);
     }
@@ -67,6 +81,8 @@ export function cloneChaosProp(name) {
   } else if (name === 'grenade') {
     applyCelShading(root, { outline: false });
     celOutlineExtruded(root, { thickness: 0.009, radialWithin: 0.33, skip: o => o.name === 'WrapEdge' });
+  } else if (name === 'rubber_chicken') {
+    applyChickenCelShading(root);
   } else applyCelShading(root);
   root.traverse(o => {
     if (!o.isMesh) return;

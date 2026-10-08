@@ -200,9 +200,9 @@ function addOutline(o, name) {
 
 /**
  * Convert lit meshes on `root` to MeshToon + optional inverted-hull outline.
- * Skips unlit MeshBasic (lamps, decals) and existing toon mats.
+ * Skips unlit MeshBasic (lamps, decals) and existing toon mats unless `toonBasic`.
  */
-export function applyCelShading(root, { skip, outline = true, outlineName = 'CelOutline' } = {}) {
+export function applyCelShading(root, { skip, outline = true, outlineName = 'CelOutline', toonBasic = false } = {}) {
   root?.traverse?.(o => {
     if (!o.isMesh) return;
     if (o.name === outlineName || o.name === 'UfoCelOutline') return;
@@ -210,13 +210,28 @@ export function applyCelShading(root, { skip, outline = true, outlineName = 'Cel
     const oldMats = Array.isArray(o.material) ? o.material : [o.material];
     const next = oldMats.map(old => {
       if (!old || old.isMeshToonMaterial) return old;
-      if (old.isMeshBasicMaterial || old.isSpriteMaterial) return old;
+      if (old.isSpriteMaterial) return old;
+      if (old.isMeshBasicMaterial && !toonBasic) return old;
       return toonFrom(old);
     });
     oldMats.forEach((m, i) => {
-      if (m && m !== next[i] && !m.isMeshToonMaterial && !m.isMeshBasicMaterial) m.dispose?.();
+      if (m && m !== next[i] && !m.isMeshToonMaterial && (!m.isMeshBasicMaterial || toonBasic)) m.dispose?.();
     });
     o.material = next.length === 1 ? next[0] : next;
     if (outline) addOutline(o, outlineName);
   });
+}
+
+/**
+ * Authored Rubberchicken.glb is tiny (~0.09 on the long axis). A fixed extruded
+ * thickness (grenade's 0.009) swallows the mesh in black ink. Scale the hull to
+ * a fraction of the longest axis so the silhouette reads as a line, not a blob.
+ */
+export function applyChickenCelShading(root) {
+  applyCelShading(root, { outline: false, toonBasic: true });
+  if (!root) return;
+  root.updateMatrixWorld(true);
+  const size = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
+  const longest = Math.max(size.x, size.y, size.z, 1e-4);
+  celOutlineExtruded(root, { thickness: longest * 0.006, depthPush: longest * 0.003 });
 }

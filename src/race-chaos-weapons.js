@@ -15,15 +15,15 @@ import { castBeam, hitSolids } from './race-chaos-laser.js';
  */
 export const WEAPONS = {
   minigun: {
-    prop: 'minigun', damage: 0.08, rounds: 14, intervalMs: 148, windupMs: 560,
+    prop: 'minigun', damage: 0.10, rounds: 14, intervalMs: 148, windupMs: 560,
     jitterBase: 0.2, jitterPerCm: 0.003, knock: 2.2, cause: 'minigun',
   },
   shotgun: {
-    prop: 'shotgun', damage: 0.05, pellets: 9,
+    prop: 'shotgun', damage: 0.065, pellets: 9,
     jitterBase: 0.1, jitterPerCm: 0.006, knock: 13, cause: 'shotgun',
   },
   taser: {
-    prop: 'taser', damage: 0.45, zapMs: 1200, chainR: 1.7, chainChance: 0.1, cause: 'taser',
+    prop: 'taser', damage: 0.55, zapMs: 1200, chainR: 1.7, chainChance: 0.1, cause: 'taser',
   },
   bazooka: {
     prop: 'bazooka', killR: 0.4, splashR: 1.55, splashMax: 0.35, splashMin: 0.15,
@@ -65,6 +65,33 @@ export function pickDuel(flies, rand = Math.random) {
   return { shooter, target: pool[Math.floor(rand() * pool.length)] };
 }
 
+/** True when `target` sits in the front hemisphere of `shooter`'s yaw. */
+export function isFacing(shooter, target) {
+  const sp = shooter?.last?.pos, tp = target?.last?.pos;
+  if (!sp || !tp) return false;
+  const yaw = shooter.last.yaw ?? 0;
+  return (tp[0] - sp[0]) * Math.cos(yaw) + (tp[1] - sp[1]) * Math.sin(yaw) > 0;
+}
+
+/**
+ * Shooter who is already looking toward someone. No behind-the-back fallback —
+ * a gun firing the wrong way reads as a glitch.
+ */
+export function pickFacingDuel(flies, rand = Math.random) {
+  const live = liveWithPos(flies);
+  if (live.length < 2) return { shooter: null, target: null };
+  const order = live.slice();
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  for (const shooter of order) {
+    const ahead = live.filter(o => o !== shooter && isFacing(shooter, o));
+    if (ahead.length) return { shooter, target: ahead[Math.floor(rand() * ahead.length)] };
+  }
+  return { shooter: null, target: null };
+}
+
 /** Nearest live fly to the shooter, used by the short-range weapons. */
 export function nearestTarget(flies, shooter) {
   let best = null, bestD = Infinity;
@@ -79,10 +106,10 @@ export function nearestTarget(flies, shooter) {
 }
 
 /** Muzzle point a little ahead of and above the thorax, from sim state (not the render graph). */
-export function muzzleOf(f, ahead = 0.17, up = 0.05) {
+export function muzzleOf(f, ahead = 0.17, up = 0.05, yawOpt) {
   const p = f?.last?.pos;
   if (!p) return null;
-  const yaw = f.last.yaw ?? 0;
+  const yaw = yawOpt ?? f.last.yaw ?? 0;
   return {
     x: p[0] + Math.cos(yaw) * ahead,
     y: p[1] + Math.sin(yaw) * ahead,
@@ -135,10 +162,12 @@ export function splashAmount(dist, r, max, min) {
 }
 
 /** Point the weapon prop at the fly holding it. Props live in world space, not on the body. */
-export function placeHeldProp(mesh, f, { ahead = 0.14, up = 0.03, roll = 0 } = {}) {
+export function placeHeldProp(mesh, f, { ahead = 0.14, up = 0.03, roll = 0, face, yaw: yawOpt } = {}) {
   const p = f?.last?.pos;
   if (!mesh || !p) return;
-  const yaw = f.last.yaw ?? 0;
+  const yaw = yawOpt != null ? yawOpt
+    : face ? Math.atan2(face.y - p[1], face.x - p[0])
+    : (f.last.yaw ?? 0);
   mesh.position.set(p[0] + Math.cos(yaw) * ahead, p[1] + Math.sin(yaw) * ahead, (p[2] ?? 0.13) + up);
   mesh.rotation.set(roll, 0, yaw);
 }

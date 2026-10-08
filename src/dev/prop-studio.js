@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { applyCelShading, celOutlineExtruded } from '../cel-shade.js';
+import { applyCelShading, applyChickenCelShading, celOutlineExtruded } from '../cel-shade.js';
 import { attachCakeSilhouette } from '../race-chaos-props.js';
 import { applyUfoRimGlow, ensureUfoHullOpaque } from '../ufo-rim-glow.js';
 import { DESERT_MAP_PROP_NAMES, DESERT_PREVIEW_PROPS, propScale } from '../desert-prop-scale.js';
@@ -213,6 +213,8 @@ function viewTop() {
 function glbUrl(name) {
   const base = name === 'sugar_pile'
     ? `/maps/sugar_pile.glb`
+    : name === 'rubber_chicken'
+      ? `/Rubberchicken.glb`
     : setName === 'desert' ? `/maps/desert/${name}.glb` : `/chaos/${name}.glb`;
   return `${base}?t=${Date.now()}`;
 }
@@ -226,6 +228,11 @@ async function loadProp(name) {
   }
   const gltf = await loader.loadAsync(glbUrl(name));
   propRoot = gltf.scene;
+  if (name === 'rubber_chicken') {
+    const box = new THREE.Box3().setFromObject(propRoot);
+    const size = box.getSize(new THREE.Vector3());
+    if (size.y > size.z * 1.15) propRoot.rotation.x = Math.PI / 2;
+  }
   baseScale.set(1, 1, 1);
   ambient.intensity = setName === 'desert' ? 0.55 : 0.48;
   if (setName === 'chaos') {
@@ -242,6 +249,8 @@ async function loadProp(name) {
         radialWithin: 0.33,
         skip: o => o.name === 'WrapEdge',
       });
+    } else if (name === 'rubber_chicken') {
+      applyChickenCelShading(propRoot);
     } else {
       applyCelShading(propRoot);
     }

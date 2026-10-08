@@ -13,7 +13,7 @@ import {
 import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial, warmBoltMaterials } from './race-chaos-bolt.js';
 import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laserSessionDuration, collectLaserSolids } from './race-chaos-laser.js';
 import {
-  WEAPONS, pickDuel, nearestTarget, muzzleOf, shotDir, castShot, splashAmount, placeHeldProp, jitterFor,
+  WEAPONS, pickDuel, pickFacingDuel, isFacing, nearestTarget, muzzleOf, shotDir, castShot, splashAmount, placeHeldProp, jitterFor,
   createTracerPool, fireTracer, tickTracers, hideTracerPool, disposeTracerPool,
 } from './race-chaos-weapons.js';
 
@@ -1694,13 +1694,23 @@ export function createRaceChaos(api) {
   // error is the lethality knob. Every delayed hit is behind hostPhysics().
   // ---------------------------------------------------------------------------
   // GLBs are built ~1 unit long pointing +X. From the race camera (~30 cm back) a fly is
-  // only ~9 px long, so a to-scale gun is a smudge; at this scale it reads ~30 px, about
-  // 3x the fly — Worms-sized rather than absurd. Hold point and barrel tip derive from the
-  // scale so resizing moves them together.
+  // only ~9 px long, so a to-scale gun is a smudge. Default 0.9 reads ~3× the fly;
+  // minigun is 30% smaller, taser is fly-body-length, bazooka/shotgun are half of default.
   const WEAPON_SCALE = 0.9;
-  const HOLD = { ahead: WEAPON_SCALE * 0.26, up: WEAPON_SCALE * 0.15 };
-  const MUZZLE_AHEAD = WEAPON_SCALE * 0.88;
-  function weaponMuzzle(f, ahead = MUZZLE_AHEAD) { return muzzleOf(f, ahead, HOLD.up); }
+  function scaleFor(kind) {
+    if (kind === 'minigun') return WEAPON_SCALE * 0.7;
+    if (kind === 'taser') return 0.4;
+    if (kind === 'bazooka' || kind === 'shotgun') return WEAPON_SCALE * 0.5;
+    return WEAPON_SCALE;
+  }
+  function holdFor(kind) {
+    const s = scaleFor(kind);
+    return { ahead: s * 0.26, up: s * 0.15 };
+  }
+  function weaponMuzzle(f, kind, ahead, yaw) {
+    const s = scaleFor(kind);
+    return muzzleOf(f, ahead ?? s * 0.88, holdFor(kind).up, yaw);
+  }
 
   function ensureTracerPool() {
     if (!tracerPool) {
@@ -1713,14 +1723,80 @@ export function createRaceChaos(api) {
   function weaponArena() { return api.env()?.arena || { radius: radius(), wallHeight: 8 }; }
   function weaponSolids() { return collectLaserSolids(api.env()); }
 
+  /** Scale an authored mesh so its longest axis is `target` cm. */
+  function fitChickenScale(mesh, target = 0.7) {
+    if (!mesh) return target;
+    const prev = mesh.scale.x;
+    mesh.scale.setScalar(1);
+    mesh.updateMatrixWorld(true);
+    const box = new T.Box3().setFromObject(mesh);
+    const size = box.getSize(new T.Vector3());
+    const longest = Math.max(size.x, size.y, size.z);
+    mesh.scale.setScalar(prev);
+    if (longest < 1e-6) return target;
+    return target / longest;
+  }
+
   /** Props sit in world space and are re-placed every frame, so they track the holder. */
-  function heldWeapon(f, prop, pose) {
+  function heldWeapon(f, prop, pose, scale = WEAPON_SCALE) {
     const mesh = chaosMesh(prop);
     if (!mesh) return null;
-    mesh.scale.setScalar(WEAPON_SCALE);
+    mesh.scale.setScalar(scale);
     placeHeldProp(mesh, f, pose);
     fxGroup().add(mesh);
     return mesh;
+  }
+
+  /** Look at the midpoint of two flies, camera just far enough that both stay in frame. */
+  function framePair(a, b, { pad = 1.6, height = 1.4, behind = 0.35, dur = 280 } = {}) {
+    const pa = a?.last?.pos, pb = b?.last?.pos;
+    if (!pa || !pb) return;
+    const ax = pa[0], ay = pa[1], bx = pb[0], by = pb[1];
+    const mx = (ax + bx) / 2, my = (ay + by) / 2;
+    const dx = bx - ax, dy = by - ay;
+    const d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d, uy = dy / d;
+    const dist = Math.max(2.4, d * 1.2 + pad);
+    const z = height + d * 0.12;
+    easeCamTo(
+      new T.Vector3(
+        ax - ux * dist * behind - uy * dist * 0.55,
+        ay - uy * dist * behind + ux * dist * 0.55,
+        z,
+      ),
+      new T.Vector3(mx, my, ((pa[2] || 0.13) + (pb[2] || 0.13)) / 2),
+      dur,
+    );
+  }
+
+  /** Whole-map view that still sits inside the race zoom limit (not maxed out). */
+  function frameArena({ fill = 1.45, dur = 340 } = {}) {
+    const arena = api.env()?.arena || {};
+    const R = arena.half || arena.radius || 12.5;
+    const dist = R * fill;
+    easeCamTo(
+      new T.Vector3(dist * 0.42, -dist * 0.78, dist * 0.48),
+      new T.Vector3(0, 0, 0.15),
+      dur,
+    );
+  }
+
+  /** Over the shooter's shoulder, looking down the shot toward the victim. */
+  function frameOverShoulder(shooter, target, { back = 2.4, height = 1.25, lookT = 0.4, dur = 320 } = {}) {
+    const sp = shooter?.last?.pos;
+    if (!sp) return;
+    const tp = target?.last?.pos;
+    const dx = tp ? tp[0] - sp[0] : Math.cos(shooter.last.yaw ?? 0);
+    const dy = tp ? tp[1] - sp[1] : Math.sin(shooter.last.yaw ?? 0);
+    const n = Math.hypot(dx, dy) || 1;
+    const ux = dx / n, uy = dy / n;
+    const lookX = sp[0] + ux * n * lookT;
+    const lookY = sp[1] + uy * n * lookT;
+    easeCamTo(
+      new T.Vector3(sp[0] - ux * back - uy * 0.35, sp[1] - uy * back + ux * 0.35, (sp[2] || 0.13) + height),
+      new T.Vector3(lookX, lookY, ((sp[2] || 0.13) + (tp?.[2] || 0.13)) / 2 + 0.08),
+      dur,
+    );
   }
 
   function endWeapons() {
@@ -1783,11 +1859,16 @@ export function createRaceChaos(api) {
   }
 
   function minigunRound(shooter, w, spec, physics, pool) {
-    const origin = weaponMuzzle(shooter);
+    const victim = flies().find(f => f.id === w.targetId);
+    const aim = aimPointOf(victim, null);
+    const yaw = aim && shooter.last?.pos
+      ? Math.atan2(aim.y - shooter.last.pos[1], aim.x - shooter.last.pos[0])
+      : shooter.last?.yaw;
+    const origin = weaponMuzzle(shooter, 'minigun', undefined, yaw);
     if (!origin) return;
     const straight = { x: origin.x + Math.cos(origin.yaw) * 6, y: origin.y + Math.sin(origin.yaw) * 6, z: origin.z };
-    const aim = aimPointOf(flies().find(f => f.id === w.targetId), straight);
-    const dir = shotDir(origin, aim, jitterFor(spec, Math.hypot(aim.x - origin.x, aim.y - origin.y)));
+    const shotAim = aim || straight;
+    const dir = shotDir(origin, shotAim, jitterFor(spec, Math.hypot(shotAim.x - origin.x, shotAim.y - origin.y)));
     const hit = castShot(origin, dir, shooter.id, flies(), weaponArena(), weaponSolids());
     fireTracer(pool, T, origin, hit, { ms: 110, radius: 0.055, color: '#ffe9a0' });
     if (Math.random() < 0.5) muzzleFlash(origin, 0.3, 90);
@@ -1802,20 +1883,19 @@ export function createRaceChaos(api) {
     const w = payload.weapon;
     const shooter = weaponShooter(payload);
     if (!w || !shooter?.last) return;
-    const pose = { ...HOLD };
-    const gun = heldWeapon(shooter, spec.prop, pose);
+    const pose = holdFor('minigun');
+    const gun = heldWeapon(shooter, spec.prop, pose, scaleFor('minigun'));
     const pool = ensureTracerPool();
     const s = beginWeapons('minigun', physics, [gun]);
-    if (hostPhysics(physics) && shooter.worker) {
-      post(shooter, { op: 'pin', on: true });
-      s.pinned.push(shooter.id);
-    }
     const total = spec.windupMs + spec.rounds * spec.intervalMs + 300;
     busyUntil = Math.max(busyUntil, now() + total + 400);
     api.audio()?.startMinigunSpin?.();
-    tween(total, u => {
+    const victim = flies().find(f => f.id === w.targetId);
+    frameOverShoulder(shooter, victim);
+    tween(total, () => {
       if (weaponSession !== s || !gun) return;
-      placeHeldProp(gun, shooter, { ...pose, roll: u * total * 0.028 });
+      const face = aimPointOf(victim, null);
+      placeHeldProp(gun, shooter, face ? { ...pose, face } : pose);
     }, () => { if (weaponSession === s) endWeapons(); });
     for (let i = 0; i < spec.rounds; i++) {
       later(spec.windupMs + i * spec.intervalMs, () => {
@@ -1823,7 +1903,6 @@ export function createRaceChaos(api) {
         minigunRound(shooter, w, spec, physics, pool);
       });
     }
-    camPullBack(1.05, 420, { orbit: true });
     later(total, () => releaseCam(420));
   }
 
@@ -1832,16 +1911,13 @@ export function createRaceChaos(api) {
     const w = payload.weapon;
     const shooter = weaponShooter(payload);
     if (!w || !shooter?.last) return;
-    const pose = { ...HOLD };
-    const gun = heldWeapon(shooter, spec.prop, pose);
+    const pose = holdFor('shotgun');
+    const gun = heldWeapon(shooter, spec.prop, pose, scaleFor('shotgun'));
     const pool = ensureTracerPool();
     const s = beginWeapons('shotgun', physics, [gun]);
     busyUntil = Math.max(busyUntil, now() + 2000);
     const victim = flies().find(f => f.id === w.targetId);
-    if (victim?.last) {
-      const p = victim.last.pos;
-      easeCamTo(new T.Vector3(p[0] - 2.8, p[1] - 2.4, (p[2] || 0.13) + 2), new T.Vector3(p[0], p[1], p[2]), 280, undefined, { orbit: true });
-    }
+    if (victim?.last) framePair(shooter, victim);
     // Recoil: the gun kicks back on the shot, then settles.
     tween(1500, u => {
       if (weaponSession !== s || !gun) return;
@@ -1850,7 +1926,7 @@ export function createRaceChaos(api) {
     }, () => { if (weaponSession === s) { endWeapons(); releaseCam(420); } });
     later(420, () => {
       if (weaponSession !== s) return;
-      const origin = weaponMuzzle(shooter);
+      const origin = weaponMuzzle(shooter, 'shotgun');
       if (!origin) return;
       const straight = { x: origin.x + Math.cos(origin.yaw) * 4, y: origin.y + Math.sin(origin.yaw) * 4, z: origin.z };
       const aim = aimPointOf(flies().find(f => f.id === w.targetId), straight);
@@ -1884,22 +1960,19 @@ export function createRaceChaos(api) {
     const w = payload.weapon;
     const shooter = weaponShooter(payload);
     if (!w || !shooter?.last) return;
-    const pose = { ...HOLD };
-    const gun = heldWeapon(shooter, spec.prop, pose);
+    const pose = holdFor('taser');
+    const gun = heldWeapon(shooter, spec.prop, pose, scaleFor('taser'));
     const pool = ensureTracerPool();
     const s = beginWeapons('taser', physics, [gun]);
     busyUntil = Math.max(busyUntil, now() + 2800);
     const victim = flies().find(f => f.id === w.targetId);
-    if (victim?.last) {
-      const p = victim.last.pos;
-      easeCamTo(new T.Vector3(p[0] - 2.2, p[1] - 1.9, (p[2] || 0.13) + 1.6), new T.Vector3(p[0], p[1], p[2]), 260, undefined, { orbit: true });
-    }
+    if (victim?.last) framePair(shooter, victim, { pad: 1.3, height: 1.2, dur: 260 });
     const arcLight = borrowLight({ color: '#8fd8ff', distance: 4 });
     tween(2300, u => {
       if (weaponSession !== s) return;
       if (gun) placeHeldProp(gun, shooter, pose);
       const live = u < 0.62;
-      const o = weaponMuzzle(shooter, WEAPON_SCALE * 0.52);   // stubby prongs, not a barrel
+      const o = weaponMuzzle(shooter, 'taser', scaleFor('taser') * 0.52);   // stubby prongs, not a barrel
       if (arcLight) arcLight.intensity = live ? (6 + Math.random() * 10) : 0;
       if (arcLight && o) arcLight.position.set(o.x, o.y, o.z);
       if (!live || !o || !victim?.last || Math.random() > 0.65) return;
@@ -1981,23 +2054,21 @@ export function createRaceChaos(api) {
     const w = payload.weapon;
     const shooter = weaponShooter(payload);
     if (!w?.land || !w.start) return;
-    const pose = { ...HOLD };
-    const launcher = kind === 'bazooka' && shooter?.last ? heldWeapon(shooter, spec.prop, pose) : null;
+    const pose = holdFor(kind);
+    const launcher = kind === 'bazooka' && shooter?.last
+      ? heldWeapon(shooter, spec.prop, pose, scaleFor(kind)) : null;
     const rocket = chaosMesh('missile');
     const s = beginWeapons(kind, physics, [launcher, rocket]);
     const flightMs = w.flightMs || 900;
     busyUntil = Math.max(busyUntil, now() + flightMs + 1900);
+    const rocketScale = kind === 'bazooka' ? WEAPON_SCALE * 0.45 * 0.5 : WEAPON_SCALE * 0.45;
     if (rocket) {
-      rocket.scale.setScalar(WEAPON_SCALE * 0.45);
+      rocket.scale.setScalar(rocketScale);
       rocket.position.set(w.start.x, w.start.y, w.start.z);
       fxGroup().add(rocket);
     }
-    if (hostPhysics(physics) && shooter?.worker) {
-      post(shooter, { op: 'pin', on: true });
-      s.pinned.push(shooter.id);
-    }
     api.audio()?.playRocketLaunch?.(kind === 'missile');
-    const o = weaponMuzzle(shooter);
+    const o = weaponMuzzle(shooter, kind);
     if (o) muzzleFlash(o, 0.34, 150);
     ensureMeteorSmoke();
     const trail = allocMeteorSmokeBatch();
@@ -2010,7 +2081,7 @@ export function createRaceChaos(api) {
     );
     const aim = new T.Vector3();
     let px = w.start.x, py = w.start.y, pz = w.start.z;
-    // The missile weaves before it converges; the bazooka flies a flat arc.
+    // The missile weaves on the way down; the bazooka flies a flat arc.
     const weave = kind === 'missile' ? (w.weave ?? 0.9) : 0;
     // A locked shot chases the fly's live pose, so host and watcher both draw it arriving
     // on the victim. `w.land` stays the fallback for an unlocked shot or a dead lock.
@@ -2024,13 +2095,33 @@ export function createRaceChaos(api) {
     tween(flightMs, u => {
       if (weaponSession !== s) return;
       impact = lockPoint();
-      const e = kind === 'missile' ? u * u * (3 - 2 * u) : u;
-      const bend = Math.sin(u * Math.PI * 1.5) * weave * (1 - u);
-      const nx = -(impact.y - w.start.y), ny = impact.x - w.start.x;
-      const nlen = Math.hypot(nx, ny) || 1;
-      const x = w.start.x + (impact.x - w.start.x) * e + (nx / nlen) * bend;
-      const y = w.start.y + (impact.y - w.start.y) * e + (ny / nlen) * bend;
-      const z = w.start.z + (0.1 - w.start.z) * e + 4 * (w.apexZ ?? 0.5) * u * (1 - u);
+      let x, y, z;
+      if (kind === 'missile') {
+        // Straight up, then a dive onto the (possibly locked) target.
+        const climbU = 0.36;
+        const apex = w.apexZ ?? 8;
+        if (u < climbU) {
+          const c = u / climbU;
+          const e = c * c * (3 - 2 * c);
+          x = w.start.x;
+          y = w.start.y;
+          z = w.start.z + apex * e;
+        } else {
+          const t = (u - climbU) / (1 - climbU);
+          const e = t * t * (3 - 2 * t);
+          const nx = -(impact.y - w.start.y), ny = impact.x - w.start.x;
+          const nlen = Math.hypot(nx, ny) || 1;
+          const bend = Math.sin(t * Math.PI) * weave * (1 - t);
+          x = w.start.x + (impact.x - w.start.x) * e + (nx / nlen) * bend;
+          y = w.start.y + (impact.y - w.start.y) * e + (ny / nlen) * bend;
+          z = apex * (1 - t * t) + 0.12 * t * t;
+        }
+      } else {
+        const e = u;
+        x = w.start.x + (impact.x - w.start.x) * e;
+        y = w.start.y + (impact.y - w.start.y) * e;
+        z = w.start.z + (0.1 - w.start.z) * e + 4 * (w.apexZ ?? 0.5) * u * (1 - u);
+      }
       if (rocket) {
         rocket.position.set(x, y, z);
         const dx = x - px, dy = y - py, dz = z - pz;
@@ -2038,12 +2129,15 @@ export function createRaceChaos(api) {
           rocket.rotation.set(0, -Math.atan2(dz, Math.hypot(dx, dy)), Math.atan2(dy, dx));
         }
       }
-      emitMeteorSmokeAlongSegment(px, py, pz, x, y, z, trail);
+      emitMeteorSmokeAlongSegment(px, py, pz, x, y, z, trail, { width: rocketScale * 0.4, step: 0.08 });
       px = x; py = y; pz = z;
       if (cam && ctl && weaponSession === s) {
+        const follow = kind === 'missile'
+          ? new T.Vector3(2.6, -3.4, 1.6 + Math.max(0, z) * 0.12)
+          : camOff;
         aim.set(x, y, 0.3 + (z - 0.3) * 0.5);
         ctl.target.lerp(aim, 0.22);
-        cam.position.lerp(aim.clone().add(camOff), 0.22);
+        cam.position.lerp(aim.clone().add(follow), 0.22);
         aimCam();
       }
     }, () => {
@@ -2065,18 +2159,14 @@ export function createRaceChaos(api) {
     const s = beginWeapons('chicken', physics, [bird]);
     const flightMs = w.flightMs || 850;
     busyUntil = Math.max(busyUntil, now() + flightMs + 1800);
+    const birdScale = fitChickenScale(bird, 0.7);
     if (bird) {
-      bird.scale.setScalar(WEAPON_SCALE * 0.85);
+      bird.scale.setScalar(birdScale);
       bird.position.set(w.start.x, w.start.y, w.start.z);
       fxGroup().add(bird);
     }
     api.audio()?.playChickenThrow?.();
-    const camOff = new T.Vector3(2.8, -2.6, 2);
-    easeCamTo(
-      new T.Vector3(w.start.x, w.start.y, 0.3).add(camOff),
-      new T.Vector3(w.start.x, w.start.y, 0.3),
-      200, undefined, { orbit: true },
-    );
+    frameArena();
     tween(flightMs, u => {
       if (weaponSession !== s || !bird) return;
       bird.position.set(
@@ -2091,7 +2181,7 @@ export function createRaceChaos(api) {
       if (bird) {
         bird.position.set(x, y, 0.12);
         bird.rotation.set(Math.PI / 2, 0, Math.random() * Math.PI * 2);
-        tween(900, u => { bird.scale.setScalar(WEAPON_SCALE * 0.85 * (1 + 0.25 * Math.sin(u * Math.PI * 3) * (1 - u))); });
+        tween(900, u => { bird.scale.setScalar(birdScale * (1 + 0.25 * Math.sin(u * Math.PI * 3) * (1 - u))); });
       }
       api.audio()?.playChickenSquawk?.();
       camShake(240, 0.2);
@@ -2139,14 +2229,25 @@ export function createRaceChaos(api) {
     const spec = WEAPONS[kind];
     let shooter = opts.flyId != null ? live.find(f => f.id === opts.flyId) : null;
     let target = null;
-    if (shooter) target = nearestTarget(live, shooter);
+    const needsFacing = kind === 'bazooka' || kind === 'minigun' || kind === 'shotgun' || kind === 'taser';
+    if (needsFacing) {
+      // Only fire if someone is already looking at a victim — a side/back shot looks broken.
+      if (shooter) {
+        const ahead = live.filter(f => f !== shooter && isFacing(shooter, f));
+        target = ahead.length ? (nearestTarget(ahead, shooter) || ahead[0]) : null;
+        if (!target) return null;
+      } else {
+        const duel = pickFacingDuel(live);
+        if (!duel.shooter) return null;
+        shooter = duel.shooter;
+        target = duel.target;
+      }
+    } else if (shooter) target = nearestTarget(live, shooter);
     else {
       const duel = pickDuel(live);
       shooter = duel.shooter;
       target = duel.target;
     }
-    // Short-range weapons go for whoever is closest, not whoever is in front.
-    if (shooter && (kind === 'taser' || kind === 'shotgun')) target = nearestTarget(live, shooter) || target;
     const sp = shooter?.last?.pos;
     const [sx, sy] = sp ? [sp[0], sp[1]] : randomInDish(2);
     const sz = (sp?.[2] ?? 0.13) + 0.2;
@@ -2182,8 +2283,13 @@ export function createRaceChaos(api) {
       // stale spot it has walked 2 cm away from by impact. The chicken only ever lobs.
       if (direct && target && kind !== 'chicken') weapon.lockId = target.id;
       weapon.flightMs = Math.round(Math.max(420, (dist / (spec.speed || 8)) * 1000));
-      weapon.apexZ = kind === 'chicken' ? 1.1 + Math.min(1.8, dist * 0.18) : 0.35 + Math.min(1.2, dist * 0.08);
-      if (kind === 'missile') weapon.weave = randRange(0.6, 1.6);
+      if (kind === 'missile') {
+        weapon.apexZ = 8 + Math.min(3, dist * 0.08);
+        weapon.flightMs = Math.round(Math.max(1700, 800 + (dist / (spec.speed || 7.5)) * 1000));
+        weapon.weave = randRange(0.6, 1.6);
+      } else {
+        weapon.apexZ = kind === 'chicken' ? 1.1 + Math.min(1.8, dist * 0.18) : 0.35 + Math.min(1.2, dist * 0.08);
+      }
     }
     return {
       kind,
@@ -2544,7 +2650,7 @@ export function createRaceChaos(api) {
       crumb: CAKE_STAGGER_MS * (CAKE_SLICE_COUNT - 1) + 2800,
       firefly: 7200, boop: 1300, puff: 5200, laser: 3200,
       meteor: 5600, sugarrain: 5400, ufo: 7000, spikes: 3600, holy: 6400,
-      minigun: 3600, shotgun: 2000, taser: 2800, bazooka: 3200, missile: 3400, chicken: 3000,
+      minigun: 3600, shotgun: 2000, taser: 2800, bazooka: 3200, missile: 4800, chicken: 3000,
     }[kind] || 1200;
   }
 
@@ -2584,7 +2690,12 @@ export function createRaceChaos(api) {
       return null;
     }
     const physics = extra.physics !== false;
-    const payload = { ...buildPayload(k, extra), ...extra, kind: k };
+    const built = buildPayload(k, extra);
+    if (!built) {
+      console.info(`[chaos] ${k} needs a fly already facing a target`);
+      return null;
+    }
+    const payload = { ...built, ...extra, kind: k };
     delete payload.physics;
     fire(k, payload, physics);
     return { kind: k, physics, flyId: payload.flyId, name: payload.name };
@@ -2748,8 +2859,14 @@ export function createRaceChaos(api) {
     }
     if (!api.isHostLive?.()) return;
     if (t < busyUntil || t < nextAt) return;
-    const kind = pickKind();
-    fire(kind, buildPayload(kind), true);
+    let kind = pickKind();
+    let payload = buildPayload(kind);
+    if (!payload) {
+      const fallback = KINDS.filter(k => k !== kind && k !== lastKind);
+      kind = pick(fallback.length ? fallback : KINDS.filter(k => k !== kind));
+      payload = buildPayload(kind);
+    }
+    if (payload) fire(kind, payload, true);
     nextAt = t + randRange(...CHAOS_ROULETTE_GAP_MS);
   }
 

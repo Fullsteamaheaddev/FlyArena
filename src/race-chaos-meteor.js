@@ -174,7 +174,8 @@ export function emitMeteorSmokeAlongSegment(x0, y0, z0, x1, y1, z1, batchId, opt
   const dy = y1 - y0;
   const dz = z1 - z0;
   const L = Math.hypot(dx, dy, dz);
-  const w = METEOR_TRAIL_WIDTH * (0.92 + Math.random() * 0.08);
+  const baseW = opts.width ?? METEOR_TRAIL_WIDTH;
+  const w = baseW * (0.92 + Math.random() * 0.08);
   if (L < 1e-5) {
     spawnMeteorSmokePuff(x1, y1, z1, w, batchId, null);
     return;

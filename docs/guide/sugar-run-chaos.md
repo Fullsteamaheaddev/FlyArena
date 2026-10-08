@@ -43,12 +43,12 @@ Chaos reaches flies via `post(f, { op, … })` on each fly worker. Important ops
 
 | op | Effect |
 |----|--------|
-| `pin` | Freeze fly (ends flight if active). |
-| `spin` | Yaw spin + lift (`wz`, `turns`, `vz`). |
+| `pin` | Freeze a walking fly (zeros horizontal velocity). Does not abort an in-progress flight. |
+| `spin` | Yaw spin + lift (`wz`, `turns`, `vz`). Does not abort flight. |
 | `loose` | Release claws (quake / flip / tilt). |
-| `ground` | End flight. |
+| `ground` | Cue still posts this; no longer ends flight. |
 | `bias` | Sets `chaosBias` — added to horizontal velocity **every physics substep** (walking flies included). |
-| `impulse` / `flip` | Velocity kick; `flip` also sets angular rates. |
+| `impulse` / `flip` | Velocity kick; `flip` also sets angular rates. Does not abort flight. |
 | `kill` | `dieKnockover()` — race elimination. |
 | `damage` | `hurt(amount, cause, by)` — spends `health`; kills only if it reaches 0. Optional `vx/vy/vz/wx/wy/wz` knockback. |
 | `zap` | Taser lock: `pin` + twitch for `ms`, plus one `damage`. Self-releases; `pin: false` cancels it. |
@@ -113,10 +113,10 @@ reset.
 | `ufo` | UFO | Shader beam + saucer GLB; lift/drop; no auto-kill | Frames then orbit; `ufo.glb` + `race-chaos-ufo-beam.js` |
 | `spikes` | Spike trap | `spike_trap.glb` (+Z spikes, 1.5×); kills inside while armed | Frames the trap then orbit; AABB `half` ~1.0–1.23 |
 | `holy` | Holy Hand Grenade | One fly lobs `grenade.glb` at another; mostly misses; blast kill R = 5× grenade height | Frames the arc then orbit; count 1-2-3 then boom |
-| `minigun` | MINIGUN | 14 rounds at 8% each; shooter pinned; spray widens with range | Tracer pool; rotor spin audio loop |
-| `shotgun` | SHOTGUN | 9 pellets at 5% (45% point blank); cone widens fast; heavy knockback | Recoil kick, muzzle flash |
-| `taser` | TASER | 45% + `zap` lock 1.2 s; 10% chains to a second fly at half | Arc tracers + borrowed light |
-| `bazooka` | BAZOOKA | Rocket; **a locked direct hit kills**, splash 35%→15% | Lock-on or fixed land point, chase cam |
+| `minigun` | MINIGUN | 14 rounds at 10% each; needs a fly in front; spray widens with range | Tracer pool; rotor spin audio loop |
+| `shotgun` | SHOTGUN | 9 pellets at 6.5%; needs a fly in front; cone widens fast; heavy knockback | Recoil kick, muzzle flash |
+| `taser` | TASER | 55% + `zap` lock 1.2 s; needs a fly in front; 10% chains to a second fly at half | Arc tracers + borrowed light |
+| `bazooka` | BAZOOKA | Needs a fly in front; rocket; **a locked direct hit kills**, splash 35%→15% | Lock-on or fixed land point, chase cam |
 | `missile` | HOMING MISSILE | Same payload, locks on more often, visible weave | Lock-on or fixed land point, chase cam |
 | `chicken` | RUBBER CHICKEN | **No damage.** Lobbed, then a squawk and a big radial shove | Ring flash, `loose` + impulse |
 
@@ -238,8 +238,13 @@ These ship in `CHAOS_KINDS` alongside the original twelve (**17 kinds**, equal r
 
 **Code:** [`src/race-chaos-weapons.js`](../../src/race-chaos-weapons.js) (tuning table, aiming,
 hit resolution, tracer pool, held-prop placement) plus the weapon block in `race-chaos.js`.
-**Props:** `minigun`, `shotgun`, `bazooka`, `missile`, `taser`, `rubber_chicken` in
-`public/chaos/`, baked by `node scripts/export_chaos_props.mjs <name>`.
+**Props:** `minigun`, `shotgun`, `bazooka`, `missile`, `taser` in `public/chaos/`
+(baked by `node scripts/export_chaos_props.mjs <name>`); chicken uses the authored
+`public/Rubberchicken.glb` (cel-shaded on clone: toon + extruded outline). Minigun is 30%
+smaller than the default guns; taser is fly-body length; bazooka and shotgun are half of
+default. The bazooka rocket and its smoke trail are half the missile rocket's size.
+Minigun, shotgun, taser and bazooka only fire when a live fly sits in the shooter's front
+hemisphere (`pickFacingDuel`); the roulette retries another kind if nobody is facing.
 
 Unlike every earlier kind, these **wound instead of kill**. A hit posts
 `{ op: 'damage', amount, cause, by }` and `FlyAgent.hurt()` spends `health`; the fly dies
@@ -254,13 +259,14 @@ real `kill`.
   stays small: flies usually duel 10–20 cm apart, and a cone that widens realistically
   makes a weapon do nothing at all at that range. **Widen the jitter (or lower
   `directChance`) to make a weapon less lethal — do not nerf `damage`.** Measured totals:
-  minigun 55%→28% from point blank to across the dish, shotgun 45%→12%.
-- **Models point along +X** and are scaled by `WEAPON_SCALE` (0.9). From the race camera
-  (~30 cm back) a fly is only ~9 px long, so a to-scale gun is a smudge; this reads ~30 px,
-  about 3× the fly. `HOLD` and `MUZZLE_AHEAD` derive from the same constant so resizing
-  moves the grip and barrel tip with it. Props sit in world space and are re-placed each
-  frame by `placeHeldProp`, which maps local +X onto the holder's `last.yaw`. They are not
-  parented to the thorax.
+  minigun ~69%→35% from point blank to across the dish, shotgun ~59%→16%.
+- **Models point along +X** and are scaled by `scaleFor(kind)` from `WEAPON_SCALE` (0.9).
+  From the race camera (~30 cm back) a fly is only ~9 px long, so a to-scale gun is a
+  smudge. Default 0.9 reads ~30 px (~3× the fly); bazooka/shotgun use 0.45. `holdFor` and
+  `weaponMuzzle` derive from the same scale so resizing moves the grip and barrel tip with
+  it. Props sit in world space and are re-placed each frame by `placeHeldProp`, which maps
+  local +X onto the holder's `last.yaw`. They are not parented to the thorax. Held-weapon
+  shooters are **not** pinned — they keep walking (or flying).
 - **Hit resolution** reuses the laser's ray casts (`castBeam` / `hitSolids`, `FLY_HIT_R`
   0.14), so bullets respect walls, the floor and desert solids.
 - **Tracers need to be fat.** At ~30 px/cm a 0.02 radius is a one-pixel hairline. The
