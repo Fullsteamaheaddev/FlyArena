@@ -306,6 +306,232 @@ function buildSugarCrumb() {
   return root;
 }
 
+// ---------------------------------------------------------------------------
+// Fly-on-fly weapons. Built ~1 unit long and pointing along +X (the arena scales
+// them down and maps local +X onto the holder's yaw). +Z stays up.
+// ---------------------------------------------------------------------------
+
+const GUNMETAL = '#4b515b';
+const GUNMETAL_DARK = '#2e3238';
+const WOOD = '#8a5633';
+const HAZARD = '#ffd23f';
+
+/** Cylinder running along +X from `x0` to `x0 + len`. */
+function barrel(len, r, color, x0 = 0, seg = 10) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), toonMat(color));
+  m.rotation.z = -Math.PI / 2;
+  m.position.x = x0 + len * 0.5;
+  return m;
+}
+
+function slab(sx, sy, sz, color, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), toonMat(color));
+  m.position.set(x, y, z);
+  return m;
+}
+
+function buildMinigun() {
+  const root = new THREE.Group();
+  root.name = 'Minigun';
+
+  const housing = slab(0.34, 0.26, 0.26, GUNMETAL, 0.17);
+  housing.name = 'Housing';
+  root.add(housing);
+  root.add(slab(0.1, 0.3, 0.3, GUNMETAL_DARK, 0.36));
+
+  // Six-barrel rotor around the +X axis.
+  const rotor = new THREE.Group();
+  rotor.name = 'Rotor';
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const b = barrel(0.62, 0.035, i % 2 ? GUNMETAL_DARK : GUNMETAL, 0.4);
+    b.position.y = Math.cos(a) * 0.075;
+    b.position.z = Math.sin(a) * 0.075;
+    rotor.add(b);
+  }
+  rotor.add(barrel(0.6, 0.028, GUNMETAL_DARK, 0.4));
+  root.add(rotor);
+  const shroud = barrel(0.08, 0.125, GUNMETAL_DARK, 0.4, 12);
+  shroud.name = 'Shroud';
+  root.add(shroud);
+
+  root.add(slab(0.14, 0.1, 0.22, GUNMETAL_DARK, 0.06, 0, -0.2));   // grip
+  root.add(slab(0.26, 0.12, 0.1, '#6c7480', 0.1, 0, 0.17));        // feed tray
+  const can = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.2, 10), toonMat('#5a6472'));
+  can.name = 'AmmoDrum';
+  can.position.set(0.02, 0.2, -0.02);
+  root.add(can);
+  return root;
+}
+
+function buildShotgun() {
+  const root = new THREE.Group();
+  root.name = 'Shotgun';
+
+  for (const dy of [-0.045, 0.045]) {
+    const b = barrel(0.68, 0.042, GUNMETAL_DARK, 0.3);
+    b.position.y = dy;
+    root.add(b);
+  }
+  const muzzle = barrel(0.05, 0.062, GUNMETAL, 0.94, 12);
+  muzzle.name = 'Muzzle';
+  muzzle.scale.y = 1.9;
+  root.add(muzzle);
+
+  root.add(slab(0.3, 0.13, 0.17, WOOD, 0.16));                     // receiver
+  const stock = slab(0.36, 0.1, 0.2, WOOD, -0.16, 0, -0.05);
+  stock.name = 'Stock';
+  stock.rotation.y = 0.16;
+  root.add(stock);
+  root.add(slab(0.1, 0.08, 0.14, GUNMETAL_DARK, 0.05, 0, -0.14));  // trigger guard
+  root.add(slab(0.2, 0.09, 0.08, WOOD, 0.44, 0, -0.07));           // pump
+  return root;
+}
+
+function buildBazooka() {
+  const root = new THREE.Group();
+  root.name = 'Bazooka';
+
+  const tube = barrel(0.9, 0.11, '#3f6b42', -0.05, 14);
+  tube.name = 'Tube';
+  root.add(tube);
+  const flare = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.11, 0.16, 14, 1, true), toonMat('#335636'));
+  flare.rotation.z = Math.PI / 2;
+  flare.position.x = -0.13;
+  flare.name = 'Blast';
+  root.add(flare);
+  const ring = barrel(0.05, 0.125, GUNMETAL_DARK, 0.8, 14);
+  ring.name = 'MuzzleRing';
+  root.add(ring);
+
+  root.add(slab(0.12, 0.09, 0.2, GUNMETAL_DARK, 0.2, 0, -0.16));   // grip
+  root.add(slab(0.1, 0.08, 0.16, GUNMETAL_DARK, 0.52, 0, -0.14));  // fore grip
+  const sight = slab(0.16, 0.05, 0.1, HAZARD, 0.3, 0, 0.14);
+  sight.name = 'Sight';
+  root.add(sight);
+  // Loaded warhead peeking out the front.
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.2, 12), toonMat('#d8453b'));
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.x = 0.92;
+  nose.name = 'Warhead';
+  root.add(nose);
+  return root;
+}
+
+/** Projectile for both bazooka and missile: nose on +X, fins at the tail. */
+function buildMissile() {
+  const root = new THREE.Group();
+  root.name = 'Missile';
+
+  const body = barrel(0.7, 0.1, '#d8453b', -0.35, 14);
+  body.name = 'Body';
+  root.add(body);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.26, 14), toonMat('#f2f2ee'));
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.x = 0.48;
+  nose.name = 'Nose';
+  root.add(nose);
+  const band = barrel(0.07, 0.108, '#f2f2ee', 0.05, 14);
+  band.name = 'Band';
+  root.add(band);
+
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const fin = slab(0.2, 0.012, 0.16, GUNMETAL_DARK, -0.27, 0, 0);
+    fin.position.y = Math.cos(a) * 0.12;
+    fin.position.z = Math.sin(a) * 0.12;
+    fin.rotation.x = a;
+    fin.name = i === 0 ? 'Fin' : `Fin_${i}`;
+    root.add(fin);
+  }
+  const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.07, 0.08, 12), toonMat(GUNMETAL_DARK));
+  bell.rotation.z = Math.PI / 2;
+  bell.position.x = -0.39;
+  bell.name = 'Nozzle';
+  root.add(bell);
+  return root;
+}
+
+function buildTaser() {
+  const root = new THREE.Group();
+  root.name = 'Taser';
+
+  const body = slab(0.42, 0.2, 0.26, HAZARD, 0.21);
+  body.name = 'Body';
+  root.add(body);
+  root.add(slab(0.1, 0.21, 0.27, GUNMETAL_DARK, 0.1));             // trim band
+  root.add(slab(0.16, 0.13, 0.24, GUNMETAL_DARK, 0.04, 0, -0.2));  // grip
+
+  for (const dz of [-0.07, 0.07]) {
+    const prong = barrel(0.3, 0.022, '#cfd6de', 0.4);
+    prong.position.z = dz;
+    root.add(prong);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 8), toonMat('#8fd8ff'));
+    tip.rotation.z = -Math.PI / 2;
+    tip.position.set(0.74, 0, dz);
+    root.add(tip);
+  }
+  const arc = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.014, 6, 10), toonMat('#8fd8ff'));
+  arc.name = 'Arc';
+  arc.position.x = 0.72;
+  arc.rotation.y = Math.PI / 2;
+  root.add(arc);
+  return root;
+}
+
+function buildRubberChicken() {
+  const root = new THREE.Group();
+  root.name = 'RubberChicken';
+  const skin = toonMat('#f2d64b');
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 10), skin);
+  body.name = 'Body';
+  body.scale.set(1.5, 0.85, 0.95);
+  root.add(body);
+
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.24, 10), skin);
+  neck.position.set(0.3, 0, 0.1);
+  neck.rotation.z = -0.5;
+  root.add(neck);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 9), skin);
+  head.name = 'Head';
+  head.position.set(0.44, 0, 0.17);
+  root.add(head);
+
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.14, 8), toonMat('#ff8a1f'));
+  beak.rotation.z = -Math.PI / 2;
+  beak.position.set(0.56, 0, 0.15);
+  beak.name = 'Beak';
+  root.add(beak);
+
+  const comb = slab(0.1, 0.03, 0.08, '#e0453a', 0.44, 0, 0.27);
+  comb.name = 'Comb';
+  root.add(comb);
+  for (const dy of [-0.045, 0.045]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), toonMat('#20242c'));
+    eye.position.set(0.5, dy, 0.2);
+    root.add(eye);
+  }
+
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.22, 8), skin);
+  tail.rotation.z = Math.PI / 2.4;
+  tail.position.set(-0.36, 0, 0.1);
+  tail.name = 'Tail';
+  root.add(tail);
+
+  // Dangling legs sell the lob.
+  for (const dy of [-0.08, 0.08]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.22, 8), toonMat('#ff8a1f'));
+    leg.position.set(-0.04, dy, -0.22);
+    leg.rotation.x = dy > 0 ? 0.25 : -0.25;
+    root.add(leg);
+    const foot = slab(0.12, 0.07, 0.022, '#ff8a1f', 0.02, dy, -0.32);
+    root.add(foot);
+  }
+  return root;
+}
+
 function exportGlb(filename, object) {
   const scene = new THREE.Scene();
   scene.add(object);
@@ -330,6 +556,12 @@ const jobs = {
   meteor_chunk: buildMeteorChunk,
   sugar_crumb: buildSugarCrumb,
   cake_slice: buildCakeSlice,
+  minigun: buildMinigun,
+  shotgun: buildShotgun,
+  bazooka: buildBazooka,
+  missile: buildMissile,
+  taser: buildTaser,
+  rubber_chicken: buildRubberChicken,
 };
 const pick = process.argv[2];
 for (const [name, build] of Object.entries(jobs)) {

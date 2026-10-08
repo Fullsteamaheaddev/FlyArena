@@ -13,7 +13,7 @@ const _end = { x: 0, y: 0, z: 0 };
 const MUJOCO_EYE_L = { x: -0.022, y: 0.013, z: 0 };
 const MUJOCO_EYE_R = { x: 0.022, y: 0.013, z: 0 };
 
-function castBeam(origin, dir, flyId, liveFlies, arenaR, wallZ, square = false) {
+export function castBeam(origin, dir, flyId, liveFlies, arenaR, wallZ, square = false) {
   const o = origin, d = dir;
   let bestT = MAX_RANGE;
   let hit = {
@@ -371,7 +371,7 @@ export function collectLaserSolids(env) {
   return out;
 }
 
-function hitSolids(origin, dir, hit, solids) {
+export function hitSolids(origin, dir, hit, solids) {
   if (!solids?.length) return hit;
   for (const s of solids) {
     const h = raySolid(origin, dir, s);

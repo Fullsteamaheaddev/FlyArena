@@ -9,7 +9,8 @@ import { DESERT_MAP_PROP_NAMES, DESERT_PREVIEW_PROPS, propScale } from '../deser
 const params = new URLSearchParams(location.search);
 const setName = params.get('set') === 'desert' ? 'desert' : 'chaos';
 
-const CHAOS_PROPS = ['ufo', 'meteor_chunk', 'spike_trap', 'sugar_crumb', 'cake_slice', 'sugar_pile', 'grenade'];
+const CHAOS_PROPS = ['ufo', 'meteor_chunk', 'spike_trap', 'sugar_crumb', 'cake_slice', 'sugar_pile', 'grenade',
+  'minigun', 'shotgun', 'bazooka', 'missile', 'taser', 'rubber_chicken'];
 
 const mount = document.getElementById('view');
 const partSelect = document.getElementById('part');

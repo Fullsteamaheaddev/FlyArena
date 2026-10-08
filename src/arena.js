@@ -3021,7 +3021,11 @@ function deathCauseLabel(s) {
   const c = s?.deathCause;
   if (!c?.kind) return '';
   if (c.kind === 'laser') return c.by ? t('death.laser', { name: c.by }) : t('death.laserAnon');
-  if (c.kind === 'holy' && c.by) return t('death.holyBy', { name: c.by });
+  if (c.by) {
+    const byKey = `death.${c.kind}By`;
+    const byLabel = t(byKey, { name: c.by });
+    if (byLabel !== byKey) return byLabel;
+  }
   const key = `death.${c.kind}`;
   const label = t(key);
   return label === key ? '' : label;

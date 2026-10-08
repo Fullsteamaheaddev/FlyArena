@@ -55,7 +55,7 @@ onmessage = async (e) => {
     if (fly) {
       fly.applyChaos(m);
       if (m.op === 'dish') { fly.syncPose(); postPose(true); }
-      else if (m.op === 'kill' || m.op === 'impulse' || m.op === 'flip' || m.op === 'spin' || m.op === 'loose') {
+      else if (m.op === 'kill' || m.op === 'damage' || m.op === 'zap' || m.op === 'impulse' || m.op === 'flip' || m.op === 'spin' || m.op === 'loose') {
         fly.kickPhysics();
         postPose(true);
       }

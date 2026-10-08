@@ -13,6 +13,12 @@ const PATHS = {
   sugar_crumb: 'chaos/sugar_crumb.glb',
   cake_slice: 'chaos/cake_slice.glb',
   grenade: 'chaos/grenade.glb',
+  minigun: 'chaos/minigun.glb',
+  shotgun: 'chaos/shotgun.glb',
+  bazooka: 'chaos/bazooka.glb',
+  missile: 'chaos/missile.glb',
+  taser: 'chaos/taser.glb',
+  rubber_chicken: 'chaos/rubber_chicken.glb',
 };
 
 const templates = {};

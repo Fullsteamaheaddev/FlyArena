@@ -12,11 +12,18 @@ import {
 } from './race-chaos-meteor.js';
 import { makeBolt, boltPulse, setBoltPulse, boltGroundFlashMaterial, warmBoltMaterials } from './race-chaos-bolt.js';
 import { createLaserPool, tickLaserBeams, hideLaserPool, disposeLaserPool, laserSessionDuration, collectLaserSolids } from './race-chaos-laser.js';
+import {
+  WEAPONS, pickDuel, nearestTarget, muzzleOf, shotDir, castShot, splashAmount, placeHeldProp, jitterFor,
+  createTracerPool, fireTracer, tickTracers, hideTracerPool, disposeTracerPool,
+} from './race-chaos-weapons.js';
 
 export const CHAOS_KINDS = [
   'thumb', 'spin', 'quake', 'flip', 'tilt', 'lightning', 'double', 'crumb', 'firefly', 'boop', 'puff', 'laser',
   'meteor', 'sugarrain', 'ufo', 'spikes', 'holy',
+  'minigun', 'shotgun', 'taser', 'bazooka', 'missile', 'chicken',
 ];
+/** Fly-on-fly weapons: one fly shoots another and spends the victim's health. */
+export const WEAPON_KINDS = ['minigun', 'shotgun', 'taser', 'bazooka', 'missile', 'chicken'];
 const KINDS = CHAOS_KINDS;
 
 
@@ -103,6 +110,8 @@ export function createRaceChaos(api) {
   let ufoSession = null;
   let spikesSession = null;
   let holySession = null;
+  let weaponSession = null;
+  let tracerPool = null;
   const LIGHT_POOL_N = 8;
   let lightPool = null, lightFree = [];
   const rimWorld = new T.Vector3();
@@ -1012,6 +1021,7 @@ export function createRaceChaos(api) {
     endUfo();
     endSpikes();
     endHoly();
+    endWeapons();
     disposeMeteorSmoke();
   }
 
@@ -1678,8 +1688,520 @@ export function createRaceChaos(api) {
     later(1300, () => { if (holySession?.h === h) { endHoly(); releaseCam(500); } });
   }
 
+  // ---------------------------------------------------------------------------
+  // Fly-on-fly weapons. Hits spend the victim's health (`op: 'damage'`) instead of
+  // killing, so only a rocket landing inside killR finishes anyone outright. Aim
+  // error is the lethality knob. Every delayed hit is behind hostPhysics().
+  // ---------------------------------------------------------------------------
+  // GLBs are built ~1 unit long pointing +X. From the race camera (~30 cm back) a fly is
+  // only ~9 px long, so a to-scale gun is a smudge; at this scale it reads ~30 px, about
+  // 3x the fly — Worms-sized rather than absurd. Hold point and barrel tip derive from the
+  // scale so resizing moves them together.
+  const WEAPON_SCALE = 0.9;
+  const HOLD = { ahead: WEAPON_SCALE * 0.26, up: WEAPON_SCALE * 0.15 };
+  const MUZZLE_AHEAD = WEAPON_SCALE * 0.88;
+  function weaponMuzzle(f, ahead = MUZZLE_AHEAD) { return muzzleOf(f, ahead, HOLD.up); }
+
+  function ensureTracerPool() {
+    if (!tracerPool) {
+      tracerPool = createTracerPool(T);
+      fxGroup().add(tracerPool.group);
+    }
+    return tracerPool;
+  }
+
+  function weaponArena() { return api.env()?.arena || { radius: radius(), wallHeight: 8 }; }
+  function weaponSolids() { return collectLaserSolids(api.env()); }
+
+  /** Props sit in world space and are re-placed every frame, so they track the holder. */
+  function heldWeapon(f, prop, pose) {
+    const mesh = chaosMesh(prop);
+    if (!mesh) return null;
+    mesh.scale.setScalar(WEAPON_SCALE);
+    placeHeldProp(mesh, f, pose);
+    fxGroup().add(mesh);
+    return mesh;
+  }
+
+  function endWeapons() {
+    const s = weaponSession;
+    weaponSession = null;
+    if (!s) return;
+    api.audio()?.stopMinigunLoop?.();
+    for (const m of s.props || []) disposeObj(m);
+    for (const id of s.pinned || []) post(flies().find(x => x.id === id), { op: 'pin', on: false });
+    hideTracerPool(tracerPool);
+  }
+
+  function beginWeapons(kind, physics, props) {
+    endWeapons();
+    weaponSession = { kind, physics: !!physics, props: props.filter(Boolean), pinned: [] };
+    return weaponSession;
+  }
+
+  function weaponShooter(payload) {
+    const id = payload.weapon?.shooterId;
+    return id == null ? null : flies().find(f => f.id === id) || null;
+  }
+
+  function aimPointOf(f, fallback) {
+    const p = f?.last?.pos;
+    if (!p) return fallback;
+    return { x: p[0], y: p[1], z: (p[2] ?? 0.13) + 0.02 };
+  }
+
+  /** One wound. Returns false when the victim is already gone. */
+  function woundFly(victimId, amount, cause, byName, knock) {
+    const v = flies().find(x => x.id === victimId);
+    if (!v?.worker || v.last?.alive === false) return false;
+    post(v, { op: 'damage', amount, cause, by: byName || '', ...(knock || {}) });
+    return true;
+  }
+
+  /** Radial wound + shove. Direct kills are the caller's job (pass them in `skip`). */
+  function splashFlies(x, y, spec, byName, skip) {
+    for (const f of liveFlies(flies())) {
+      if (skip?.has(f.id)) continue;
+      const p = f.last.pos;
+      const d = Math.hypot(p[0] - x, p[1] - y);
+      const amount = splashAmount(d, spec.splashR, spec.splashMax, spec.splashMin);
+      if (amount <= 0) continue;
+      const k = (1 - d / spec.splashR) * spec.knock;
+      const ux = d > 0.02 ? (p[0] - x) / d : 0;
+      const uy = d > 0.02 ? (p[1] - y) / d : 0;
+      woundFly(f.id, amount, spec.cause, byName, { vx: ux * k, vy: uy * k, vz: 3 + k * 0.3 });
+    }
+  }
+
+  function muzzleFlash(origin, size = 0.22, ms = 110) {
+    const mat = new T.MeshBasicMaterial({ color: '#ffd66b', transparent: true, depthWrite: false, toneMapped: false });
+    const m = new T.Mesh(new T.SphereGeometry(1, 10, 8), mat);
+    m.position.set(origin.x, origin.y, origin.z);
+    m.scale.setScalar(size);
+    fxGroup().add(m);
+    tween(ms, u => { m.scale.setScalar(size * (1 + u * 0.8)); mat.opacity = 1 - u; }, () => disposeObj(m));
+  }
+
+  function minigunRound(shooter, w, spec, physics, pool) {
+    const origin = weaponMuzzle(shooter);
+    if (!origin) return;
+    const straight = { x: origin.x + Math.cos(origin.yaw) * 6, y: origin.y + Math.sin(origin.yaw) * 6, z: origin.z };
+    const aim = aimPointOf(flies().find(f => f.id === w.targetId), straight);
+    const dir = shotDir(origin, aim, jitterFor(spec, Math.hypot(aim.x - origin.x, aim.y - origin.y)));
+    const hit = castShot(origin, dir, shooter.id, flies(), weaponArena(), weaponSolids());
+    fireTracer(pool, T, origin, hit, { ms: 110, radius: 0.055, color: '#ffe9a0' });
+    if (Math.random() < 0.5) muzzleFlash(origin, 0.3, 90);
+    api.audio()?.playMinigunRound?.();
+    if (hit.type === 'fly' && hit.victimId != null && hostPhysics(physics)) {
+      woundFly(hit.victimId, spec.damage, spec.cause, shooter.name, { vx: dir.x * spec.knock, vy: dir.y * spec.knock, vz: 1 });
+    }
+  }
+
+  function minigunBurst(payload, physics) {
+    const spec = WEAPONS.minigun;
+    const w = payload.weapon;
+    const shooter = weaponShooter(payload);
+    if (!w || !shooter?.last) return;
+    const pose = { ...HOLD };
+    const gun = heldWeapon(shooter, spec.prop, pose);
+    const pool = ensureTracerPool();
+    const s = beginWeapons('minigun', physics, [gun]);
+    if (hostPhysics(physics) && shooter.worker) {
+      post(shooter, { op: 'pin', on: true });
+      s.pinned.push(shooter.id);
+    }
+    const total = spec.windupMs + spec.rounds * spec.intervalMs + 300;
+    busyUntil = Math.max(busyUntil, now() + total + 400);
+    api.audio()?.startMinigunSpin?.();
+    tween(total, u => {
+      if (weaponSession !== s || !gun) return;
+      placeHeldProp(gun, shooter, { ...pose, roll: u * total * 0.028 });
+    }, () => { if (weaponSession === s) endWeapons(); });
+    for (let i = 0; i < spec.rounds; i++) {
+      later(spec.windupMs + i * spec.intervalMs, () => {
+        if (weaponSession !== s) return;
+        minigunRound(shooter, w, spec, physics, pool);
+      });
+    }
+    camPullBack(1.05, 420, { orbit: true });
+    later(total, () => releaseCam(420));
+  }
+
+  function shotgunBlast(payload, physics) {
+    const spec = WEAPONS.shotgun;
+    const w = payload.weapon;
+    const shooter = weaponShooter(payload);
+    if (!w || !shooter?.last) return;
+    const pose = { ...HOLD };
+    const gun = heldWeapon(shooter, spec.prop, pose);
+    const pool = ensureTracerPool();
+    const s = beginWeapons('shotgun', physics, [gun]);
+    busyUntil = Math.max(busyUntil, now() + 2000);
+    const victim = flies().find(f => f.id === w.targetId);
+    if (victim?.last) {
+      const p = victim.last.pos;
+      easeCamTo(new T.Vector3(p[0] - 2.8, p[1] - 2.4, (p[2] || 0.13) + 2), new T.Vector3(p[0], p[1], p[2]), 280, undefined, { orbit: true });
+    }
+    // Recoil: the gun kicks back on the shot, then settles.
+    tween(1500, u => {
+      if (weaponSession !== s || !gun) return;
+      const kick = u < 0.28 ? Math.sin((u / 0.28) * Math.PI) : 0;
+      placeHeldProp(gun, shooter, { ...pose, ahead: pose.ahead - kick * 0.2, roll: -kick * 0.5 });
+    }, () => { if (weaponSession === s) { endWeapons(); releaseCam(420); } });
+    later(420, () => {
+      if (weaponSession !== s) return;
+      const origin = weaponMuzzle(shooter);
+      if (!origin) return;
+      const straight = { x: origin.x + Math.cos(origin.yaw) * 4, y: origin.y + Math.sin(origin.yaw) * 4, z: origin.z };
+      const aim = aimPointOf(flies().find(f => f.id === w.targetId), straight);
+      // The cone widens with range, so distance falloff is the spread, not a multiplier.
+      const jitter = jitterFor(spec, Math.hypot(aim.x - origin.x, aim.y - origin.y));
+      const pellets = new Map();
+      for (let i = 0; i < spec.pellets; i++) {
+        const dir = shotDir(origin, aim, jitter);
+        const hit = castShot(origin, dir, shooter.id, flies(), weaponArena(), weaponSolids());
+        fireTracer(pool, T, origin, hit, { ms: 170, radius: 0.042, color: '#fff0c0' });
+        if (hit.type === 'fly' && hit.victimId != null) pellets.set(hit.victimId, (pellets.get(hit.victimId) || 0) + 1);
+      }
+      muzzleFlash(origin, 0.5, 170);
+      camShake(170, 0.13);
+      if (!hostPhysics(physics)) return;
+      for (const [victimId, n] of pellets) {
+        const v = flies().find(x => x.id === victimId);
+        const p = v?.last?.pos;
+        if (!p) continue;
+        const d = Math.hypot(p[0] - origin.x, p[1] - origin.y);
+        const ux = d > 0.02 ? (p[0] - origin.x) / d : Math.cos(origin.yaw);
+        const uy = d > 0.02 ? (p[1] - origin.y) / d : Math.sin(origin.yaw);
+        woundFly(victimId, spec.damage * n, spec.cause, shooter.name,
+          { vx: ux * spec.knock, vy: uy * spec.knock, vz: 3 });
+      }
+    });
+  }
+
+  function taserZap(payload, physics) {
+    const spec = WEAPONS.taser;
+    const w = payload.weapon;
+    const shooter = weaponShooter(payload);
+    if (!w || !shooter?.last) return;
+    const pose = { ...HOLD };
+    const gun = heldWeapon(shooter, spec.prop, pose);
+    const pool = ensureTracerPool();
+    const s = beginWeapons('taser', physics, [gun]);
+    busyUntil = Math.max(busyUntil, now() + 2800);
+    const victim = flies().find(f => f.id === w.targetId);
+    if (victim?.last) {
+      const p = victim.last.pos;
+      easeCamTo(new T.Vector3(p[0] - 2.2, p[1] - 1.9, (p[2] || 0.13) + 1.6), new T.Vector3(p[0], p[1], p[2]), 260, undefined, { orbit: true });
+    }
+    const arcLight = borrowLight({ color: '#8fd8ff', distance: 4 });
+    tween(2300, u => {
+      if (weaponSession !== s) return;
+      if (gun) placeHeldProp(gun, shooter, pose);
+      const live = u < 0.62;
+      const o = weaponMuzzle(shooter, WEAPON_SCALE * 0.52);   // stubby prongs, not a barrel
+      if (arcLight) arcLight.intensity = live ? (6 + Math.random() * 10) : 0;
+      if (arcLight && o) arcLight.position.set(o.x, o.y, o.z);
+      if (!live || !o || !victim?.last || Math.random() > 0.65) return;
+      const p = victim.last.pos;
+      fireTracer(pool, T, o, {
+        x: p[0] + (Math.random() - 0.5) * 0.12,
+        y: p[1] + (Math.random() - 0.5) * 0.12,
+        z: (p[2] ?? 0.13) + 0.05,
+      }, { ms: 70, radius: 0.04, color: '#9fe4ff' });
+    }, () => {
+      if (arcLight) releaseLight(arcLight);
+      if (weaponSession === s) { endWeapons(); releaseCam(420); }
+    });
+    if (!hostPhysics(physics) || !victim) return;
+    post(victim, { op: 'zap', ms: spec.zapMs, amount: spec.damage, cause: spec.cause, by: shooter.name || '' });
+    if (w.chainId == null) return;
+    later(280, () => {
+      if (!hostPhysics(physics)) return;
+      const chain = flies().find(f => f.id === w.chainId);
+      if (!chain || chain.last?.alive === false) return;
+      const o = muzzleOf(victim, 0.1, 0.05);
+      const p = chain.last.pos;
+      if (o) fireTracer(pool, T, o, { x: p[0], y: p[1], z: (p[2] ?? 0.13) + 0.05 }, { ms: 140, radius: 0.045, color: '#9fe4ff' });
+      post(chain, { op: 'zap', ms: spec.zapMs * 0.6, amount: spec.damage * 0.5, cause: spec.cause, by: shooter.name || '' });
+    });
+  }
+
+  function rocketImpact(kind, w, physics, impact = w.land) {
+    const spec = WEAPONS[kind];
+    const { x, y } = impact;
+    ensureMeteorSmoke();
+    const smoke = allocMeteorSmokeBatch();
+    burstMeteorSmoke(x, y, 0.15, smoke, spec.splashR * 1.4);
+    sealMeteorSmokeBatch(smoke, now());
+    api.audio()?.playRocketBoom?.();
+    const fb = new T.Group();
+    const fireMat = c => new T.MeshBasicMaterial({ color: c, transparent: true, depthWrite: false, toneMapped: false });
+    const outer = new T.Mesh(new T.SphereGeometry(1, 18, 12), fireMat('#ff9a2e'));
+    const core = new T.Mesh(new T.SphereGeometry(1, 14, 10), fireMat('#fff3c4'));
+    fb.add(outer, core);
+    fb.position.set(x, y, 0.25);
+    fxGroup().add(fb);
+    tween(460, u => {
+      const e = 1 - (1 - u) ** 3;
+      outer.scale.setScalar(0.2 + e * spec.splashR * 1.2);
+      core.scale.setScalar(0.12 + e * spec.splashR * 0.7);
+      outer.material.opacity = 1 - u;
+      core.material.opacity = Math.max(0, 1 - u * 1.6);
+    }, () => disposeObj(fb));
+    const light = borrowLight({ color: '#ffb050', distance: Math.max(5, spec.splashR * 6) });
+    if (light) {
+      light.position.set(x, y, 0.7);
+      tween(520, u => { light.intensity = 26 * (1 - u); }, () => releaseLight(light));
+    }
+    camShake(320, 0.32);
+    scorches.push({ x, y, r: spec.splashR * 0.55 * scorchScale(), until: now() + 15000 });
+    api.repaintFloor?.();
+    later(900, () => releaseCam(480));
+    if (!hostPhysics(physics)) return;
+    const killed = new Set();
+    // A locked shot kills by identity: the rocket tracked the fly all the way in, so it
+    // connects even though the fly has walked well past `killR` of the original aim point.
+    for (const f of liveFlies(flies())) {
+      const p = f.last.pos;
+      const locked = w.lockId != null && f.id === w.lockId;
+      if (!locked && (Math.hypot(p[0] - x, p[1] - y) >= spec.killR || (p[2] || 0) >= 0.6)) continue;
+      post(f, f.id === w.shooterId
+        ? { op: 'kill', cause: `${spec.cause}Self` }
+        : { op: 'kill', cause: spec.cause, by: w.shooterName || '' });
+      killed.add(f.id);
+      hideToast();
+    }
+    splashFlies(x, y, spec, w.shooterName, killed);
+  }
+
+  /** Bazooka and missile share one flight: a fixed land point so watchers replay it exactly. */
+  function rocketFlight(kind, payload, physics) {
+    const spec = WEAPONS[kind];
+    const w = payload.weapon;
+    const shooter = weaponShooter(payload);
+    if (!w?.land || !w.start) return;
+    const pose = { ...HOLD };
+    const launcher = kind === 'bazooka' && shooter?.last ? heldWeapon(shooter, spec.prop, pose) : null;
+    const rocket = chaosMesh('missile');
+    const s = beginWeapons(kind, physics, [launcher, rocket]);
+    const flightMs = w.flightMs || 900;
+    busyUntil = Math.max(busyUntil, now() + flightMs + 1900);
+    if (rocket) {
+      rocket.scale.setScalar(WEAPON_SCALE * 0.45);
+      rocket.position.set(w.start.x, w.start.y, w.start.z);
+      fxGroup().add(rocket);
+    }
+    if (hostPhysics(physics) && shooter?.worker) {
+      post(shooter, { op: 'pin', on: true });
+      s.pinned.push(shooter.id);
+    }
+    api.audio()?.playRocketLaunch?.(kind === 'missile');
+    const o = weaponMuzzle(shooter);
+    if (o) muzzleFlash(o, 0.34, 150);
+    ensureMeteorSmoke();
+    const trail = allocMeteorSmokeBatch();
+    const cam = api.camera(), ctl = api.controls();
+    const camOff = new T.Vector3(3, -2.8, 2.2);
+    easeCamTo(
+      new T.Vector3(w.start.x, w.start.y, 0.3).add(camOff),
+      new T.Vector3(w.start.x, w.start.y, 0.3),
+      220, undefined, { orbit: true },
+    );
+    const aim = new T.Vector3();
+    let px = w.start.x, py = w.start.y, pz = w.start.z;
+    // The missile weaves before it converges; the bazooka flies a flat arc.
+    const weave = kind === 'missile' ? (w.weave ?? 0.9) : 0;
+    // A locked shot chases the fly's live pose, so host and watcher both draw it arriving
+    // on the victim. `w.land` stays the fallback for an unlocked shot or a dead lock.
+    const lockPoint = () => {
+      if (w.lockId == null) return w.land;
+      const f = flies().find(x => x.id === w.lockId);
+      const p = f?.last?.pos;
+      return p && f.last.alive !== false ? { x: p[0], y: p[1] } : w.land;
+    };
+    let impact = lockPoint();
+    tween(flightMs, u => {
+      if (weaponSession !== s) return;
+      impact = lockPoint();
+      const e = kind === 'missile' ? u * u * (3 - 2 * u) : u;
+      const bend = Math.sin(u * Math.PI * 1.5) * weave * (1 - u);
+      const nx = -(impact.y - w.start.y), ny = impact.x - w.start.x;
+      const nlen = Math.hypot(nx, ny) || 1;
+      const x = w.start.x + (impact.x - w.start.x) * e + (nx / nlen) * bend;
+      const y = w.start.y + (impact.y - w.start.y) * e + (ny / nlen) * bend;
+      const z = w.start.z + (0.1 - w.start.z) * e + 4 * (w.apexZ ?? 0.5) * u * (1 - u);
+      if (rocket) {
+        rocket.position.set(x, y, z);
+        const dx = x - px, dy = y - py, dz = z - pz;
+        if (Math.hypot(dx, dy, dz) > 1e-4) {
+          rocket.rotation.set(0, -Math.atan2(dz, Math.hypot(dx, dy)), Math.atan2(dy, dx));
+        }
+      }
+      emitMeteorSmokeAlongSegment(px, py, pz, x, y, z, trail);
+      px = x; py = y; pz = z;
+      if (cam && ctl && weaponSession === s) {
+        aim.set(x, y, 0.3 + (z - 0.3) * 0.5);
+        ctl.target.lerp(aim, 0.22);
+        cam.position.lerp(aim.clone().add(camOff), 0.22);
+        aimCam();
+      }
+    }, () => {
+      sealMeteorSmokeBatch(trail, now());
+      if (rocket) { disposeObj(rocket); s.props = s.props.filter(m => m !== rocket); }
+      for (const id of s.pinned) post(flies().find(x => x.id === id), { op: 'pin', on: false });
+      s.pinned = [];
+      rocketImpact(kind, w, physics, impact);
+      later(1400, () => { if (weaponSession === s) endWeapons(); });
+    });
+  }
+
+  function chickenToss(payload, physics) {
+    const spec = WEAPONS.chicken;
+    const w = payload.weapon;
+    const shooter = weaponShooter(payload);
+    if (!w?.land || !w.start) return;
+    const bird = chaosMesh(spec.prop);
+    const s = beginWeapons('chicken', physics, [bird]);
+    const flightMs = w.flightMs || 850;
+    busyUntil = Math.max(busyUntil, now() + flightMs + 1800);
+    if (bird) {
+      bird.scale.setScalar(WEAPON_SCALE * 0.85);
+      bird.position.set(w.start.x, w.start.y, w.start.z);
+      fxGroup().add(bird);
+    }
+    api.audio()?.playChickenThrow?.();
+    const camOff = new T.Vector3(2.8, -2.6, 2);
+    easeCamTo(
+      new T.Vector3(w.start.x, w.start.y, 0.3).add(camOff),
+      new T.Vector3(w.start.x, w.start.y, 0.3),
+      200, undefined, { orbit: true },
+    );
+    tween(flightMs, u => {
+      if (weaponSession !== s || !bird) return;
+      bird.position.set(
+        w.start.x + (w.land.x - w.start.x) * u,
+        w.start.y + (w.land.y - w.start.y) * u,
+        w.start.z + (0.1 - w.start.z) * u + 4 * (w.apexZ ?? 1.1) * u * (1 - u),
+      );
+      bird.rotation.set(u * 9, 0, u * 5.5);
+    }, () => {
+      if (weaponSession !== s) return;
+      const { x, y } = w.land;
+      if (bird) {
+        bird.position.set(x, y, 0.12);
+        bird.rotation.set(Math.PI / 2, 0, Math.random() * Math.PI * 2);
+        tween(900, u => { bird.scale.setScalar(WEAPON_SCALE * 0.85 * (1 + 0.25 * Math.sin(u * Math.PI * 3) * (1 - u))); });
+      }
+      api.audio()?.playChickenSquawk?.();
+      camShake(240, 0.2);
+      const flash = new T.Mesh(
+        new T.RingGeometry(0.1, spec.knockR, 36),
+        new T.MeshBasicMaterial({ color: '#ffe066', transparent: true, depthWrite: false, side: T.DoubleSide, toneMapped: false }),
+      );
+      flash.position.set(x, y, 0.03);
+      fxGroup().add(flash);
+      tween(420, u => {
+        flash.scale.setScalar(0.3 + u * 0.9);
+        flash.material.opacity = 0.75 * (1 - u);
+      }, () => disposeObj(flash));
+      later(1300, () => { if (weaponSession === s) endWeapons(); });
+      later(900, () => releaseCam(460));
+      if (!hostPhysics(physics)) return;
+      // No damage at all — the chicken is pure knockback.
+      postAll({ op: 'loose', on: true });
+      for (const f of liveFlies(flies())) {
+        const p = f.last.pos;
+        const d = Math.hypot(p[0] - x, p[1] - y);
+        if (d >= spec.knockR) continue;
+        const k = (1 - d / spec.knockR) * spec.knock;
+        const ux = d > 0.02 ? (p[0] - x) / d : Math.cos(Math.random() * 6.28);
+        const uy = d > 0.02 ? (p[1] - y) / d : Math.sin(Math.random() * 6.28);
+        post(f, { op: 'impulse', vx: ux * k, vy: uy * k, vz: 4 + k * 0.3, wz: (Math.random() - 0.5) * 30 });
+      }
+      later(800, () => postAll({ op: 'loose', on: false }));
+    });
+  }
+
+  function playWeapon(kind, payload, physics) {
+    if (kind === 'minigun') minigunBurst(payload, physics);
+    else if (kind === 'shotgun') shotgunBlast(payload, physics);
+    else if (kind === 'taser') taserZap(payload, physics);
+    else if (kind === 'chicken') chickenToss(payload, physics);
+    else rocketFlight(kind, payload, physics);
+  }
+
+  /**
+   * Weapon payloads are frozen on the host: shooter, victim and (for the lobbed kinds) the
+   * exact landing spot, so a watcher replays the same shot without live fly positions.
+   */
+  function buildWeaponPayload(kind, live, opts = {}) {
+    const spec = WEAPONS[kind];
+    let shooter = opts.flyId != null ? live.find(f => f.id === opts.flyId) : null;
+    let target = null;
+    if (shooter) target = nearestTarget(live, shooter);
+    else {
+      const duel = pickDuel(live);
+      shooter = duel.shooter;
+      target = duel.target;
+    }
+    // Short-range weapons go for whoever is closest, not whoever is in front.
+    if (shooter && (kind === 'taser' || kind === 'shotgun')) target = nearestTarget(live, shooter) || target;
+    const sp = shooter?.last?.pos;
+    const [sx, sy] = sp ? [sp[0], sp[1]] : randomInDish(2);
+    const sz = (sp?.[2] ?? 0.13) + 0.2;
+    const weapon = {
+      shooterId: shooter?.id ?? null,
+      shooterName: shooter?.name || '',
+      targetId: target?.id ?? null,
+      targetName: target?.name || '',
+    };
+    if (kind === 'taser') {
+      const chain = live.find(f => f !== shooter && f !== target
+        && target?.last?.pos
+        && Math.hypot(f.last.pos[0] - target.last.pos[0], f.last.pos[1] - target.last.pos[1]) < spec.chainR);
+      weapon.chainId = (chain && Math.random() < spec.chainChance) ? chain.id : null;
+    }
+    if (kind === 'bazooka' || kind === 'missile' || kind === 'chicken') {
+      const tp = target?.last?.pos;
+      const directChance = kind === 'missile' ? 0.42 : kind === 'bazooka' ? 0.3 : 0.5;
+      const direct = opts.direct ?? Math.random() < directChance;
+      let land;
+      if (tp && direct) land = [tp[0], tp[1]];
+      else if (tp) {
+        const az = Math.atan2(tp[1] - sy, tp[0] - sx) + (Math.random() < 0.5 ? 0 : Math.PI) + randRange(-1, 1) * 0.5;
+        const off = kind === 'missile' ? randRange(0.5, 1.5) : randRange(0.7, 2.3);
+        land = [tp[0] + Math.cos(az) * off, tp[1] + Math.sin(az) * off];
+      } else land = randomInDish(1.2);
+      land = clampIntoArena(land[0], land[1], 1);
+      const dist = Math.hypot(land[0] - sx, land[1] - sy);
+      weapon.start = { x: sx, y: sy, z: sz };
+      weapon.land = { x: land[0], y: land[1] };
+      weapon.direct = direct;
+      // Rockets that roll a direct hit lock on, so the flight tracks the fly instead of a
+      // stale spot it has walked 2 cm away from by impact. The chicken only ever lobs.
+      if (direct && target && kind !== 'chicken') weapon.lockId = target.id;
+      weapon.flightMs = Math.round(Math.max(420, (dist / (spec.speed || 8)) * 1000));
+      weapon.apexZ = kind === 'chicken' ? 1.1 + Math.min(1.8, dist * 0.18) : 0.35 + Math.min(1.2, dist * 0.08);
+      if (kind === 'missile') weapon.weave = randRange(0.6, 1.6);
+    }
+    return {
+      kind,
+      flyId: shooter?.id ?? null,
+      name: shooter?.name || '',
+      color: shooter?.color || '#fff',
+      x: weapon.land?.x ?? sx,
+      y: weapon.land?.y ?? sy,
+      yaw: 0, deg: 0, points: [], hitBolt: null, killed: false,
+      weapon,
+    };
+  }
+
   function chaosName(kind, payload) {
     if (kind === 'holy') return payload.holy ? { thrower: payload.holy.throwerName, target: payload.holy.targetName } : null;
+    if (WEAPON_KINDS.includes(kind)) {
+      return payload.weapon ? { shooter: payload.weapon.shooterName, target: payload.weapon.targetName } : null;
+    }
     if (kind === 'double') return payload.hitBolt != null ? (payload.name || '') : '';
     if (kind === 'laser') return payload.solo ? (payload.name || '') : '';
     return payload.name || '';
@@ -1882,12 +2404,15 @@ export function createRaceChaos(api) {
       spikeTrap(payload, physics);
     } else if (kind === 'holy') {
       holyThrow(payload, physics);
+    } else if (WEAPON_KINDS.includes(kind)) {
+      playWeapon(kind, payload, physics);
     }
   }
 
   function buildPayload(kind, opts = {}) {
     const live = liveFlies(flies());
     if (kind === 'holy') return buildHolyPayload(live, opts);
+    if (WEAPON_KINDS.includes(kind)) return buildWeaponPayload(kind, live, opts);
     const f = live.length ? pick(live) : null;
     const farthest = live.slice().sort((a, b) => Math.hypot(b.last.pos[0], b.last.pos[1]) - Math.hypot(a.last.pos[0], a.last.pos[1]))[0];
     const target = (kind === 'crumb' ? farthest : f);
@@ -2019,6 +2544,7 @@ export function createRaceChaos(api) {
       crumb: CAKE_STAGGER_MS * (CAKE_SLICE_COUNT - 1) + 2800,
       firefly: 7200, boop: 1300, puff: 5200, laser: 3200,
       meteor: 5600, sugarrain: 5400, ufo: 7000, spikes: 3600, holy: 6400,
+      minigun: 3600, shotgun: 2000, taser: 2800, bazooka: 3200, missile: 3400, chicken: 3000,
     }[kind] || 1200;
   }
 
@@ -2045,6 +2571,7 @@ export function createRaceChaos(api) {
         strikes: payload.strikes,
         killed: payload.killed,
         holy: payload.holy,
+        weapon: payload.weapon,
         solo: payload.solo,
       });
     }
@@ -2095,6 +2622,10 @@ export function createRaceChaos(api) {
       disposeLaserPool(laserPool);
       laserPool = null;
     }
+    if (tracerPool) {
+      disposeTracerPool(tracerPool);
+      tracerPool = null;
+    }
     scorches = [];
     scorchDirty = false;
     busyUntil = 0;
@@ -2136,6 +2667,7 @@ export function createRaceChaos(api) {
     nextAt = Infinity;
     endLaserSession();
     api.audio()?.stopUfoSting?.(0.4);
+    api.audio()?.stopMinigunLoop?.();
     postEvery({ op: 'pin', on: false });
     postEvery({ op: 'spin', on: false });
     postEvery({ op: 'loose', on: false });
@@ -2187,6 +2719,7 @@ export function createRaceChaos(api) {
     }
     tickLaserSession(t, api.isHostLive?.());
     tickLaserDecals(t);
+    tickTracers(tracerPool, t);
     tickMeteorSmoke(t);
     if (ufoSession?.saucer && ufoSession.spinRadPerSec) {
       const dt = (t - (ufoSession.lastSpinT ?? t)) / 1000;

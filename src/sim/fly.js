@@ -109,6 +109,8 @@ export class FlyAgent {
     this.chaosSpinLeft = 0;
     this.chaosLoose = false;
     this.chaosSlip = false;
+    this.chaosZapped = false;
+    this.chaosZapMs = 0;
     this.chaosBias = [0, 0];
     this.chaosPull = false;
     this.pullTarget = null;
@@ -130,6 +132,7 @@ export class FlyAgent {
     this.lastTouch = undefined; this.lastPivot = undefined;
     this.chaosPin = false; this.chaosSpin = false; this.chaosSpinWz = 0; this.chaosSpinLeft = 0;
     this.chaosLoose = false; this.chaosSlip = false; this.chaosBias = [0, 0];
+    this.chaosZapped = false; this.chaosZapMs = 0;
     this.chaosPull = false; this.pullTarget = null; this.pullK = 0.5;
     this.dishPose = { x: 0, y: 0, z: 0, qw: 1, qx: 0, qy: 0, qz: 0 }; this.dishSeq = 0;
     this.setSlipFriction(false);
@@ -193,6 +196,8 @@ export class FlyAgent {
     this.chaosSpinLeft = 0;
     this.chaosBias = [0, 0];
     this.chaosSlip = false;
+    this.chaosZapped = false;
+    this.chaosZapMs = 0;
     this.setSlipFriction(false);
     d.qvel[2] += 6;
     d.qvel[4] += (Math.random() > 0.5 ? 1 : -1) * (26 + Math.random() * 8);
@@ -200,10 +205,24 @@ export class FlyAgent {
     this.alive = false;
     this.ragdollMs = 380;
   }
+  /** Chaos weapons spend `health`, so a hit finishes a fly through the same path as starving. */
+  hurt(amount, cause, by) {
+    if (!this.alive) return false;
+    this.health = Math.max(0, this.health - Math.max(0, amount || 0));
+    if (this.health > 0) return false;
+    this.deathCause = { kind: cause || 'shot', by: by || null };
+    this.dieKnockover();
+    return true;
+  }
   applyChaos(m) {
     const d = this.mjd;
     const op = m.op;
-    if (op === 'pin') { this.chaosPin = m.on !== false; if (this.chaosPin && this.flight.active) this.flight.end(); return; }
+    if (op === 'pin') {
+      this.chaosPin = m.on !== false;
+      if (this.chaosPin) { if (this.flight.active) this.flight.end(); }
+      else { this.chaosZapped = false; this.chaosZapMs = 0; }   // releasing a pin also cancels a taser lock
+      return;
+    }
     if (op === 'spin') {
       this.chaosSpin = m.on !== false;
       this.chaosSpinWz = m.wz || 28;
@@ -276,6 +295,34 @@ export class FlyAgent {
     if (op === 'kill') {
       this.deathCause = { kind: m.cause || 'killed', by: m.by || null };
       this.dieKnockover();
+      return;
+    }
+    if (op === 'damage') {
+      if (!this.alive) return;
+      const died = this.hurt(m.amount, m.cause, m.by);
+      if (died) return;
+      if (m.vx || m.vy || m.vz || m.wx || m.wy || m.wz) {
+        this.releaseClaws();
+        if (this.flight.active) this.flight.end();
+        d.qvel[0] += m.vx || 0;
+        d.qvel[1] += m.vy || 0;
+        d.qvel[2] += m.vz || 0;
+        d.qvel[3] += m.wx || 0;
+        d.qvel[4] += m.wy || 0;
+        d.qvel[5] += m.wz || 0;
+      }
+      return;
+    }
+    if (op === 'zap') {
+      if (!this.alive) return;
+      if (this.hurt(m.amount, m.cause || 'taser', m.by)) return;
+      this.chaosZapMs = Math.max(0, m.ms ?? 1200);
+      this.chaosZapped = this.chaosZapMs > 0;
+      this.chaosPin = this.chaosZapped;
+      if (this.chaosZapped) {
+        this.releaseClaws();
+        if (this.flight.active) this.flight.end();
+      }
       return;
     }
     if (op === 'impulse' || op === 'flip') {
@@ -383,6 +430,7 @@ export class FlyAgent {
       }
       return;
     }
+    if (this.chaosZapped && --this.chaosZapMs <= 0) { this.chaosZapped = false; this.chaosZapMs = 0; this.chaosPin = false; }
     const th = this.env.threat, tm = this.threatMocap * 3;
     if (th) { d.mocap_pos[tm] = th.x; d.mocap_pos[tm + 1] = th.y; d.mocap_pos[tm + 2] = th.z; } else if (d.mocap_pos[tm + 2] > -10) d.mocap_pos[tm + 2] = -20;
     const st = this.state();
@@ -460,6 +508,7 @@ export class FlyAgent {
       this.cmd.v = 0; this.cmd.turn = 0;
       d.qvel[0] = 0; d.qvel[1] = 0;
       if (d.qvel[2] > 0) d.qvel[2] = 0;
+      if (this.chaosZapped) { d.qvel[3] = (Math.random() - 0.5) * 22; d.qvel[5] = (Math.random() - 0.5) * 26; }
     }
     if (spinning) {
       d.qvel[5] = this.chaosSpinWz;

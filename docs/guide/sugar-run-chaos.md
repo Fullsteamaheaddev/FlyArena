@@ -50,6 +50,8 @@ Chaos reaches flies via `post(f, { op, … })` on each fly worker. Important ops
 | `bias` | Sets `chaosBias` — added to horizontal velocity **every physics substep** (walking flies included). |
 | `impulse` / `flip` | Velocity kick; `flip` also sets angular rates. |
 | `kill` | `dieKnockover()` — race elimination. |
+| `damage` | `hurt(amount, cause, by)` — spends `health`; kills only if it reaches 0. Optional `vx/vy/vz/wx/wy/wz` knockback. |
+| `zap` | Taser lock: `pin` + twitch for `ms`, plus one `damage`. Self-releases; `pin: false` cancels it. |
 | `dish` | Host dish mocap pose (quake / flip / tilt). |
 
 **Pattern:** dish-wide events use `postAll` on live flies. Targeted events resolve
@@ -90,7 +92,7 @@ reset.
 
 ---
 
-## Shipped kinds (16)
+## Shipped kinds (23)
 
 | Kind | Toast | Host physics | Notes |
 |------|-------|--------------|-------|
@@ -111,6 +113,12 @@ reset.
 | `ufo` | UFO | Shader beam + saucer GLB; lift/drop; no auto-kill | Frames then orbit; `ufo.glb` + `race-chaos-ufo-beam.js` |
 | `spikes` | Spike trap | `spike_trap.glb` (+Z spikes, 1.5×); kills inside while armed | Frames the trap then orbit; AABB `half` ~1.0–1.23 |
 | `holy` | Holy Hand Grenade | One fly lobs `grenade.glb` at another; mostly misses; blast kill R = 5× grenade height | Frames the arc then orbit; count 1-2-3 then boom |
+| `minigun` | MINIGUN | 14 rounds at 8% each; shooter pinned; spray widens with range | Tracer pool; rotor spin audio loop |
+| `shotgun` | SHOTGUN | 9 pellets at 5% (45% point blank); cone widens fast; heavy knockback | Recoil kick, muzzle flash |
+| `taser` | TASER | 45% + `zap` lock 1.2 s; 10% chains to a second fly at half | Arc tracers + borrowed light |
+| `bazooka` | BAZOOKA | Rocket; **a locked direct hit kills**, splash 35%→15% | Lock-on or fixed land point, chase cam |
+| `missile` | HOMING MISSILE | Same payload, locks on more often, visible weave | Lock-on or fixed land point, chase cam |
+| `chicken` | RUBBER CHICKEN | **No damage.** Lobbed, then a squawk and a big radial shove | Ring flash, `loose` + impulse |
 
 Reference implementations for “spectacle + optional kill”: **`crumb`** (staggered props +
 env), **`laser`** (session + tick), **`lightning`** (payload `points` + `hitBolt`),
@@ -224,10 +232,64 @@ These ship in `CHAOS_KINDS` alongside the original twelve (**17 kinds**, equal r
 
 ---
 
+---
+
+## Fly-on-fly weapons (six)
+
+**Code:** [`src/race-chaos-weapons.js`](../../src/race-chaos-weapons.js) (tuning table, aiming,
+hit resolution, tracer pool, held-prop placement) plus the weapon block in `race-chaos.js`.
+**Props:** `minigun`, `shotgun`, `bazooka`, `missile`, `taser`, `rubber_chicken` in
+`public/chaos/`, baked by `node scripts/export_chaos_props.mjs <name>`.
+
+Unlike every earlier kind, these **wound instead of kill**. A hit posts
+`{ op: 'damage', amount, cause, by }` and `FlyAgent.hurt()` spends `health`; the fly dies
+through the same `dieKnockover()` path that starving uses, so the race-finish check, the
+health bar and watcher snapshots all work unchanged. Only a rocket that connects posts a
+real `kill`.
+
+- **Single source of tuning:** `WEAPONS` in `race-chaos-weapons.js`. Aim error is a
+  lateral offset **in cm at the target** (`jitterBase + jitterPerCm * distance`), never an
+  angle — a few degrees across the dish misses a 0.14 cm fly every time. The chance a round
+  connects is about `(0.14 / jitter)^2`, which falls off as the square, so `jitterPerCm`
+  stays small: flies usually duel 10–20 cm apart, and a cone that widens realistically
+  makes a weapon do nothing at all at that range. **Widen the jitter (or lower
+  `directChance`) to make a weapon less lethal — do not nerf `damage`.** Measured totals:
+  minigun 55%→28% from point blank to across the dish, shotgun 45%→12%.
+- **Models point along +X** and are scaled by `WEAPON_SCALE` (0.9). From the race camera
+  (~30 cm back) a fly is only ~9 px long, so a to-scale gun is a smudge; this reads ~30 px,
+  about 3× the fly. `HOLD` and `MUZZLE_AHEAD` derive from the same constant so resizing
+  moves the grip and barrel tip with it. Props sit in world space and are re-placed each
+  frame by `placeHeldProp`, which maps local +X onto the holder's `last.yaw`. They are not
+  parented to the thorax.
+- **Hit resolution** reuses the laser's ray casts (`castBeam` / `hitSolids`, `FLY_HIT_R`
+  0.14), so bullets respect walls, the floor and desert solids.
+- **Tracers need to be fat.** At ~30 px/cm a 0.02 radius is a one-pixel hairline. The
+  weapon tracers run 0.04–0.055.
+- **A rocket that rolls a direct hit locks on** (`weapon.lockId`): the flight tracks that
+  fly's live pose and the impact kills it by identity. Geometry alone cannot work here — a
+  rocket is in the air for up to 2 s, in which a fly walks ~2 cm, far outside the 0.4 cm
+  `killR` around a frozen aim point, so "direct hits" would never land. Both host and
+  watcher draw the chase from their own pose stream; the kill itself is host-side and
+  reaches watchers through the normal pose/snapshot path. An **unlocked** rocket keeps the
+  frozen `weapon.land` point (same trick as `holy`) and only splashes. The chicken never
+  locks — it is always a lob.
+- **Cue:** everything a watcher needs is in `payload.weapon`, which `fire()` copies into
+  the cue. New weapon fields must be added to that `setCue` call.
+- **Cleanup:** one `weaponSession` at a time (`beginWeapons` / `endWeapons`), ended from
+  `endWildcardSessions`. `tracerPool` is disposed in `disposeAllFx`. `stopMinigunLoop()`
+  runs from `stopLive()` so the rotor whine stops at the winner while delayed rocket
+  booms still play.
+
+Death causes: `minigun`, `shotgun`, `taser`, `bazooka`, `bazookaSelf`, `missile`,
+`missileSelf`. `deathCauseLabel` in `arena.js` prefers `death.<cause>By` when the hit is
+attributed, so the card reads "shredded by Nova's minigun".
+
+---
+
 ## Roulette odds
 
-All **16** kinds share the same `pickKind()` pool (no repeat of the immediate previous
-kind). Re-test `disposeAllFx` after changes: finish banner, lobby countdown, `resetRace`.
+All **23** kinds share the same `pickKind()` pool (no repeat of the immediate previous
+kind). The six weapons are ~26% of rolls; the two lethal rockets are ~8.7%. Re-test `disposeAllFx` after changes: finish banner, lobby countdown, `resetRace`.
 Host + relay watchers should replay `chaosCue` with visuals only (`physics: false`).
 
 ---

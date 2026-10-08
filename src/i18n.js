@@ -145,6 +145,12 @@ export function chaosCopy(kind, name) {
   if (kind === 'ufo') {
     return { title, line: name ? t(`chaos.${kind}.line`, { name }) : t(`chaos.${kind}.lineAnon`) };
   }
+  // Fly-on-fly weapons carry { shooter, target }.
+  if (name && typeof name === 'object' && 'shooter' in name) {
+    if (name.shooter && name.target) return { title, line: t(`chaos.${kind}.line`, name) };
+    if (name.shooter) return { title, line: t(`chaos.${kind}.lineSolo`, name) };
+    return { title, line: t(`chaos.${kind}.lineAnon`) };
+  }
   return { title, line: t(`chaos.${kind}.line`, { name: name || t('chaos.aFly') }) };
 }
 

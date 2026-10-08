@@ -16,6 +16,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   let laserToastBuf, laserBeamBuf, laserKillBuf;
   let laserBeamSrc, laserBeamGain;
   let xfilesSrc, xfilesGain;
+  let minigunSrc, minigunGain;
   let currentBed = null, lastStep = 0, muted = false, keepOsc = null;
 
   async function decodeUrl(url) {
@@ -201,6 +202,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
   function stop() {
     stopUfoSting(0.02);
     stopLaserBeam();
+    stopMinigunLoop();
     fadeStopLoopBed();
     currentBed = null;
     bedGain = null;
@@ -347,6 +349,7 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
       thumb: 1.5, spin: 0.9, quake: 5.2, flip: 2.2, tilt: 3.4, lightning: 1.6, double: 2.8, crumb: 0.7,
       firefly: 7.1, boop: 1.1, puff: 5.1, laser: 1.5,
       meteor: 3.2, sugarrain: 5.3, ufo: 6.8, spikes: 3.4, holy: 5.6,
+      minigun: 3.4, shotgun: 1.8, taser: 2.4, bazooka: 2.8, missile: 3, chicken: 2.6,
     }[kind] || 0.8;
     duck(true);
     setTimeout(() => duck(false), hold * 1000);
@@ -384,6 +387,14 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
       thud.connect(g); g.connect(master); thud.start(t0); thud.stop(t0 + 0.22);
     }
     else if (kind === 'holy') playHolyThrow(t0);
+    // The weapons announce themselves from race-chaos as the shots land, so the toast
+    // only carries the short pre-roll: a cocked hammer, a charge, a launch tube.
+    else if (kind === 'shotgun') later0(0.34, () => sfxShotgun(ctx.currentTime));
+    else if (kind === 'taser') later0(0.18, () => sfxTaser(ctx.currentTime));
+  }
+  /** Schedule a callback against the audio clock without leaning on setTimeout drift. */
+  function later0(sec, fn) {
+    setTimeout(() => { if (ctx && ctx.state === 'running' && !muted) fn(); }, sec * 1000);
   }
   // "Hallelujah" stab: a major triad of detuned saws through a soft lowpass.
   function sfxChoir(t0) {
@@ -470,6 +481,158 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     sub.frequency.setValueAtTime(70, t0); sub.frequency.exponentialRampToValueAtTime(28, t0 + 0.6);
     const sg = ctx.createGain(); sg.gain.setValueAtTime(0.5, t0); sg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.7);
     sub.connect(sg); sg.connect(master); sub.start(t0); sub.stop(t0 + 0.72);
+  }
+  // --- fly-on-fly weapons -------------------------------------------------
+  /** Rotor whine that has to be stopped explicitly, like the laser beam loop. */
+  function startMinigunSpin() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    stopMinigunLoop();
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(70, t0); o.frequency.exponentialRampToValueAtTime(330, t0 + 0.55);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 620; bp.Q.value = 3.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.1, t0 + 0.3);
+    o.connect(bp); bp.connect(g); g.connect(master);
+    o.start(t0);
+    minigunSrc = o;
+    minigunGain = g;
+  }
+  function stopMinigunLoop() {
+    if (!ctx || !minigunSrc) return;
+    const t0 = ctx.currentTime;
+    if (minigunGain) {
+      const from = Math.max(minigunGain.gain.value, 0.0001);
+      minigunGain.gain.cancelScheduledValues(t0);
+      minigunGain.gain.setValueAtTime(from, t0);
+      minigunGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.25);
+    }
+    try { minigunSrc.frequency.exponentialRampToValueAtTime(60, t0 + 0.3); } catch {}
+    try { minigunSrc.stop(t0 + 0.32); } catch {}
+    minigunSrc = null;
+    minigunGain = null;
+  }
+  /** One round: a clipped noise crack over a short body thump. */
+  function playMinigunRound() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const ns = noiseSrc(0.09);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1100;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.2, t0); ng.gain.exponentialRampToValueAtTime(0.001, t0 + 0.07);
+    ns.connect(hp); hp.connect(ng); ng.connect(master); ns.start(t0);
+    const o = ctx.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(190, t0); o.frequency.exponentialRampToValueAtTime(70, t0 + 0.06);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.14, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.07);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.08);
+  }
+  function sfxShotgun(t0) {
+    const ns = noiseSrc(0.4);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(3200, t0);
+    lp.frequency.exponentialRampToValueAtTime(400, t0 + 0.3);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.34);
+    ns.connect(lp); lp.connect(g); g.connect(master); ns.start(t0);
+    const sub = ctx.createOscillator(); sub.type = 'sine';
+    sub.frequency.setValueAtTime(110, t0); sub.frequency.exponentialRampToValueAtTime(40, t0 + 0.2);
+    const sg = ctx.createGain(); sg.gain.setValueAtTime(0.34, t0); sg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.26);
+    sub.connect(sg); sg.connect(master); sub.start(t0); sub.stop(t0 + 0.28);
+    // Pump action afterwards: two dry clacks.
+    for (const dt of [0.45, 0.62]) {
+      const c = noiseSrc(0.08);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 2;
+      const cg = ctx.createGain(); cg.gain.setValueAtTime(0.13, t0 + dt); cg.gain.exponentialRampToValueAtTime(0.001, t0 + dt + 0.07);
+      c.connect(bp); bp.connect(cg); cg.connect(master); c.start(t0 + dt);
+    }
+  }
+  function sfxTaser(t0) {
+    const dur = 1.4;
+    const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = 58;
+    const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 42;
+    const lfoGain = ctx.createGain(); lfoGain.gain.value = 1200;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 1.6;
+    lfo.connect(lfoGain); lfoGain.connect(bp.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.2, t0 + 0.03);
+    g.gain.setValueAtTime(0.2, t0 + dur - 0.2); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(bp); bp.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0 + dur); lfo.start(t0); lfo.stop(t0 + dur);
+    // Crackle on top.
+    const ns = noiseSrc(dur);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3000;
+    const ng = ctx.createGain(); ng.gain.value = 0.07;
+    ns.connect(hp); hp.connect(ng); ng.connect(master); ns.start(t0);
+  }
+  function playRocketLaunch(homing) {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const ns = noiseSrc(0.9);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
+    bp.frequency.setValueAtTime(500, t0); bp.frequency.exponentialRampToValueAtTime(1900, t0 + 0.8);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.3, t0 + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.02, t0 + 0.85);
+    ns.connect(bp); bp.connect(g); g.connect(master); ns.start(t0);
+    if (!homing) return;
+    // Seeker tone: a wavering whine that sells the lock.
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(1500, t0); o.frequency.linearRampToValueAtTime(1150, t0 + 0.9);
+    const vib = ctx.createOscillator(); vib.type = 'sine'; vib.frequency.value = 11;
+    const vg = ctx.createGain(); vg.gain.value = 110;
+    vib.connect(vg); vg.connect(o.frequency);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t0); og.gain.exponentialRampToValueAtTime(0.1, t0 + 0.08);
+    og.gain.exponentialRampToValueAtTime(0.001, t0 + 0.95);
+    o.connect(og); og.connect(master);
+    o.start(t0); o.stop(t0 + 0.96); vib.start(t0); vib.stop(t0 + 0.96);
+  }
+  function playRocketBoom() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    sfxBolt(t0, 0.95);
+    const ns = noiseSrc(0.7);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2200, t0); lp.frequency.exponentialRampToValueAtTime(220, t0 + 0.6);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.46, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.66);
+    ns.connect(lp); lp.connect(g); g.connect(master); ns.start(t0);
+    const sub = ctx.createOscillator(); sub.type = 'sine';
+    sub.frequency.setValueAtTime(90, t0); sub.frequency.exponentialRampToValueAtTime(32, t0 + 0.5);
+    const sg = ctx.createGain(); sg.gain.setValueAtTime(0.45, t0); sg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.6);
+    sub.connect(sg); sg.connect(master); sub.start(t0); sub.stop(t0 + 0.62);
+  }
+  function playChickenThrow() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const ns = noiseSrc(0.3);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+    bp.frequency.setValueAtTime(700, t0); bp.frequency.exponentialRampToValueAtTime(1700, t0 + 0.26);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
+    ns.connect(bp); bp.connect(g); g.connect(master); ns.start(t0);
+  }
+  /** The squawk: a rubber-chicken glissando, then the boing of the shove. */
+  function playChickenSquawk() {
+    if (!ctx || ctx.state !== 'running' || muted) return;
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(420, t0);
+    o.frequency.linearRampToValueAtTime(1150, t0 + 0.14);
+    o.frequency.linearRampToValueAtTime(330, t0 + 0.42);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1300; bp.Q.value = 2.4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.3, t0 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.46);
+    o.connect(bp); bp.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.48);
+    const t1 = t0 + 0.12;
+    const boing = ctx.createOscillator(); boing.type = 'sine';
+    boing.frequency.setValueAtTime(260, t1); boing.frequency.exponentialRampToValueAtTime(70, t1 + 0.34);
+    const bg = ctx.createGain(); bg.gain.setValueAtTime(0.26, t1); bg.gain.exponentialRampToValueAtTime(0.001, t1 + 0.38);
+    boing.connect(bg); bg.connect(master); boing.start(t1); boing.stop(t1 + 0.4);
   }
   function playBuf(buf, when, gain = 0.8) {
     if (!ctx || !buf) return;
@@ -765,6 +928,8 @@ export function createRaceAudio(yipeeUrl, gongUrl, extraUrls = {}) {
     setMuted, setMotion, hold, playLaserToast, startLaserBeam, stopLaserBeam, playLaserKill,
     startUfoSting, stopUfoSting, startAmbience, stopAmbience, setAmbience,
     playHolyThrow, playHolyWhoosh, playHolyThud, playHolyCount, playHolyBoom,
+    startMinigunSpin, stopMinigunLoop, playMinigunRound, playRocketLaunch, playRocketBoom,
+    playChickenThrow, playChickenSquawk,
   };
 }
 
