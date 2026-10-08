@@ -17,11 +17,11 @@ rules, and the four GLB-backed wildcards (`meteor`, `sugarrain`, `ufo`, `spikes`
 ## How it works
 
 1. **Arm** — When the race starts, `createRaceChaos().arm()` sets the first roulette time
-   (about 8–15 s after start).
+   (about 4–9 s after start).
 2. **Tick (host only)** — While `isHostLive()`, if not `busyUntil` and `now >= nextAt`,
    `pickKind()` chooses a kind (never the same as the previous kind), `buildPayload(kind)`
    fills targets and geometry, then `fire(kind, payload, true)`.
-3. **Interval** — After each fire, `nextAt = now + randRange(5_000, 15_000)` ms (same range for the first event after `arm()`).
+3. **Interval** — After each fire, `nextAt = now + randRange(4_000, 9_000)` ms (same range for the first event after `arm()`).
 4. **Cue sync** — On host fires with `physics: true`, `setCue({ id, kind, flyId, name,
    x, y, yaw, deg, points, hitBolt, … })` runs. Match snapshots include `chaosCue`
    (`src/match.js`, `src/arena.js`). Watchers call `playCue(c)` → `fire(c.kind, c, false)`:

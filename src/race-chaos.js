@@ -78,7 +78,7 @@ export function paintChaosScorches(fx, fs, radius, scorches, now) {
 }
 
 /** Random idle gap between chaos roulette fires (ms). */
-const CHAOS_ROULETTE_GAP_MS = [5000, 15000];
+const CHAOS_ROULETTE_GAP_MS = [4000, 9000];
 
 export function createRaceChaos(api) {
   const T = api.THREE;
